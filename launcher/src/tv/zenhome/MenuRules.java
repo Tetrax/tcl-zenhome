@@ -10,8 +10,8 @@ import java.util.List;
 final class MenuRules {
     private MenuRules() { }
 
-    static final int ACTION = 0, SUBMENU = 1, CHOICE = 2, SEPARATOR = 3;
-    static final int ROW_H = 52, SEP_H = 13;
+    static final int ACTION = 0, SUBMENU = 1, CHOICE = 2, SEPARATOR = 3, INFO = 4;   // INFO : texte, non focalisable
+    static final int ROW_H = 52, APP_H = 46, SEP_H = 13;   // ligne d'appli (avec sous-texte) un peu plus basse : 10 applis tiennent dans le panneau
 
     /** Une ligne : action (ferme le menu), sous-menu (valeur courante + chevron), choix exclusif (point a droite), separateur. */
     static final class Row {
@@ -19,19 +19,23 @@ final class MenuRules {
         final String label, value, icon;   // icon : nom Phosphor ou ""
         final boolean selected;            // CHOICE : le choix actuel
         final int swatch;                  // CHOICE : couleur de la pastille de gauche (rgb), -1 sans
-        Row(int kind, String label, String value, String icon, boolean selected, int swatch) {
-            this.kind = kind; this.label = label; this.value = value; this.icon = icon; this.selected = selected; this.swatch = swatch;
+        final String sub;                  // texte discret sous le libelle (ligne d'appli : « il y a 5 min »)
+        Row(int kind, String label, String value, String icon, boolean selected, int swatch, String sub) {
+            this.kind = kind; this.label = label; this.value = value; this.icon = icon; this.selected = selected; this.swatch = swatch; this.sub = sub;
         }
     }
 
-    static Row action(String label, String icon) { return new Row(ACTION, label, "", icon, false, -1); }
-    static Row submenu(String label, String value, String icon) { return new Row(SUBMENU, label, value, icon, false, -1); }
-    static Row choice(String label, boolean selected, int swatch) { return new Row(CHOICE, label, "", "", selected, swatch); }
-    static Row separator() { return new Row(SEPARATOR, "", "", "", false, -1); }
+    static Row action(String label, String icon) { return new Row(ACTION, label, "", icon, false, -1, ""); }
+    static Row submenu(String label, String value, String icon) { return new Row(SUBMENU, label, value, icon, false, -1, ""); }
+    static Row choice(String label, boolean selected, int swatch) { return new Row(CHOICE, label, "", "", selected, swatch, ""); }
+    static Row separator() { return new Row(SEPARATOR, "", "", "", false, -1, ""); }
+    /** Ligne d'appli : l'icone de l'appli (icone « app » = colonne reservee) et un sous-texte. */
+    static Row app(String label, String sub) { return new Row(ACTION, label, "", "app", false, -1, sub); }
+    static Row info(String text) { return new Row(INFO, text, "", "", false, -1, ""); }
 
-    static boolean focusable(Row r) { return r.kind != SEPARATOR; }
+    static boolean focusable(Row r) { return r.kind != SEPARATOR && r.kind != INFO; }
 
-    static int rowHeight(Row r) { return r.kind == SEPARATOR ? SEP_H : ROW_H; }
+    static int rowHeight(Row r) { return r.kind == SEPARATOR ? SEP_H : (r.sub.isEmpty() ? ROW_H : APP_H); }
 
     /** Hauteur totale des lignes. */
     static int height(List<Row> rows) {
@@ -64,9 +68,18 @@ final class MenuRules {
         return -1;
     }
 
+    /** Ligne focalisable la plus proche de idx (apres la suppression d'une ligne) : idx borne, sinon la precedente ; -1 s'il n'y en a pas. */
+    static int nearestFocus(List<Row> rows, int idx) {
+        if (rows.isEmpty()) return -1;
+        int i = Math.max(0, Math.min(idx, rows.size() - 1));
+        if (focusable(rows.get(i))) return i;
+        int p = step(rows, i, -1);
+        return p;
+    }
+
     /** Au moins une ligne a une icone : on reserve alors la colonne des icones pour toutes. */
     static boolean hasIcons(List<Row> rows) {
-        for (Row r : rows) if (r.kind != SEPARATOR && (!r.icon.isEmpty() || r.swatch >= 0)) return true;
+        for (Row r : rows) if (focusable(r) && (!r.icon.isEmpty() || r.swatch >= 0)) return true;
         return false;
     }
 

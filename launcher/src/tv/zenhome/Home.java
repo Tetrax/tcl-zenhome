@@ -62,6 +62,7 @@ public class Home extends Activity implements Host {
     Ambient ambient;
     Inputs inputs;
     SettingsMenu settingsMenu;
+    Recents recents;
     Sleep sleep;
     Banner banner;
 
@@ -100,12 +101,13 @@ public class Home extends Activity implements Host {
         grid = new AppsGrid(this, ui, apps, ovs, this);
         inputs = new Inputs(this, ui, apps, ovs, this);
         settingsMenu = new SettingsMenu(this, ui, ovs);
+        recents = new Recents(this, ui, apps, ovs, config, carousel);
         sleep = new Sleep(this, ui, prefs, ovs, new Runnable() { public void run() { shortcuts.sleepBadge(sleep.badgeText()); } });
         sleep.restore();
         shortcuts = new Shortcuts(this, ui, apps, root, this);
         detail = new MovieDetail(this, ui, prefs, async, ovs, apps, this);
         movies = new Movies(this, ui, prefs, async, ovs, this);
-        editor = new Editor(this, ui, apps, grid, ovs, config, dock, carousel, this);
+        editor = new Editor(this, ui, apps, grid, ovs, config, dock, carousel, recents, this);
         levels = new Levels(ui, dock, carousel, movies, weather, shortcuts, editor, ovs, content, this);
         root.addView(content, new FrameLayout.LayoutParams(-1, -1));
         wall.build(content);
@@ -197,6 +199,8 @@ public class Home extends Activity implements Host {
     public void showSleep() { sleep.show(); }
 
     public void showSettings() { settingsMenu.show(); }
+
+    public void showRecents() { recents.show(); }
 
     public void editHome() { editor.startEdit(); }
 

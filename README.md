@@ -90,10 +90,14 @@ Tous (sauf `restaurer-tv.sh`) acceptent `--help` et `--dry-run`.
 | **Menu** ailleurs | Mode édition de l'accueil |
 | **Touche Source / TV** | Panneau des entrées en cartes |
 | **Touche Réglages** | Depuis l'accueil : menu Réglages (Image, Son, tous les paramètres). Dans les autres applis : panneau rapide Image de TCL (service d'accessibilité) |
+| Raccourci **Applis ouvertes** | Liste des applis récentes (encore en mémoire) : OK ferme une appli, « Tout libérer » les ferme toutes et affiche la mémoire gagnée |
+| **Menu** d'une tuile, « Fermer l'appli » | Ferme l'appli d'arrière-plan (jamais Zen Home ni les paquets système critiques) |
 | Raccourci **minuteur** | Programmer la veille (badge du temps restant) |
 | Mode édition (Menu), entrée « Thème » | Changer la couleur du verre |
 | Aucune touche pendant 3 min | Mode ambiance ; la première touche réveille l'écran |
 | Boutons Netflix / YouTube / Prime de la télécommande TCL | Ouvrent l'appli (service d'accessibilité installé par `deployer.sh`) |
+
+**Permission des « Applis ouvertes »** : la liste des applis récentes demande l'accès aux statistiques d'usage, accordé par `tv/deployer.sh` et `tv/photos.sh` (qui accordent les permissions), et réappliqué par `tv/verifier-tv.sh --fix` : `adb shell appops set tv.zenhome GET_USAGE_STATS allow`. Sans elle, l'écran affiche « Autorisation requise : voir README » et « Tout libérer » n'agit que sur le dock et le carrousel. « Fermer l'appli » n'a pas besoin de cette autorisation.
 
 ## Configuration avancée par adb
 

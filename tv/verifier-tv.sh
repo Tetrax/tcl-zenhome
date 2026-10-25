@@ -74,7 +74,7 @@ etat_pkg() { if [ "$INCONNU" = 1 ]; then echo 2; elif inactif "$1"; then echo 1;
 
 controler() {
     R_NOM=(); R_ST=(); R_DET=(); KO=0
-    local TOUS DESACTIVES dump ver holder a11y dream spot wifi p n etat det
+    local TOUS DESACTIVES dump ver holder a11y dream spot wifi p n etat det usage
     # Wi-Fi : 1 vérifié et non lié, 2 lié à setupwraith, 3 non vérifiable (sortie vide ou format inattendu).
     # Dans les cas 2 et 3, setupwraith n'est JAMAIS désactivé.
     wifi=$(adb_lire shell dumpsys wifi)
@@ -130,6 +130,11 @@ controler() {
     esac
     ST_DREAM=$LAST_OK
 
+    usage=$(adb_lire shell appops get "$PKG" GET_USAGE_STATS)
+    if grep -q 'GET_USAGE_STATS: allow' <<<"$usage"; then enreg "Stats d'usage (Applis ouvertes)" 1 ""
+    else enreg "Stats d'usage (Applis ouvertes)" 0 "appops GET_USAGE_STATS non accordé"; fi
+    ST_USAGE=$LAST_OK
+
     if [ "$INCONNU" = 0 ] && [ "$DRY_RUN" != 1 ] && ! grep -Fqx "package:$SPOTIFY" <<<"$TOUS"; then
         enreg "Spotify : arrière-plan restreint" 1 "Spotify absent"
     else
@@ -176,6 +181,7 @@ corriger() {
         [ "$ST_ROLE" = 1 ] || definir_accueil
         [ "$ST_A11Y" = 1 ] || activer_accessibilite
         [ "$ST_DREAM" = 1 ] || adb_tv shell settings put secure screensaver_components "$DREAM"
+        [ "$ST_USAGE" = 1 ] || adb_tv shell appops set "$PKG" GET_USAGE_STATS allow
     fi
     # 2. Debloat
     for p in ${DEBLOAT_KO[@]+"${DEBLOAT_KO[@]}"}; do adb_tv shell pm disable-user --user 0 "$p"; done

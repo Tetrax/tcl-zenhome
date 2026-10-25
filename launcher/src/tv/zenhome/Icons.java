@@ -62,7 +62,7 @@ class Icons {
 
     /** Repli des icones Phosphor : trait fin blanc a extremites arrondies (dessinees dans un carre). */
     static class LineIcon extends Drawable {
-        static final int INPUT = 0, GRID = 1, GEAR = 2, PENCIL = 3, IMAGE = 4, MOON = 5, PLAY = 6;
+        static final int INPUT = 0, GRID = 1, GEAR = 2, PENCIL = 3, IMAGE = 4, MOON = 5, PLAY = 6, STACK = 7;
         final android.graphics.Paint p = new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
         final android.graphics.Path path = new android.graphics.Path(), cut = new android.graphics.Path();
         final int kind;
@@ -125,6 +125,13 @@ class Icons {
                     c.drawPath(path, p);
                     break;
                 }
+                case STACK:   // trois losanges empiles
+                    for (int k = 0; k < 3; k++) {
+                        float dy = 0.22f * k;
+                        path.reset(); path.moveTo(X(0.5f), Y(0.16f + dy)); path.lineTo(X(0.86f), Y(0.32f + dy)); path.lineTo(X(0.5f), Y(0.48f + dy)); path.lineTo(X(0.14f), Y(0.32f + dy)); path.close();
+                        c.drawPath(path, p);
+                    }
+                    break;
                 default:   // PLAY : triangle en contour
                     path.reset(); path.moveTo(X(0.32f), Y(0.2f)); path.lineTo(X(0.8f), Y(0.5f)); path.lineTo(X(0.32f), Y(0.8f)); path.close();
                     c.drawPath(path, p);

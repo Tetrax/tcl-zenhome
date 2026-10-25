@@ -30,4 +30,4 @@ Licences : [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/) · [C
 
 Police / Font : Poppins (Indian Type Foundry), [SIL Open Font License 1.1](https://openfontlicense.org). Texte complet : [`assets/Poppins-OFL.txt`](assets/Poppins-OFL.txt).
 
-Icônes / Icons : Phosphor Icons (MIT) — https://phosphoricons.com, sous-ensemble (33 glyphes, Regular et Fill) de @phosphor-icons/web 2.1.2 (licence : `assets/Phosphor-LICENSE.txt`).
+Icônes / Icons : Phosphor Icons (MIT) — https://phosphoricons.com, sous-ensemble (36 glyphes, Regular et Fill) de @phosphor-icons/web 2.1.2 (licence : `assets/Phosphor-LICENSE.txt`).

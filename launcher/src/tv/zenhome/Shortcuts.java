@@ -46,19 +46,20 @@ class Shortcuts {
         parent.addView(bubble, new FrameLayout.LayoutParams(-2, -2, Gravity.TOP | Gravity.START));
     }
 
-    // Raccourcis : entrees, toutes les applis, reglages, crayon (edition), fond, veille, Play Store
+    // Raccourcis : entrees, toutes les applis, applis ouvertes, reglages, crayon (edition), fond, veille, Play Store
     void build() {
         row.removeAllViews();
         final String[] input = apps.findInput();
         final ComponentName viewInputs = apps.viewInputsTarget();
         // appli TV connue, ou (projecteurs XGIMI...) le systeme sait ouvrir les entrees
         if (input != null || viewInputs != null)
-            shortcut(Icons.LineIcon.INPUT, ui.t("Entrées TV", "TV inputs"), new Runnable() { public void run() { host.showInputs(); } });
-        shortcut(Icons.LineIcon.GRID, ui.t("Toutes les applis", "All apps"), new Runnable() { public void run() { host.showAllApps(); } });
-        shortcut(Icons.LineIcon.GEAR, ui.t("Réglages", "Settings"), new Runnable() { public void run() { host.showSettings(); } });
-        shortcut(Icons.LineIcon.PENCIL, ui.t("Modifier l'accueil", "Edit home screen"), new Runnable() { public void run() { host.editHome(); } });
-        shortcut(Icons.LineIcon.IMAGE, ui.t("Fond", "Wallpaper"), new Runnable() { public void run() { host.nextWall(); } });
-        FrameLayout moon = shortcut(Icons.LineIcon.MOON, ui.t("Mise en veille", "Sleep timer"), new Runnable() { public void run() { host.showSleep(); } });
+            shortcut(Icons.LineIcon.INPUT, "television-simple", ui.t("Entrées TV", "TV inputs"), new Runnable() { public void run() { host.showInputs(); } });
+        shortcut(Icons.LineIcon.GRID, "squares-four", ui.t("Toutes les applis", "All apps"), new Runnable() { public void run() { host.showAllApps(); } });
+        shortcut(Icons.LineIcon.STACK, "stack", ui.t("Applis ouvertes", "Open apps"), new Runnable() { public void run() { host.showRecents(); } });
+        shortcut(Icons.LineIcon.GEAR, "gear-six", ui.t("Réglages", "Settings"), new Runnable() { public void run() { host.showSettings(); } });
+        shortcut(Icons.LineIcon.PENCIL, "pencil-simple", ui.t("Modifier l'accueil", "Edit home screen"), new Runnable() { public void run() { host.editHome(); } });
+        shortcut(Icons.LineIcon.IMAGE, "image", ui.t("Fond", "Wallpaper"), new Runnable() { public void run() { host.nextWall(); } });
+        FrameLayout moon = shortcut(Icons.LineIcon.MOON, "moon", ui.t("Mise en veille", "Sleep timer"), new Runnable() { public void run() { host.showSleep(); } });
         sleepBadge = ui.text("", 8, ui.fMed, 0xFF111111);
         sleepBadge.setShadowLayer(0, 0, 0, 0);
         sleepBadge.setPadding(ui.dp(4), ui.dp(1), ui.dp(4), ui.dp(1));
@@ -67,7 +68,7 @@ class Shortcuts {
         moon.addView(sleepBadge, new FrameLayout.LayoutParams(-2, -2, Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL));
         sleepBadge(sleepText);
         if (apps.usable("com.android.vending"))
-            shortcut(Icons.LineIcon.PLAY, "Play Store", new Runnable() { public void run() { apps.launch("com.android.vending"); } });
+            shortcut(Icons.LineIcon.PLAY, "google-play-logo", "Play Store", new Runnable() { public void run() { apps.launch("com.android.vending"); } });
     }
 
     /** Badge du temps restant sur la lune ; masque si vide. */
@@ -79,11 +80,11 @@ class Shortcuts {
     }
 
     /** Bouton de 44 unites : icone Phosphor Regular seule au repos ; au focus pastille blanche pleine et icone Fill sombre (zoom par Ui.wire, libelle par la bulle). */
-    FrameLayout shortcut(int kind, String label, Runnable r) {
+    FrameLayout shortcut(int kind, String icon, String label, Runnable r) {
         FrameLayout f = new FrameLayout(ctx);
         final GradientDrawable bg = new GradientDrawable(); bg.setShape(GradientDrawable.OVAL); bg.setColor(0x00FFFFFF);
         f.setBackground(bg);
-        final Icons.GlyphIcon glyph = Icons.GlyphIcon.make(ui.pReg, ui.pFill, IconRules.glyph(kind));   // Phosphor
+        final Icons.GlyphIcon glyph = Icons.GlyphIcon.make(ui.pReg, ui.pFill, IconRules.glyph(icon));   // Phosphor
         final Icons.LineIcon line = glyph == null ? new Icons.LineIcon(kind) : null;                 // repli si polices absentes
         ImageView iv = new ImageView(ctx); iv.setImageDrawable(glyph != null ? glyph : line);
         f.addView(iv, new FrameLayout.LayoutParams(ui.dp(24), ui.dp(24), Gravity.CENTER));

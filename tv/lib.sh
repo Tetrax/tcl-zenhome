@@ -141,6 +141,8 @@ accorder_permissions() {
     local sdk
     sdk=$(adb_lire shell getprop ro.build.version.sdk)
     adb_essayer shell pm grant "$PKG" android.permission.READ_MEDIA_IMAGES
+    # Stats d'usage (écran « Applis ouvertes ») : opération appops, pas une permission runtime
+    adb_essayer shell appops set "$PKG" GET_USAGE_STATS allow
     if [ "$DRY_RUN" = 1 ]; then
         info "[dry-run] (READ_EXTERNAL_STORAGE : seulement si ro.build.version.sdk <= 32)"
         adb_tv shell pm grant "$PKG" android.permission.READ_EXTERNAL_STORAGE

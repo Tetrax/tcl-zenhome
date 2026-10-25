@@ -23,7 +23,7 @@ public class Tests {
     }
 
     public static void main(String[] args) {
-        net(); fmt(); wmo(); greeting(); dock(); movieRules(); configRules(); nav(); trailer(); myList(); hardening(); inputs(); sleep(); weatherRules(); keyRules(); settingsKey(); gauge(); standby(); iconRules(); themeRules(); menuRules(); nightLabels(); attribution(); banner();
+        net(); fmt(); wmo(); greeting(); dock(); movieRules(); configRules(); nav(); trailer(); myList(); hardening(); inputs(); sleep(); weatherRules(); keyRules(); settingsKey(); gauge(); standby(); iconRules(); themeRules(); menuRules(); recent(); nightLabels(); attribution(); banner();
         System.out.println(count + " assertions, " + failed + " echec(s)");
         if (failed > 0) System.exit(1);
     }
@@ -850,7 +850,8 @@ public class Tests {
         eq("icone drop", 0xE210, IconRules.codepoint("drop")); eq("icone plug", 0xE946, IconRules.codepoint("plug")); eq("icone plugs", 0xEB56, IconRules.codepoint("plugs"));
         eq("icone speaker-hifi", 0xEA08, IconRules.codepoint("speaker-hifi")); eq("icone plus", 0xE3D4, IconRules.codepoint("plus"));
         eq("icone caret-down", 0xE136, IconRules.codepoint("caret-down")); eq("icone check", 0xE182, IconRules.codepoint("check"));
-        eq("33 icones", 33, IconRules.NAMES.length);
+        eq("36 icones", 36, IconRules.NAMES.length);
+        eq("icone x-circle", 0xE4F8, IconRules.codepoint("x-circle")); eq("icone stack", 0xE466, IconRules.codepoint("stack")); eq("icone broom", 0xEC54, IconRules.codepoint("broom"));
         eq("icone monitor", 0xE32E, IconRules.codepoint("monitor")); eq("icone speaker-high", 0xE44A, IconRules.codepoint("speaker-high"));
         eq("icone sliders-horizontal", 0xE434, IconRules.codepoint("sliders-horizontal"));
         int[] nc = {0xE0A0, 0xE83C, 0xE4A6, 0xE6EE, 0xE6C8, 0xE038, 0xE13A, 0xE5DE};
@@ -876,9 +877,7 @@ public class Tests {
         ok("repli: jour absent du cache", !WeatherRules.isNight(d0 + 72 * hh + 12 * hh, up, dn)); ok("repli: tableaux de longueurs differentes", WeatherRules.isNight(d0 + 3 * hh, up, new long[0]));
         ok("repli: entree illisible", !WeatherRules.isNight(d0 + 12 * hh, new long[]{-1}, new long[]{-1}));
         eq("table: autant de noms que de codes", IconRules.NAMES.length, IconRules.CODES.length);
-        eq("glyphe entrees", "\uEAE6", IconRules.glyph(0)); eq("glyphe play", "\uE294", IconRules.glyph(6));
-        eq("glyphe hors table", "", IconRules.glyph(33)); eq("glyphe negatif", "", IconRules.glyph(-1));
-        eq("glyphe nom", "\uE472", IconRules.glyph("sun")); eq("glyphe nom inconnu", "", IconRules.glyph("house"));
+                eq("glyphe nom", "\uE472", IconRules.glyph("sun")); eq("glyphe nom inconnu", "", IconRules.glyph("house"));
         java.util.Set<Integer> seen = new java.util.HashSet<>();
         for (int c : IconRules.CODES) seen.add(c);
         eq("codepoints distincts", IconRules.CODES.length, seen.size());
@@ -1039,5 +1038,78 @@ public class Tests {
         for (String n : new String[]{"arrows-left-right", "swap", "trash", "text-aa", "palette", "arrow-counter-clockwise", "caret-right", "arrow-square-out"})
             ok("disponible : " + n, IconRules.codepoint(n) > 0 && !IconRules.glyph(n).isEmpty());
         for (String n : new String[]{"plus", "squares-four", "moon"}) ok("deja disponible : " + n, IconRules.codepoint(n) > 0);
+    }
+
+    // ---------- Applis ouvertes
+    static java.util.Map<String, Long> usage(Object... kv) {
+        java.util.Map<String, Long> m = new java.util.HashMap<>();
+        for (int i = 0; i < kv.length; i += 2) m.put((String) kv[i], (Long) kv[i + 1]);
+        return m;
+    }
+
+    static void recent() {
+        for (String p : new String[]{"tv.zenhome", "android", "com.android.vending", "com.android.systemui", "com.android.tv.settings", "com.tcl.dashboard", "com.tcl.tvextras", "com.google.android.apps.tv.launcherx", "com.google.android.apps.tv.dreamx", "com.google.android.gms",
+                "com.google.android.gms.persistent", "com.tcl.tv", "com.tcl.tvinput", "com.mediatek.wwtv.tvcenter", "", null})
+            ok("protege : " + p, RecentRules.protectedPkg(p) && !RecentRules.canClose(p));
+        for (String p : new String[]{"com.netflix.ninja", "com.google.android.youtube.tv", "tv.zenhome2", "com.google.android.apps.youtube", "org.xbmc.kodi", "com.google.android.gmsx"})
+            ok("fermable : " + p, !RecentRules.protectedPkg(p) && RecentRules.canClose(p));
+
+        long now = 10_000_000_000L, min = 60_000L, h3 = RecentRules.WINDOW_MS;
+        java.util.Map<String, Long> u = usage("com.netflix.ninja", now - 5 * min, "org.xbmc.kodi", now - 20 * min, "tv.zenhome", now - min,
+                "com.android.vending", now - 2 * min, "com.old.app", now - h3 - 1, "com.never", 0L, "com.future", now + 5 * 60_000L, "com.b", now - 20 * min);
+        eq("tri par dernier usage, protegees et hors fenetre exclues, egalite par nom", "[com.netflix.ninja, com.b, org.xbmc.kodi]", RecentRules.select(u, now, h3, 10).toString());
+        eq("plafond", "[com.netflix.ninja, com.b]", RecentRules.select(u, now, h3, 2).toString());
+        eq("plafond 1", "[com.netflix.ninja]", RecentRules.select(u, now, h3, 1).toString());
+        eq("pile 3 h incluse", "[com.edge]", RecentRules.select(usage("com.edge", now - h3), now, h3, 10).toString());
+        eq("aucune appli", "[]", RecentRules.select(usage(), now, h3, 10).toString());
+        java.util.Map<String, Long> many = new java.util.HashMap<>();
+        for (int i = 0; i < 25; i++) many.put("com.app" + i, now - (i + 1) * min);
+        eq("25 applis -> 10", 10, RecentRules.select(many, now, h3, RecentRules.MAX).size());
+        eq("la plus recente en tete", "com.app0", RecentRules.select(many, now, h3, RecentRules.MAX).get(0));
+        eq("la dixieme", "com.app9", RecentRules.select(many, now, h3, RecentRules.MAX).get(9));
+
+        eq("a l'instant", "à l'instant", RecentRules.agoText(now, now - 30_000, true)); eq("just now", "just now", RecentRules.agoText(now, now - 59_999, false));
+        eq("1 min", "il y a 1 min", RecentRules.agoText(now, now - min, true)); eq("5 min", "il y a 5 min", RecentRules.agoText(now, now - 5 * min, true));
+        eq("59 min", "il y a 59 min", RecentRules.agoText(now, now - 59 * min - 59_000, true)); eq("5 min en", "5 min ago", RecentRules.agoText(now, now - 5 * min, false));
+        eq("1 h", "il y a 1 h", RecentRules.agoText(now, now - 60 * min, true)); eq("2 h 59", "il y a 2 h", RecentRules.agoText(now, now - 179 * min, true));
+        eq("2 h en", "2 h ago", RecentRules.agoText(now, now - 120 * min, false)); eq("2 jours", "il y a 2 j", RecentRules.agoText(now, now - 49 * 60 * min, true));
+        eq("3 d en", "3 d ago", RecentRules.agoText(now, now - 72 * 60 * min, false)); eq("futur -> a l'instant", "à l'instant", RecentRules.agoText(now, now + 1000, true));
+
+        eq("gain 312 Mo", 312L, RecentRules.freedMb(1_000_000, 1_000_000 + 312 * 1024)); eq("gain negatif -> 0", 0L, RecentRules.freedMb(2_000_000, 1_000_000));
+        long b0 = 1_000_000, big = b0 + 312 * 1024, small = b0 + 19 * 1024;
+        eq("3 applis + gain fr", "3 applis fermées  ·  312 Mo libérés", RecentRules.freeAllText(3, b0, big, true));
+        eq("3 apps + gain en", "3 apps closed  ·  312 MB freed", RecentRules.freeAllText(3, b0, big, false));
+        eq("1 appli fr", "1 appli fermée  ·  312 Mo libérés", RecentRules.freeAllText(1, b0, big, true)); eq("1 app en", "1 app closed", RecentRules.freeAllText(1, b0, b0, false));
+        eq("gain faible : pas de Mo", "2 applis fermées", RecentRules.freeAllText(2, b0, small, true));
+        eq("exactement 20 Mo", "2 applis fermées  ·  20 Mo libérés", RecentRules.freeAllText(2, b0, b0 + 20 * 1024, true));
+        eq("gain negatif", "4 applis fermées", RecentRules.freeAllText(4, b0, b0 - 50_000, true));
+        eq("mesure inconnue", "2 applis fermées", RecentRules.freeAllText(2, -1, -1, true));
+        eq("rien a fermer fr", "Rien à fermer", RecentRules.freeAllText(0, b0, big, true)); eq("rien a fermer en", "Nothing to close", RecentRules.freeAllText(0, b0, big, false));
+        eq("gain 312 Mo", 312L, RecentRules.freedMb(b0, big)); eq("gain negatif -> 0", 0L, RecentRules.freedMb(2_000_000, 1_000_000));
+        eq("ram 0,8 Go", "RAM libre 0,8 Go", RecentRules.ramText(838_861, true)); eq("ram en", "Free RAM 0.8 GB", RecentRules.ramText(838_861, false));
+        eq("ram 1,9 Go", "RAM libre 1,9 Go", RecentRules.ramText(2_000_000, true)); eq("ram 12 Go", "Free RAM 12 GB", RecentRules.ramText(12_582_912L, false));
+        eq("ram inconnue", "", RecentRules.ramText(-1, true));
+        eq("fermee fr", "Netflix fermée", RecentRules.closedText("Netflix", true, true)); eq("closed en", "Netflix closed", RecentRules.closedText("Netflix", true, false));
+        eq("deja fermee fr", "Netflix est déjà fermée", RecentRules.closedText("Netflix", false, true)); eq("already closed en", "Netflix is already closed", RecentRules.closedText("Netflix", false, false));
+        eq("inconnu fr", "Fermeture demandée : Netflix", RecentRules.closedText("Netflix", null, true)); eq("inconnu en", "Close requested: Netflix", RecentRules.closedText("Netflix", null, false));
+
+        // lignes du menu : application, texte, focus apres suppression
+        MenuRules.Row a = MenuRules.app("Netflix", "il y a 5 min");
+        eq("ligne d'appli : sous-texte", "il y a 5 min", a.sub); eq("ligne d'appli : colonne d'icone", "app", a.icon); ok("ligne d'appli : focalisable", MenuRules.focusable(a));
+        java.util.List<MenuRules.Row> rr = new ArrayList<>();
+        rr.add(MenuRules.action("Tout libérer", "broom")); rr.add(MenuRules.app("A", "x")); rr.add(MenuRules.app("B", "y")); rr.add(MenuRules.app("C", "z"));
+        eq("focus apres suppression : meme index", 2, MenuRules.nearestFocus(rr, 2)); eq("focus apres suppression en fin : borne", 3, MenuRules.nearestFocus(rr, 9));
+        rr.remove(3); eq("derniere supprimee : la precedente", 2, MenuRules.nearestFocus(rr, 3));
+        eq("focus negatif -> 0", 0, MenuRules.nearestFocus(rr, -4)); eq("liste vide", -1, MenuRules.nearestFocus(new ArrayList<MenuRules.Row>(), 0));
+        java.util.List<MenuRules.Row> inf = new ArrayList<>();
+        inf.add(MenuRules.action("Tout libérer", "broom")); inf.add(MenuRules.info("Autorisation requise : voir README"));
+        ok("info non focalisable", !MenuRules.focusable(inf.get(1))); eq("info : le focus reste sur Tout liberer", 0, MenuRules.firstFocus(inf));
+        eq("info : hauteur de ligne", 52, MenuRules.rowHeight(inf.get(1))); eq("info : precedent = Tout liberer", 0, MenuRules.step(inf, 0, 1));
+        eq("info : focus apres suppression", 0, MenuRules.nearestFocus(inf, 1));
+        java.util.List<MenuRules.Row> full = new ArrayList<>();
+        full.add(MenuRules.action("Tout libérer", "broom"));
+        for (int i = 0; i < 10; i++) full.add(a);
+        ok("liste de 10 applis + Tout liberer tient dans le panneau (en-tete + aide ~119)", MenuRules.height(full) + 119 <= 672);
+        eq("hauteur ligne d'appli", 46, MenuRules.rowHeight(a)); eq("hauteur ligne simple", 52, MenuRules.rowHeight(MenuRules.action("x", "")));
     }
 }

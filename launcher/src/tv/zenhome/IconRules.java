@@ -1,6 +1,6 @@
 package tv.zenhome;
 
-/** Icones Phosphor (sous-ensembles de police) : nom -> codepoint, meteo -> icone (sans android.*). Les 7 premieres suivent Icons.LineIcon. */
+/** Icones Phosphor (sous-ensembles de police) : nom -> codepoint, meteo -> icone (sans android.*). */
 final class IconRules {
     private IconRules() { }
 
@@ -8,12 +8,12 @@ final class IconRules {
             "sun", "cloud-sun", "cloud-moon", "cloud", "cloud-fog", "cloud-rain", "cloud-lightning", "cloud-snow", "drop",
             "plug", "plugs", "speaker-hifi", "plus", "caret-down", "check",
             "arrows-left-right", "swap", "trash", "text-aa", "palette", "arrow-counter-clockwise", "caret-right", "arrow-square-out",
-            "monitor", "speaker-high", "sliders-horizontal"};
+            "monitor", "speaker-high", "sliders-horizontal", "x-circle", "stack", "broom"};
     static final int[] CODES = {0xEAE6, 0xE464, 0xE272, 0xE3B4, 0xE2CA, 0xE330, 0xE294,
             0xE472, 0xE540, 0xE53E, 0xE1AA, 0xE53C, 0xE1B4, 0xE1B2, 0xE1B8, 0xE210,
             0xE946, 0xEB56, 0xEA08, 0xE3D4, 0xE136, 0xE182,
             0xE0A0, 0xE83C, 0xE4A6, 0xE6EE, 0xE6C8, 0xE038, 0xE13A, 0xE5DE,
-            0xE32E, 0xE44A, 0xE434};
+            0xE32E, 0xE44A, 0xE434, 0xE4F8, 0xE466, 0xEC54};
 
     /** Codepoint du glyphe, ou -1 si le nom est inconnu. */
     static int codepoint(String name) {
@@ -25,11 +25,6 @@ final class IconRules {
     static String glyph(String name) {
         int c = codepoint(name);
         return c < 0 ? "" : new String(Character.toChars(c));
-    }
-
-    /** Glyphe de l'icone numero kind (LineIcon.INPUT...), vide si kind est hors table. */
-    static String glyph(int kind) {
-        return kind < 0 || kind >= CODES.length ? "" : new String(Character.toChars(CODES[kind]));
     }
 
     /** Code WMO -> nom d'icone (clair : soleil ou lune ; peu nuageux : nuage avec soleil ou lune ; couvert ; brouillard ; pluie ; neige ; orage). */

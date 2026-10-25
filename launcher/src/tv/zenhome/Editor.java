@@ -31,15 +31,16 @@ class Editor {
     final HomeConfig config;
     final Dock dock;
     final Carousel carousel;
+    final Recents recents;
     final Host host;
     TextView hintView;
     int moveIndex = -1;           // >= 0 : appli en cours de deplacement
     boolean editMode = false;     // mode edition (raccourci crayon, ou touche Menu hors d'une tuile) : OK sur une appli ouvre son menu
     boolean moveCar = false;      // le deplacement en cours concerne le carrousel (moveIndex = position dedans)
 
-    Editor(Context ctx, Ui ui, Apps apps, AppsGrid grid, Overlays ovs, HomeConfig config, Dock dock, Carousel carousel, Host host) {
+    Editor(Context ctx, Ui ui, Apps apps, AppsGrid grid, Overlays ovs, HomeConfig config, Dock dock, Carousel carousel, Recents recents, Host host) {
         this.ctx = ctx; this.ui = ui; this.apps = apps; this.grid = grid; this.ovs = ovs; this.config = config;
-        this.dock = dock; this.carousel = carousel; this.host = host;
+        this.dock = dock; this.carousel = carousel; this.recents = recents; this.host = host;
     }
 
     void buildHint(ViewGroup parent) {
@@ -83,6 +84,7 @@ class Editor {
     void onAppLongPress(final String pkg, final View ov) {
         MenuPanel.Page p = new MenuPanel.Page(apps.appLabel(pkg), "");
         p.add(MenuRules.action(ui.t("Ouvrir", "Open"), "arrow-square-out"), new Runnable() { public void run() { ovs.closeOverlay(ov, false); apps.launch(pkg); } });
+        if (RecentRules.canClose(pkg)) p.add(MenuRules.action(ui.t("Fermer l'appli", "Close app"), "x-circle"), closeAction(pkg));
         if (!config.dockPkgs.contains(pkg) && config.dockPkgs.size() < config.layout) {
             p.add(MenuRules.action(ui.t("Ajouter au dock", "Add to dock"), "plus"), new Runnable() { public void run() {
                 ovs.closeOverlay(ov, false); config.dockPkgs.add(pkg); config.save(); dock.rebuild(config.dockPkgs.indexOf(pkg)); } });
@@ -92,6 +94,8 @@ class Editor {
         }
         menu(p);
     }
+
+    Runnable closeAction(final String pkg) { return new Runnable() { public void run() { recents.closeApp(pkg); } }; }
 
     /** Menu lateral a une seule page fixe. */
     void menu(final MenuPanel.Page p) {
@@ -114,6 +118,7 @@ class Editor {
             p.add(MenuRules.action(ui.t("Remplacer par une autre appli", "Replace with another app"), "swap"), new Runnable() { public void run() { pickAppToReplace(index); } });
             p.add(MenuRules.action(ui.t("Retirer du dock", "Remove from dock"), "trash"), new Runnable() { public void run() {
                 config.dockPkgs.remove(index); config.save(); dock.rebuild(Math.max(0, index - 1)); } });
+            if (RecentRules.canClose(config.dockPkgs.get(index))) p.add(MenuRules.action(ui.t("Fermer l'appli", "Close app"), "x-circle"), closeAction(config.dockPkgs.get(index)));
             p.sep();
         }
         if (config.dockPkgs.size() < config.layout) p.add(MenuRules.action(ui.t("Ajouter une appli", "Add an app"), "plus"), new Runnable() { public void run() { pickAppToAdd(); } });
@@ -262,6 +267,7 @@ class Editor {
             if (carousel.pkgs.size() > 1) p.add(MenuRules.action(ui.t("Déplacer", "Move"), "arrows-left-right"), new Runnable() { public void run() { startCarMove(index); } });
             p.add(MenuRules.action(ui.t("Retirer du carrousel", "Remove from carousel"), "trash"), new Runnable() { public void run() {
                 carousel.pkgs.remove(index); carousel.save(); carousel.rebuild(Math.max(0, index - 1)); } });
+            if (RecentRules.canClose(carousel.pkgs.get(index))) p.add(MenuRules.action(ui.t("Fermer l'appli", "Close app"), "x-circle"), closeAction(carousel.pkgs.get(index)));
             p.sep();
         }
         p.add(MenuRules.action(ui.t("Ajouter une appli", "Add an app"), "plus"), new Runnable() { public void run() { pickCarouselApp(); } });

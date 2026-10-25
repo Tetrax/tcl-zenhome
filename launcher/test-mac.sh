@@ -6,7 +6,7 @@ cd "$(dirname "$0")"
 export JAVA_HOME="${JAVA_HOME:-/opt/homebrew/opt/openjdk@17}"
 export PATH="$JAVA_HOME/bin:$PATH"
 
-PURE="Net Fmt Wmo Greeting DockMetrics Movie MovieRules ConfigRules Nav InputRules SleepRules WeatherRules KeyRules GaugeRules StandbyRules IconRules ThemeRules Attribution MenuRules"
+PURE="Net Fmt Wmo Greeting DockMetrics Movie MovieRules ConfigRules Nav InputRules SleepRules WeatherRules KeyRules GaugeRules StandbyRules IconRules ThemeRules Attribution MenuRules RecentRules"
 
 SRC=""
 for c in $PURE; do SRC="$SRC src/tv/zenhome/$c.java"; done

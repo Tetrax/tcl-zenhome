@@ -87,6 +87,9 @@ interface Host {
     /** Menu lateral « Reglages » (Image, Son, tous les parametres). */
     void showSettings();
 
+    /** Menu lateral « Applis ouvertes ». */
+    void showRecents();
+
     /** Menu du minuteur de mise en veille. */
     void showSleep();
 

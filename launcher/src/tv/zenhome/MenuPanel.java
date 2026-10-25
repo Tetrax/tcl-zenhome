@@ -28,6 +28,9 @@ class MenuPanel {
 
     static class Item {
         final MenuRules.Row row; final Runnable action; final Source sub;
+        boolean stay;      // l'action ne ferme pas le menu : la page est reconstruite ensuite
+        boolean removes;   // la ligne disparait avec l'action (animation de sortie avant la reconstruction)
+        android.graphics.drawable.Drawable drawable;   // icone d'appli a la place du glyphe
         Item(MenuRules.Row row, Runnable action, Source sub) { this.row = row; this.action = action; this.sub = sub; }
     }
 
@@ -36,6 +39,12 @@ class MenuPanel {
         final List<Item> items = new ArrayList<>();
         Page(String title, String subtitle) { this.title = title; this.subtitle = subtitle; }
         Page add(MenuRules.Row r, Runnable a) { items.add(new Item(r, a, null)); return this; }
+        /** Action qui laisse le menu ouvert (la page est reconstruite apres). */
+        Page addStay(MenuRules.Row r, Runnable a) { Item it = new Item(r, a, null); it.stay = true; items.add(it); return this; }
+        /** Ligne d'appli : OK lance a, la ligne s'efface, le menu reste ouvert. */
+        Page addApp(MenuRules.Row r, android.graphics.drawable.Drawable icon, Runnable a) {
+            Item it = new Item(r, a, null); it.stay = true; it.removes = true; it.drawable = icon; items.add(it); return this;
+        }
         Page sub(MenuRules.Row r, Source s) { items.add(new Item(r, null, s)); return this; }
         Page sep() { items.add(new Item(MenuRules.separator(), null, null)); return this; }
         /** Une ligne par element de rows, actions dans le meme ordre (listes de choix). */
@@ -134,8 +143,10 @@ class MenuPanel {
 
     // ---------- construction d'une page
 
-    /** Vue d'une page ; son tag est la ligne qui prend le focus. */
-    View buildPage(Page p) {
+    View buildPage(Page p) { return buildPage(p, -1); }
+
+    /** Vue d'une page ; son tag est la ligne qui prend le focus (la plus proche de want si want >= 0, sinon le choix actuel / la premiere). */
+    View buildPage(Page p, int want) {
         final List<MenuRules.Row> rows = p.rows();
         LinearLayout pv = new LinearLayout(ctx);
         pv.setOrientation(LinearLayout.VERTICAL);
@@ -180,8 +191,16 @@ class MenuPanel {
                 col.addView(s, new LinearLayout.LayoutParams(-1, ui.dp(MenuRules.SEP_H)));
                 continue;
             }
+            if (r.kind == MenuRules.INFO) {   // texte explicatif, non focalisable
+                TextView tx = ui.text(r.label, 13, ui.fReg, 0xB3FFFFFF);
+                tx.setShadowLayer(0, 0, 0, 0);
+                tx.setGravity(Gravity.CENTER_VERTICAL);
+                tx.setPadding(ui.dp(14), 0, ui.dp(14), 0);
+                col.addView(tx, new LinearLayout.LayoutParams(-1, ui.dp(MenuRules.ROW_H)));
+                continue;
+            }
             views[i] = row(it, i, rows, hl, icons);
-            col.addView(views[i], new LinearLayout.LayoutParams(-1, ui.dp(MenuRules.ROW_H)));
+            col.addView(views[i], new LinearLayout.LayoutParams(-1, ui.dp(MenuRules.rowHeight(r))));
             views[i].setId(View.generateViewId());
         }
         for (int i = 0; i < rows.size(); i++) {   // Haut / Bas bouclent entre les lignes focalisables ; Gauche / Droite restent dans le panneau
@@ -190,7 +209,7 @@ class MenuPanel {
             views[i].setNextFocusDownId(views[MenuRules.step(rows, i, 1)].getId());
             views[i].setNextFocusLeftId(views[i].getId()); views[i].setNextFocusRightId(views[i].getId());
         }
-        int f = MenuRules.firstFocus(rows);
+        int f = want >= 0 ? MenuRules.nearestFocus(rows, want) : MenuRules.firstFocus(rows);
         pv.setTag(f < 0 ? null : views[f]);
         return pv;
     }
@@ -211,6 +230,11 @@ class MenuPanel {
                 sw.setBackground(sg);
                 LinearLayout.LayoutParams ls = new LinearLayout.LayoutParams(ui.dp(18), ui.dp(18)); ls.rightMargin = ui.dp(14); ls.leftMargin = ui.dp(3);
                 v.addView(sw, ls);
+            } else if (it.drawable != null) {   // icone de l'appli
+                android.widget.ImageView iv = new android.widget.ImageView(ctx);
+                iv.setImageDrawable(it.drawable);
+                LinearLayout.LayoutParams li = new LinearLayout.LayoutParams(ui.dp(30), ui.dp(30)); li.rightMargin = ui.dp(12); li.leftMargin = -ui.dp(3);
+                v.addView(iv, li);
             } else {
                 ic.setGravity(Gravity.CENTER);
                 LinearLayout.LayoutParams li = new LinearLayout.LayoutParams(ui.dp(24), ui.dp(24)); li.rightMargin = ui.dp(14);
@@ -220,7 +244,16 @@ class MenuPanel {
         final TextView label = ui.text(r.label, 15, ui.fMed, 0xFFFFFFFF);
         label.setShadowLayer(0, 0, 0, 0);
         label.setSingleLine(true); label.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        v.addView(label, new LinearLayout.LayoutParams(0, -2, 1f));
+        final TextView subTx = ui.text(r.sub, 11, ui.fReg, 0x99FFFFFF);
+        subTx.setShadowLayer(0, 0, 0, 0);
+        subTx.setSingleLine(true);
+        if (r.sub.isEmpty()) v.addView(label, new LinearLayout.LayoutParams(0, -2, 1f));
+        else {   // libelle au-dessus d'un sous-texte discret
+            LinearLayout two = new LinearLayout(ctx);
+            two.setOrientation(LinearLayout.VERTICAL);
+            two.addView(label); two.addView(subTx);
+            v.addView(two, new LinearLayout.LayoutParams(0, -2, 1f));
+        }
         final TextView val = ui.text(r.value, 13, ui.fReg, 0x99FFFFFF);
         val.setShadowLayer(0, 0, 0, 0);
         val.setSingleLine(true);
@@ -246,17 +279,18 @@ class MenuPanel {
             int dark = 0xFF111111;
             label.setTextColor(has ? dark : 0xFFFFFFFF);
             val.setTextColor(has ? 0xAA111111 : 0x99FFFFFF);
+            subTx.setTextColor(has ? 0xAA111111 : 0x99FFFFFF);
             caret.setTextColor(has ? 0xAA111111 : 0x99FFFFFF);
             ic.setTextColor(has ? dark : 0xF2FFFFFF);
             if (ui.pReg != null) ic.setTypeface(has ? ui.pFill : ui.pReg);   // Regular au repos, Fill au focus
             radio.setStroke(Math.max(1, ui.dp(1.5f)), has ? 0xAA111111 : 0xAAFFFFFF);
             radio.setColor(sel ? (has ? dark : 0xFFFFFFFF) : 0x00FFFFFF);
-            if (has) moveHighlight(hl, topPx(rows, index));
+            if (has) moveHighlight(hl, topPx(rows, index), ui.dp(MenuRules.rowHeight(r)));
         } });
         // etat de repos des couleurs du point de choix
         radio.setStroke(Math.max(1, ui.dp(1.5f)), 0xAAFFFFFF);
         radio.setColor(sel ? 0xFFFFFFFF : 0x00FFFFFF);
-        v.setOnClickListener(new View.OnClickListener() { public void onClick(View x) { activate(it); } });
+        v.setOnClickListener(new View.OnClickListener() { public void onClick(View x) { activate(it, index, x); } });
         v.setOnKeyListener(new View.OnKeyListener() { public boolean onKey(View x, int code, KeyEvent e) {
             if (code == KeyEvent.KEYCODE_DPAD_LEFT) {   // ◀ = Retour
                 if (e.getAction() == KeyEvent.ACTION_DOWN && e.getRepeatCount() == 0) ovs.closeTopOverlay();
@@ -274,13 +308,41 @@ class MenuPanel {
     }
 
     /** La surbrillance se place sans animation la premiere fois, puis glisse (translationY, 140 ms). */
-    void moveHighlight(View hl, int y) {
+    void moveHighlight(View hl, int y, int h) {
+        if (hl.getLayoutParams().height != h) { hl.getLayoutParams().height = h; hl.requestLayout(); }
         if (hl.getVisibility() != View.VISIBLE) { hl.setTranslationY(y); hl.setVisibility(View.VISIBLE); return; }
         hl.animate().translationY(y).setDuration(HL_MS).setInterpolator(new DecelerateInterpolator()).start();
     }
 
-    void activate(Item it) {
+    /** Reconstruit la page affichee (valeurs a jour, lignes retirees) en fondu ; le focus reste pres de la ligne focus. */
+    void refresh(int focus) {
+        if (busy || cur == null || !alive()) return;
+        final View old = cur;
+        View next = buildPage(stack.top().build(), focus);
+        cur = next;
+        busy = true;
+        if (old instanceof android.view.ViewGroup) ((android.view.ViewGroup) old).setDescendantFocusability(android.view.ViewGroup.FOCUS_BLOCK_DESCENDANTS);
+        pages.addView(next, new FrameLayout.LayoutParams(-1, -1));
+        next.setAlpha(0f);
+        next.animate().alpha(1f).setDuration(120).start();
+        old.animate().alpha(0f).setDuration(120).withEndAction(new Runnable() { public void run() { pages.removeView(old); busy = false; } }).start();
+        View f = (View) next.getTag();
+        if (f != null) f.requestFocus();
+    }
+
+    /** Le menu est toujours affiche. */
+    boolean alive() { return ov != null && ovs.overlays.contains(ov); }
+
+    void activate(final Item it, final int index, View row) {
         if (busy) return;
+        if (it.stay) {
+            it.action.run();
+            if (!it.removes) { refresh(index); return; }
+            busy = true;   // la ligne glisse et s'efface, puis la page est reconstruite sans elle
+            row.animate().alpha(0f).translationX(ui.dp(60)).setDuration(150)
+                    .withEndAction(new Runnable() { public void run() { busy = false; refresh(index); } }).start();
+            return;
+        }
         switch (it.row.kind) {
             case MenuRules.SUBMENU: push(it.sub); break;
             case MenuRules.CHOICE:

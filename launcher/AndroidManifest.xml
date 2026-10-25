@@ -8,6 +8,12 @@
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Fermer des applis d'arriere-plan (menus des tuiles, ecran « Applis ouvertes ») ; niveau normal -->
+    <uses-permission android:name="android.permission.KILL_BACKGROUND_PROCESSES" />
+    <!-- Liste des applis recentes (« Applis ouvertes ») : pas de dialogue, accordee par adb :
+         adb shell appops set tv.zenhome GET_USAGE_STATS allow
+         Sans elle, l'ecran n'agit que sur le dock et le carrousel. -->
+    <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" />
     <uses-feature android:name="android.software.leanback" android:required="false" />
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
     <!-- Visibilite des paquets (API 30+) : les intents ci-dessous suffisent au launcher (applis, entrees, YouTube),
