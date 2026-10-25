@@ -61,6 +61,7 @@ public class Home extends Activity implements Host {
     Levels levels;
     Ambient ambient;
     Inputs inputs;
+    SettingsMenu settingsMenu;
     Sleep sleep;
     Banner banner;
 
@@ -98,6 +99,7 @@ public class Home extends Activity implements Host {
         ovs = new Overlays(this, ui, root, content, this);
         grid = new AppsGrid(this, ui, apps, ovs, this);
         inputs = new Inputs(this, ui, apps, ovs, this);
+        settingsMenu = new SettingsMenu(this, ui, ovs);
         sleep = new Sleep(this, ui, prefs, ovs, new Runnable() { public void run() { shortcuts.sleepBadge(sleep.badgeText()); } });
         sleep.restore();
         shortcuts = new Shortcuts(this, ui, apps, root, this);
@@ -193,6 +195,8 @@ public class Home extends Activity implements Host {
     public void cover(boolean on) { levels.cover(on); }
 
     public void showSleep() { sleep.show(); }
+
+    public void showSettings() { settingsMenu.show(); }
 
     public void editHome() { editor.startEdit(); }
 
@@ -322,6 +326,13 @@ public class Home extends Activity implements Host {
         if (front != this || !ovs.isEmpty() || editor.moveIndex >= 0) return;
         ambient.reset();
         inputs.show();
+    }
+
+    /** Touche Reglages recue par KeyService : menu « Reglages » (thread UI). */
+    void onSettingsKey() {
+        if (front != this || !ovs.isEmpty() || editor.moveIndex >= 0) return;
+        ambient.reset();
+        settingsMenu.show();
     }
 
     public void focusDock() {

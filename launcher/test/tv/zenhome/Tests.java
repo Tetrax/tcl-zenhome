@@ -23,7 +23,7 @@ public class Tests {
     }
 
     public static void main(String[] args) {
-        net(); fmt(); wmo(); greeting(); dock(); movieRules(); configRules(); nav(); trailer(); myList(); hardening(); inputs(); sleep(); weatherRules(); keyRules(); gauge(); standby(); iconRules(); themeRules(); menuRules(); nightLabels(); attribution(); banner();
+        net(); fmt(); wmo(); greeting(); dock(); movieRules(); configRules(); nav(); trailer(); myList(); hardening(); inputs(); sleep(); weatherRules(); keyRules(); settingsKey(); gauge(); standby(); iconRules(); themeRules(); menuRules(); nightLabels(); attribution(); banner();
         System.out.println(count + " assertions, " + failed + " echec(s)");
         if (failed > 0) System.exit(1);
     }
@@ -734,6 +734,21 @@ public class Tests {
         ok("source: code 0", !KeyRules.shouldHandleSource(0, true));
     }
 
+    static void settingsKey() {
+        ok("reglages: touche 176", KeyRules.isSettingsKey(176)); ok("reglages: pas 178", !KeyRules.isSettingsKey(178)); ok("reglages: pas 82 (menu)", !KeyRules.isSettingsKey(82));
+        eq("reglages: accueil au premier plan -> menu", KeyRules.HOME_MENU, KeyRules.settingsAction(176, true, true));
+        eq("reglages: accueil sans panneau TCL -> menu", KeyRules.HOME_MENU, KeyRules.settingsAction(176, true, false));
+        eq("reglages: autre appli, TCL -> panneau Image", KeyRules.TCL_PANEL, KeyRules.settingsAction(176, false, true));
+        eq("reglages: autre appli, pas TCL -> la touche passe", KeyRules.NONE, KeyRules.settingsAction(176, false, false));
+        // telecommande TCL : la touche engrenage envoie KEYCODE_NOTIFICATION (83)
+        ok("reglages: touche TCL 83", KeyRules.isSettingsKey(83));
+        eq("reglages TCL 83: accueil -> menu", KeyRules.HOME_MENU, KeyRules.settingsAction(83, true, true));
+        eq("reglages TCL 83: autre appli -> panneau Image", KeyRules.TCL_PANEL, KeyRules.settingsAction(83, false, true));
+        eq("reglages TCL 83: TV non TCL -> la touche passe (meme sur l'accueil)", KeyRules.NONE, KeyRules.settingsAction(83, true, false));
+        eq("reglages: autre touche -> rien", KeyRules.NONE, KeyRules.settingsAction(178, true, true));
+        eq("reglages: code 0", KeyRules.NONE, KeyRules.settingsAction(0, false, true));
+    }
+
     // ---------- Bandeau « sort aujourd'hui »
     static void banner() {
         List<Movie> l = new ArrayList<>();
@@ -835,7 +850,9 @@ public class Tests {
         eq("icone drop", 0xE210, IconRules.codepoint("drop")); eq("icone plug", 0xE946, IconRules.codepoint("plug")); eq("icone plugs", 0xEB56, IconRules.codepoint("plugs"));
         eq("icone speaker-hifi", 0xEA08, IconRules.codepoint("speaker-hifi")); eq("icone plus", 0xE3D4, IconRules.codepoint("plus"));
         eq("icone caret-down", 0xE136, IconRules.codepoint("caret-down")); eq("icone check", 0xE182, IconRules.codepoint("check"));
-        eq("30 icones", 30, IconRules.NAMES.length);
+        eq("33 icones", 33, IconRules.NAMES.length);
+        eq("icone monitor", 0xE32E, IconRules.codepoint("monitor")); eq("icone speaker-high", 0xE44A, IconRules.codepoint("speaker-high"));
+        eq("icone sliders-horizontal", 0xE434, IconRules.codepoint("sliders-horizontal"));
         int[] nc = {0xE0A0, 0xE83C, 0xE4A6, 0xE6EE, 0xE6C8, 0xE038, 0xE13A, 0xE5DE};
         String[] nn = {"arrows-left-right", "swap", "trash", "text-aa", "palette", "arrow-counter-clockwise", "caret-right", "arrow-square-out"};
         for (int i = 0; i < nn.length; i++) eq("icone " + nn[i], nc[i], IconRules.codepoint(nn[i]));
@@ -860,7 +877,7 @@ public class Tests {
         ok("repli: entree illisible", !WeatherRules.isNight(d0 + 12 * hh, new long[]{-1}, new long[]{-1}));
         eq("table: autant de noms que de codes", IconRules.NAMES.length, IconRules.CODES.length);
         eq("glyphe entrees", "\uEAE6", IconRules.glyph(0)); eq("glyphe play", "\uE294", IconRules.glyph(6));
-        eq("glyphe hors table", "", IconRules.glyph(30)); eq("glyphe negatif", "", IconRules.glyph(-1));
+        eq("glyphe hors table", "", IconRules.glyph(33)); eq("glyphe negatif", "", IconRules.glyph(-1));
         eq("glyphe nom", "\uE472", IconRules.glyph("sun")); eq("glyphe nom inconnu", "", IconRules.glyph("house"));
         java.util.Set<Integer> seen = new java.util.HashSet<>();
         for (int c : IconRules.CODES) seen.add(c);

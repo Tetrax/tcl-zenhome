@@ -84,6 +84,9 @@ interface Host {
     /** Un panneau plein ecran (entrees) cache (true) ou rend (false) le bloc du bas et les films. */
     void cover(boolean on);
 
+    /** Menu lateral « Reglages » (Image, Son, tous les parametres). */
+    void showSettings();
+
     /** Menu du minuteur de mise en veille. */
     void showSleep();
 

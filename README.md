@@ -89,6 +89,7 @@ Tous (sauf `restaurer-tv.sh`) acceptent `--help` et `--dry-run`.
 | **Menu** sur une affiche | Ajouter à / retirer de *Ma liste* |
 | **Menu** ailleurs | Mode édition de l'accueil |
 | **Touche Source / TV** | Panneau des entrées en cartes |
+| **Touche Réglages** | Depuis l'accueil : menu Réglages (Image, Son, tous les paramètres). Dans les autres applis : panneau rapide Image de TCL (service d'accessibilité) |
 | Raccourci **minuteur** | Programmer la veille (badge du temps restant) |
 | Mode édition (Menu), entrée « Thème » | Changer la couleur du verre |
 | Aucune touche pendant 3 min | Mode ambiance ; la première touche réveille l'écran |

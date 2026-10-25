@@ -85,7 +85,7 @@ Fond :
 - `Ambient` : mode ambiance après 3 min sans touche ; `Standby` : contenu partagé avec l'économiseur `ZenDream` (DreamService)
 - `Banner` : bandeau « film de Ma liste qui sort aujourd'hui », une fois par jour
 - `Theme` : applique la palette aux vues
-- `KeyService` : service d'accessibilité qui relaie les boutons d'applis de la télécommande TCL
+- `KeyService` : service d'accessibilité qui relaie les boutons d'applis de la télécommande TCL, la touche Source (accueil au premier plan) et la touche Réglages (menu `SettingsMenu` ou panneau rapide TCL via `Apps.openTclPanel`)
 - `ConfigReceiver` : configuration par adb (ville, jeton TMDB), protégée par la permission `DUMP`
 
 **Décisions** :

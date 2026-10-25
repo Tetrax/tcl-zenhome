@@ -2,9 +2,7 @@ package tv.zenhome;
 
 import android.content.ComponentName;
 import android.content.Context;
-import android.content.Intent;
 import android.graphics.drawable.GradientDrawable;
-import android.provider.Settings;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
@@ -57,9 +55,7 @@ class Shortcuts {
         if (input != null || viewInputs != null)
             shortcut(Icons.LineIcon.INPUT, ui.t("Entrées TV", "TV inputs"), new Runnable() { public void run() { host.showInputs(); } });
         shortcut(Icons.LineIcon.GRID, ui.t("Toutes les applis", "All apps"), new Runnable() { public void run() { host.showAllApps(); } });
-        shortcut(Icons.LineIcon.GEAR, ui.t("Réglages", "Settings"), new Runnable() { public void run() {
-            try { ctx.startActivity(new Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)); }
-            catch (Exception e) { ui.toast(ui.t("Réglages indisponibles", "Settings unavailable")); } } });
+        shortcut(Icons.LineIcon.GEAR, ui.t("Réglages", "Settings"), new Runnable() { public void run() { host.showSettings(); } });
         shortcut(Icons.LineIcon.PENCIL, ui.t("Modifier l'accueil", "Edit home screen"), new Runnable() { public void run() { host.editHome(); } });
         shortcut(Icons.LineIcon.IMAGE, ui.t("Fond", "Wallpaper"), new Runnable() { public void run() { host.nextWall(); } });
         FrameLayout moon = shortcut(Icons.LineIcon.MOON, ui.t("Mise en veille", "Sleep timer"), new Runnable() { public void run() { host.showSleep(); } });

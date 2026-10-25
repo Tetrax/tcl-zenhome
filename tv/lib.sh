@@ -115,7 +115,13 @@ activer_accessibilite() {
     cur=$(adb_lire shell settings get secure enabled_accessibility_services)
     [ "$cur" = null ] && cur=""
     case ":$cur:" in
-        *":$KEYSVC_FULL:"*|*":$KEYSVC_SHORT:"*) info "Accessibilité : KeyService déjà activé." ;;
+        *":$KEYSVC_FULL:"*|*":$KEYSVC_SHORT:"*)
+            # Une réinstallation de l'APK délie le service sans le retirer de la liste : on le retire puis on le remet pour le relier.
+            local rest
+            rest=$(printf '%s' "$cur" | tr ':' '\n' | grep -vxF -e "$KEYSVC_FULL" -e "$KEYSVC_SHORT" | paste -sd: -)
+            adb_tv shell settings put secure enabled_accessibility_services "$(shq "${rest:-\"\"}")"
+            adb_tv shell settings put secure enabled_accessibility_services "$(shq "${rest:+$rest:}$KEYSVC_FULL")"
+            info "Accessibilité : KeyService relancé." ;;
         *)
             [ "$DRY_RUN" = 1 ] && info "[dry-run] (valeur actuelle conservée, KeyService ajouté à la suite)"
             adb_tv shell settings put secure enabled_accessibility_services "$(shq "${cur:+$cur:}$KEYSVC_FULL")"

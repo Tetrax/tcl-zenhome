@@ -11,7 +11,7 @@ import android.view.accessibility.AccessibilityEvent;
  * Ces touches envoient des codes propres a TCL, que seul l'accueil Google TV traitait :
  * une fois cet accueil desactive par le kit, elles ne faisaient plus rien.
  * Le kit n'active ce service que dans ce cas. Seules ces touches sont interceptees (et Source / TV quand l'accueil est
- * au premier plan, voir KeyRules), toutes les autres passent sans modification.
+ * au premier plan, et Reglages, voir KeyRules), toutes les autres passent sans modification.
  */
 public class KeyService extends AccessibilityService {
 
@@ -48,8 +48,23 @@ public class KeyService extends AccessibilityService {
         return null;
     }
 
+    boolean settingsHeld;   // la touche Reglages a ete prise sur son appui : on prend aussi sa repetition et son relachement
+
     @Override
     protected boolean onKeyEvent(KeyEvent e) {
+        // Reglages : sans l'accueil Google TV, la touche ne fait plus rien. Menu Reglages de Zen Home s'il est au premier plan,
+        // sinon panneau rapide Image de TCL, partout ; si rien n'est possible la touche suit son chemin
+        if (KeyRules.isSettingsKey(e.getKeyCode())) {
+            if (e.getAction() == KeyEvent.ACTION_DOWN && e.getRepeatCount() == 0) {
+                final Home hm = Home.front;
+                int a = KeyRules.settingsAction(e.getKeyCode(), hm != null, Apps.tclPanelAvailable(this));
+                if (a == KeyRules.HOME_MENU) { hm.runOnUiThread(new Runnable() { public void run() { hm.onSettingsKey(); } }); settingsHeld = true; }
+                else settingsHeld = a == KeyRules.TCL_PANEL && Apps.startTclPanel(this, "picture");
+            }
+            boolean held = settingsHeld;
+            if (e.getAction() == KeyEvent.ACTION_UP) settingsHeld = false;
+            return held;
+        }
         // Source / TV : le panneau des entrees de l'accueil, mais seulement quand l'accueil est au premier plan
         final Home h = Home.front;
         if (KeyRules.shouldHandleSource(e.getKeyCode(), h != null)) {

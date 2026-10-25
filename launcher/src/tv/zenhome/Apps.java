@@ -7,6 +7,7 @@ import android.content.Intent;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.graphics.drawable.Drawable;
+import android.provider.Settings;
 
 /** Lancement des applis, entrees TV, icones et libelles. */
 class Apps {
@@ -83,6 +84,33 @@ class Apps {
         String[] in = findInput();
         if (in != null) openInput(in);
         else ui.toast(ui.t("Aucun menu des entrées trouvé sur cette TV", "No inputs menu found on this TV"));
+    }
+
+    static final ComponentName TCL_PANEL = new ComponentName("com.android.tv.settings", "com.tcl.settings.ShowWindowService");
+
+    /** Marque TCL et service des panneaux rapides (Image, Son) present : c'est un service exporte de com.android.tv.settings. */
+    static boolean tclPanelAvailable(Context ctx) {
+        try {
+            return KeyService.isTcl() && ctx.getPackageManager().resolveService(new Intent("com.tcl.settings.SHOW_WINDOW").setComponent(TCL_PANEL), 0) != null;
+        } catch (Exception e) { return false; }
+    }
+
+    /** Demarre le panneau rapide TCL (« picture » ou « sound ») par-dessus l'appli en cours ; faux s'il est refuse ou introuvable. */
+    static boolean startTclPanel(Context ctx, String type) {
+        if (!tclPanelAvailable(ctx)) return false;
+        try {
+            return ctx.startService(new Intent("com.tcl.settings.SHOW_WINDOW").setComponent(TCL_PANEL).putExtra("Type", type)) != null;
+        } catch (RuntimeException e) { return false; }   // appli en arriere-plan, service refuse...
+    }
+
+    /** Panneau TCL, sinon l'ecran Android equivalent (Image : affichage, Son : son), sinon les parametres. Faux si rien ne s'ouvre. */
+    static boolean openTclPanel(Context ctx, String type) {
+        if (startTclPanel(ctx, type)) return true;
+        String[] tries = {"sound".equals(type) ? Settings.ACTION_SOUND_SETTINGS : Settings.ACTION_DISPLAY_SETTINGS, Settings.ACTION_SETTINGS};
+        for (String a : tries) {
+            try { ctx.startActivity(new Intent(a).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)); return true; } catch (Exception ignored) { }
+        }
+        return false;
     }
 
     /** Partage avec KeyService (qui n'a pas de Context applicatif ici, seulement le PackageManager). */
