@@ -40,13 +40,7 @@ final class SleepRules {
     }
 
     static String choiceLabel(int minutes, boolean fr) {
-        if (minutes <= 0) return fr ? "Désactivé" : "Off";
-        return minutes >= 180 && minutes % 60 == 0 ? (minutes / 60) + " h" : minutes + " min";
-    }
-
-    /** Ligne du menu, coche sur le choix courant (meme gabarit que le menu de disposition). */
-    static String row(int minutes, int chosen, boolean fr) {
-        return (minutes == chosen ? Fmt.CHECK : Fmt.NO_CHECK) + choiceLabel(minutes, fr);
+        return minutes <= 0 ? (fr ? "Désactivé" : "Off") : minutes + " min";
     }
 
     static int indexOf(int minutes) {

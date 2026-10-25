@@ -61,6 +61,17 @@ final class ThemeRules {
         }
     }
 
+    /** Couleur (rgb) de la pastille d'un theme dans le menu : sa teinte, eclaircie pour se voir sur le verre sombre ; verre : gris clair. */
+    static int swatch(String name, int autoRgb) {
+        switch (normalize(name)) {
+            case NIGHT: return mixRgb(NIGHT_TINT, 0xFFFFFF, 0.25f);
+            case SAND: return mixRgb(SAND_TINT, 0xFFFFFF, 0.25f);
+            case FOREST: return mixRgb(FOREST_TINT, 0xFFFFFF, 0.25f);
+            case AUTO: return mixRgb(autoRgb < 0 ? NEUTRAL_TINT : autoRgb, 0xFFFFFF, 0.25f);
+            default: return 0xC9CED8;
+        }
+    }
+
     // ---------- couleurs
 
     static int argb(int a, int rgb) { return (a << 24) | (rgb & 0xFFFFFF); }

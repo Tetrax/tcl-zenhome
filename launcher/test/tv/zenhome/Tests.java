@@ -23,7 +23,7 @@ public class Tests {
     }
 
     public static void main(String[] args) {
-        net(); fmt(); wmo(); greeting(); dock(); movieRules(); configRules(); nav(); trailer(); myList(); hardening(); inputs(); sleep(); weatherRules(); keyRules(); gauge(); standby(); iconRules(); themeRules(); nightLabels(); attribution(); banner();
+        net(); fmt(); wmo(); greeting(); dock(); movieRules(); configRules(); nav(); trailer(); myList(); hardening(); inputs(); sleep(); weatherRules(); keyRules(); gauge(); standby(); iconRules(); themeRules(); menuRules(); nightLabels(); attribution(); banner();
         System.out.println(count + " assertions, " + failed + " echec(s)");
         if (failed > 0) System.exit(1);
     }
@@ -636,11 +636,10 @@ public class Tests {
         eq("avertissement sans minuteur", 0L, SleepRules.warnAt(0, now));
         eq("choix off fr", "Désactivé", SleepRules.choiceLabel(0, true)); eq("choix off en", "Off", SleepRules.choiceLabel(0, false));
         eq("choix 90", "90 min", SleepRules.choiceLabel(90, true));
-        eq("ligne cochee", "✓  60 min", SleepRules.row(60, 60, true)); eq("ligne non cochee", "     60 min", SleepRules.row(60, 30, true));
-        eq("ligne off cochee", "✓  Désactivé", SleepRules.row(0, 0, true));
         eq("choix 8 valeurs", "[0, 15, 30, 60, 90, 120, 180, 240]", java.util.Arrays.toString(SleepRules.CHOICES));
         eq("choix 120", "120 min", SleepRules.choiceLabel(120, true));
-        eq("choix 3 h", "3 h", SleepRules.choiceLabel(180, true)); eq("choix 4 h", "4 h", SleepRules.choiceLabel(240, false));
+        eq("choix 180", "180 min", SleepRules.choiceLabel(180, true)); eq("choix 240", "240 min", SleepRules.choiceLabel(240, false));
+        eq("choix 15", "15 min", SleepRules.choiceLabel(15, true));
         eq("index 240", 7, SleepRules.indexOf(240));
         eq("index 90", 4, SleepRules.indexOf(90)); eq("index inconnu -> 0", 0, SleepRules.indexOf(7));
         ok("due: a l'heure", SleepRules.due(now, now, now)); ok("due: 3 s avant", SleepRules.due(now, now, now - 3000));
@@ -836,7 +835,10 @@ public class Tests {
         eq("icone drop", 0xE210, IconRules.codepoint("drop")); eq("icone plug", 0xE946, IconRules.codepoint("plug")); eq("icone plugs", 0xEB56, IconRules.codepoint("plugs"));
         eq("icone speaker-hifi", 0xEA08, IconRules.codepoint("speaker-hifi")); eq("icone plus", 0xE3D4, IconRules.codepoint("plus"));
         eq("icone caret-down", 0xE136, IconRules.codepoint("caret-down")); eq("icone check", 0xE182, IconRules.codepoint("check"));
-        eq("22 icones", 22, IconRules.NAMES.length);
+        eq("30 icones", 30, IconRules.NAMES.length);
+        int[] nc = {0xE0A0, 0xE83C, 0xE4A6, 0xE6EE, 0xE6C8, 0xE038, 0xE13A, 0xE5DE};
+        String[] nn = {"arrows-left-right", "swap", "trash", "text-aa", "palette", "arrow-counter-clockwise", "caret-right", "arrow-square-out"};
+        for (int i = 0; i < nn.length; i++) eq("icone " + nn[i], nc[i], IconRules.codepoint(nn[i]));
         eq("meteo ciel clair jour", "sun", IconRules.weatherIcon(0, false)); eq("meteo ciel clair nuit", "moon", IconRules.weatherIcon(0, true));
         eq("meteo peu nuageux jour", "cloud-sun", IconRules.weatherIcon(1, false)); eq("meteo peu nuageux nuit", "cloud-moon", IconRules.weatherIcon(2, true));
         eq("meteo couvert", "cloud", IconRules.weatherIcon(3, false)); eq("meteo couvert nuit", "cloud", IconRules.weatherIcon(3, true));
@@ -858,7 +860,7 @@ public class Tests {
         ok("repli: entree illisible", !WeatherRules.isNight(d0 + 12 * hh, new long[]{-1}, new long[]{-1}));
         eq("table: autant de noms que de codes", IconRules.NAMES.length, IconRules.CODES.length);
         eq("glyphe entrees", "\uEAE6", IconRules.glyph(0)); eq("glyphe play", "\uE294", IconRules.glyph(6));
-        eq("glyphe hors table", "", IconRules.glyph(22)); eq("glyphe negatif", "", IconRules.glyph(-1));
+        eq("glyphe hors table", "", IconRules.glyph(30)); eq("glyphe negatif", "", IconRules.glyph(-1));
         eq("glyphe nom", "\uE472", IconRules.glyph("sun")); eq("glyphe nom inconnu", "", IconRules.glyph("house"));
         java.util.Set<Integer> seen = new java.util.HashSet<>();
         for (int c : IconRules.CODES) seen.add(c);
@@ -955,5 +957,70 @@ public class Tests {
         eq("tmdb en", "Data and images: TMDB. This product uses the TMDB API but is not endorsed or certified by TMDB.", Attribution.tmdb(false));
         eq("meteo fr", "Météo : Open-Meteo (CC BY 4.0)", Attribution.weather(true));
         eq("meteo en", "Weather: Open-Meteo (CC BY 4.0)", Attribution.weather(false));
+    }
+
+    // ---------- Menus lateraux
+    static String kinds(java.util.List<MenuRules.Row> l) {
+        StringBuilder b = new StringBuilder();
+        for (MenuRules.Row r : l) b.append(r.kind);
+        return b.toString();
+    }
+
+    static void menuRules() {
+        java.util.List<MenuRules.Row> g = new ArrayList<>();   // menu d'une tuile : 3 actions, separateur, ajouter, 2 sous-menus, titre
+        g.add(MenuRules.action("Déplacer", "arrows-left-right")); g.add(MenuRules.action("Remplacer", "swap")); g.add(MenuRules.action("Retirer", "trash"));
+        g.add(MenuRules.separator()); g.add(MenuRules.action("Ajouter", "plus"));
+        g.add(MenuRules.submenu("Nombre d'applis", "6", "squares-four")); g.add(MenuRules.submenu("Thème", "Nuit", "palette")); g.add(MenuRules.action("Titre", "text-aa"));
+        eq("types de lignes", "00030110", kinds(g));
+        ok("separateur non focalisable", !MenuRules.focusable(g.get(3))); ok("action focalisable", MenuRules.focusable(g.get(0)));
+        eq("hauteur ligne", 52, MenuRules.rowHeight(g.get(0))); eq("hauteur separateur", 13, MenuRules.rowHeight(g.get(3)));
+        eq("hauteur totale", 7 * 52 + 13, MenuRules.height(g));
+        eq("haut de la 1re ligne", 0, MenuRules.top(g, 0)); eq("haut de la 3e ligne", 104, MenuRules.top(g, 2));
+        eq("haut apres le separateur", 3 * 52 + 13, MenuRules.top(g, 4)); eq("haut hors bornes", MenuRules.height(g), MenuRules.top(g, 99));
+        eq("1er focus = 1re ligne", 0, MenuRules.firstFocus(g));
+        eq("valeur du sous-menu", "6", g.get(5).value); eq("icone", "palette", g.get(6).icon); eq("libelle", "Titre", g.get(7).label);
+        eq("suivant saute le separateur", 4, MenuRules.step(g, 2, 1)); eq("precedent saute le separateur", 2, MenuRules.step(g, 4, -1));
+        eq("suivant boucle", 0, MenuRules.step(g, 7, 1)); eq("precedent boucle", 7, MenuRules.step(g, 0, -1));
+        eq("suivant sans focalisable", -1, MenuRules.step(java.util.Collections.singletonList(MenuRules.separator()), 0, 1));
+        eq("une seule ligne boucle sur elle-meme", 0, MenuRules.step(java.util.Collections.singletonList(MenuRules.action("x", "")), 0, 1));
+        ok("icones presentes", MenuRules.hasIcons(g)); ok("sans icones", !MenuRules.hasIcons(java.util.Collections.singletonList(MenuRules.action("x", ""))));
+        ok("pastille compte comme icone", MenuRules.hasIcons(java.util.Collections.singletonList(MenuRules.choice("x", false, 0x123456))));
+        eq("rien a focaliser", -1, MenuRules.firstFocus(java.util.Collections.singletonList(MenuRules.separator())));
+        eq("menu de 10 lignes tient dans l'ecran", true, MenuRules.height(MenuRules.layoutRows(6, true)) + 2 * 24 + 110 < 720);
+
+        java.util.List<MenuRules.Row> th = MenuRules.themeRows("night", 0x203040, true);   // themes
+        eq("5 themes", 5, th.size()); eq("themes : choix", "22222", kinds(th));
+        eq("libelle verre", "Verre", th.get(0).label); eq("libelle foret", "Forêt", th.get(3).label); eq("libelle auto", "Auto", th.get(4).label);
+        ok("seul nuit est coche", !th.get(0).selected && th.get(1).selected && !th.get(2).selected && !th.get(3).selected && !th.get(4).selected);
+        eq("le focus s'ouvre sur le theme actuel", 1, MenuRules.firstFocus(th));
+        ok("chaque theme a une pastille", th.get(0).swatch >= 0 && th.get(1).swatch >= 0 && th.get(4).swatch >= 0);
+        eq("pastille auto = teinte courante", ThemeRules.swatch("auto", 0x203040), th.get(4).swatch);
+        eq("pastille nuit eclaircie", ThemeRules.mixRgb(0x1E3470, 0xFFFFFF, 0.25f), ThemeRules.swatch("night", -1));
+        eq("pastille verre", 0xC9CED8, ThemeRules.swatch("glass", -1)); eq("pastille inconnue = verre", 0xC9CED8, ThemeRules.swatch("zz", -1));
+        ok("theme inconnu -> verre coche", MenuRules.themeRows("zz", -1, false).get(0).selected);
+        eq("libelle en", "Glass", MenuRules.themeRows("glass", -1, false).get(0).label);
+
+        java.util.List<MenuRules.Row> ly = MenuRules.layoutRows(6, true);   // nombre d'applis
+        eq("9 valeurs", 9, ly.size()); eq("premiere", "2 applis", ly.get(0).label); eq("derniere en", "10 apps", MenuRules.layoutRows(6, false).get(8).label);
+        ok("6 est coche", ly.get(4).selected && !ly.get(3).selected); eq("focus sur 6", 4, MenuRules.firstFocus(ly));
+        eq("focus sans valeur courante -> 1re ligne", 0, MenuRules.firstFocus(MenuRules.layoutRows(99, true)));
+
+        java.util.List<MenuRules.Row> sl = MenuRules.sleepRows(60, true);   // minuteur
+        eq("8 choix", 8, sl.size()); eq("desactive", "Désactivé", sl.get(0).label); eq("180", "180 min", sl.get(6).label); eq("240", "240 min", sl.get(7).label);
+        ok("60 est coche", sl.get(3).selected); eq("focus sur 60", 3, MenuRules.firstFocus(sl));
+        eq("minuteur inactif : Desactive coche", 0, MenuRules.firstFocus(MenuRules.sleepRows(0, true))); ok("Off en", MenuRules.sleepRows(0, false).get(0).label.equals("Off"));
+        eq("aide fr", "◀  Retour        OK  Valider", MenuRules.help(true)); eq("aide en", "◀  Back        OK  Select", MenuRules.help(false));
+
+        MenuRules.NavStack<String> st = new MenuRules.NavStack<>();   // pile de sous-menus
+        eq("pile vide", 0, st.depth()); ok("pile vide : rien en haut", st.top() == null); ok("pile vide : pas de retour", !st.canPop());
+        st.push("racine"); eq("racine", 1, st.depth()); ok("la racine ne se depile pas", !st.canPop()); eq("pop sur la racine", "racine", st.pop()); eq("racine toujours la", 1, st.depth());
+        st.push("theme"); eq("sous-menu", "theme", st.top()); ok("retour possible", st.canPop()); eq("profondeur 2", 2, st.depth());
+        st.push("sous-sous-menu"); eq("profondeur 3", 3, st.depth()); eq("pop -> sous-menu", "theme", st.pop()); eq("pop -> racine", "racine", st.pop());
+        ok("de nouveau a la racine", !st.canPop()); eq("profondeur finale", 1, st.depth());
+
+        // toutes les icones des menus sont dans la table
+        for (String n : new String[]{"arrows-left-right", "swap", "trash", "text-aa", "palette", "arrow-counter-clockwise", "caret-right", "arrow-square-out"})
+            ok("disponible : " + n, IconRules.codepoint(n) > 0 && !IconRules.glyph(n).isEmpty());
+        for (String n : new String[]{"plus", "squares-four", "moon"}) ok("deja disponible : " + n, IconRules.codepoint(n) > 0);
     }
 }

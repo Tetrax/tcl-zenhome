@@ -81,61 +81,62 @@ class Editor {
 
     /** Appui long sur une appli de la liste « Toutes les applis » : menu Ouvrir / Ajouter au dock. */
     void onAppLongPress(final String pkg, final View ov) {
-        List<String> l = new ArrayList<>(); List<Runnable> a = new ArrayList<>();
-        l.add(ui.t("Ouvrir", "Open")); a.add(new Runnable() { public void run() { ovs.closeOverlay(ov, false); apps.launch(pkg); } });
+        MenuPanel.Page p = new MenuPanel.Page(apps.appLabel(pkg), "");
+        p.add(MenuRules.action(ui.t("Ouvrir", "Open"), "arrow-square-out"), new Runnable() { public void run() { ovs.closeOverlay(ov, false); apps.launch(pkg); } });
         if (!config.dockPkgs.contains(pkg) && config.dockPkgs.size() < config.layout) {
-            l.add(ui.t("Ajouter au dock", "Add to dock")); a.add(new Runnable() { public void run() {
+            p.add(MenuRules.action(ui.t("Ajouter au dock", "Add to dock"), "plus"), new Runnable() { public void run() {
                 ovs.closeOverlay(ov, false); config.dockPkgs.add(pkg); config.save(); dock.rebuild(config.dockPkgs.indexOf(pkg)); } });
         } else if (!config.dockPkgs.contains(pkg)) {
-            l.add(ui.t("Dock plein : remplacer une appli…", "Dock full: replace an app…")); a.add(new Runnable() { public void run() {
+            p.add(MenuRules.action(ui.t("Dock plein : remplacer une appli…", "Dock full: replace an app…"), "swap"), new Runnable() { public void run() {
                 ovs.closeOverlay(ov, false); chooseSlotFor(pkg); } });
         }
-        ovs.showMenu(apps.appLabel(pkg), l, a);
+        menu(p);
     }
 
+    /** Menu lateral a une seule page fixe. */
+    void menu(final MenuPanel.Page p) {
+        ovs.showMenu(new MenuPanel.Source() { public MenuPanel.Page build() { return p; } });
+    }
 
     // Mode edition (appui long sur OK, ou touche Menu)
     void showTileMenu(final int index) {
         if (moveIndex >= 0 || !ovs.isEmpty()) return;
-        List<String> labels = new ArrayList<>();
-        final List<Runnable> actions = new ArrayList<>();
-        String header;
-        if (index >= 0 && index < config.dockPkgs.size()) {
-            header = apps.appLabel(config.dockPkgs.get(index));
-            if (config.dockPkgs.size() > 1) { labels.add(ui.t("Déplacer", "Move")); actions.add(new Runnable() { public void run() { startMove(index); } }); }
-            labels.add(ui.t("Remplacer par une autre appli", "Replace with another app")); actions.add(new Runnable() { public void run() { pickAppToReplace(index); } });
-            labels.add(ui.t("Retirer du dock", "Remove from dock")); actions.add(new Runnable() { public void run() {
+        ovs.showMenu(new MenuPanel.Source() { public MenuPanel.Page build() { return tilePage(index); } });
+    }
+
+    /** Menu d'une tuile du dock (index) ou menu general de l'accueil (-1) : actions de la tuile, puis reglages de l'accueil. */
+    MenuPanel.Page tilePage(final int index) {
+        boolean tile = index >= 0 && index < config.dockPkgs.size();
+        MenuPanel.Page p = tile ? new MenuPanel.Page(ui.t("Dock", "Dock"), apps.appLabel(config.dockPkgs.get(index)))
+                : new MenuPanel.Page(ui.t("Écran d'accueil", "Home screen"), "");
+        if (tile) {
+            if (config.dockPkgs.size() > 1) p.add(MenuRules.action(ui.t("Déplacer", "Move"), "arrows-left-right"), new Runnable() { public void run() { startMove(index); } });
+            p.add(MenuRules.action(ui.t("Remplacer par une autre appli", "Replace with another app"), "swap"), new Runnable() { public void run() { pickAppToReplace(index); } });
+            p.add(MenuRules.action(ui.t("Retirer du dock", "Remove from dock"), "trash"), new Runnable() { public void run() {
                 config.dockPkgs.remove(index); config.save(); dock.rebuild(Math.max(0, index - 1)); } });
-        } else {
-            header = ui.t("Écran d'accueil", "Home screen");
+            p.sep();
         }
-        if (config.dockPkgs.size() < config.layout) { labels.add(ui.t("Ajouter une appli", "Add an app")); actions.add(new Runnable() { public void run() { pickAppToAdd(); } }); }
-        labels.add(ui.t("Nombre d'applis : ", "Number of apps: ") + config.layout); actions.add(new Runnable() { public void run() { showLayoutMenu(); } });
-        labels.add(ui.t("Thème : ", "Theme: ") + ThemeRules.label(ui.theme.name, ui.fr)); actions.add(new Runnable() { public void run() { showThemeMenu(); } });
-        labels.add(ui.t("Modifier le titre", "Change the title")); actions.add(new Runnable() { public void run() { editTitle(); } });
-        ovs.showMenu(header, labels, actions);
+        if (config.dockPkgs.size() < config.layout) p.add(MenuRules.action(ui.t("Ajouter une appli", "Add an app"), "plus"), new Runnable() { public void run() { pickAppToAdd(); } });
+        p.sub(MenuRules.submenu(ui.t("Nombre d'applis", "Number of apps"), String.valueOf(config.layout), "squares-four"),
+                new MenuPanel.Source() { public MenuPanel.Page build() { return layoutPage(); } });
+        p.sub(MenuRules.submenu(ui.t("Thème", "Theme"), ThemeRules.label(ui.theme.name, ui.fr), "palette"),
+                new MenuPanel.Source() { public MenuPanel.Page build() { return themePage(); } });
+        p.add(MenuRules.action(ui.t("Modifier le titre", "Change the title"), "text-aa"), new Runnable() { public void run() { editTitle(); } });
+        return p;
     }
 
-    /** Choix du theme de couleur (coche sur l'actuel), enregistre dans les prefs « theme ». */
-    void showThemeMenu() {
-        List<String> labels = new ArrayList<>();
+    /** Choix du theme de couleur (point sur l'actuel), enregistre dans les prefs « theme ». */
+    MenuPanel.Page themePage() {
         List<Runnable> actions = new ArrayList<>();
-        int cur = 0;
-        for (int i = 0; i < ThemeRules.NAMES.length; i++) {
-            final String n = ThemeRules.NAMES[i];
-            if (n.equals(ui.theme.name)) cur = i;
-            labels.add((n.equals(ui.theme.name) ? Fmt.CHECK : Fmt.NO_CHECK) + ThemeRules.label(n, ui.fr));
+        for (final String n : ThemeRules.NAMES)
             actions.add(new Runnable() { public void run() { config.prefs.edit().putString("theme", n).apply(); ui.theme.set(n); } });
-        }
-        ovs.showMenu(ui.t("Thème", "Theme"), labels, actions, cur);
+        return new MenuPanel.Page(ui.t("Thème", "Theme"), "").addAll(MenuRules.themeRows(ui.theme.name, ui.theme.photoTint, ui.fr), actions);
     }
 
-    void showLayoutMenu() {
-        List<String> labels = new ArrayList<>();
+    MenuPanel.Page layoutPage() {
         List<Runnable> actions = new ArrayList<>();
         for (int i = 2; i <= 10; i++) {
             final int n = i;
-            labels.add((n == config.layout ? Fmt.CHECK : Fmt.NO_CHECK) + n + ui.t(" applis", " apps"));
             actions.add(new Runnable() { public void run() {
                 config.layout = n;
                 while (config.dockPkgs.size() > config.layout) config.dockPkgs.remove(config.dockPkgs.size() - 1);
@@ -144,7 +145,7 @@ class Editor {
                 }
                 config.save(); dock.rebuild(0); } });
         }
-        ovs.showMenu(ui.t("Nombre d'applis", "Number of apps"), labels, actions, config.layout - 2);   // focus sur la valeur actuelle
+        return new MenuPanel.Page(ui.t("Nombre d'applis", "Number of apps"), "").addAll(MenuRules.layoutRows(config.layout, ui.fr), actions);
     }
 
     void editTitle() {
@@ -237,13 +238,13 @@ class Editor {
     }
 
     void chooseSlotFor(final String pkg) {
-        List<String> l = new ArrayList<>(); List<Runnable> a = new ArrayList<>();
+        MenuPanel.Page p = new MenuPanel.Page(ui.t("Remplacer une appli", "Replace an app"), apps.appLabel(pkg));
         for (int i = 0; i < config.dockPkgs.size(); i++) {
             final int idx = i;
-            l.add(ui.t("Remplacer ", "Replace ") + apps.appLabel(config.dockPkgs.get(i)));
-            a.add(new Runnable() { public void run() { config.dockPkgs.set(idx, pkg); config.save(); dock.rebuild(idx); } });
+            p.add(MenuRules.action(ui.t("Remplacer ", "Replace ") + apps.appLabel(config.dockPkgs.get(i)), "swap"),
+                    new Runnable() { public void run() { config.dockPkgs.set(idx, pkg); config.save(); dock.rebuild(idx); } });
         }
-        ovs.showMenu(apps.appLabel(pkg), l, a);
+        menu(p);
     }
 
     void pickCarouselApp() {
@@ -254,22 +255,20 @@ class Editor {
 
     void showCarMenu(final int index) {
         if (moveIndex >= 0 || !ovs.isEmpty()) return;
-        List<String> labels = new ArrayList<>();
-        final List<Runnable> actions = new ArrayList<>();
-        String header;
-        if (index >= 0 && index < carousel.pkgs.size()) {
-            header = apps.appLabel(carousel.pkgs.get(index));
-            if (carousel.pkgs.size() > 1) { labels.add(ui.t("Déplacer", "Move")); actions.add(new Runnable() { public void run() { startCarMove(index); } }); }
-            labels.add(ui.t("Retirer du carrousel", "Remove from carousel")); actions.add(new Runnable() { public void run() {
+        boolean tile = index >= 0 && index < carousel.pkgs.size();
+        MenuPanel.Page p = tile ? new MenuPanel.Page(ui.t("Carrousel", "Carousel"), apps.appLabel(carousel.pkgs.get(index)))
+                : new MenuPanel.Page(ui.t("Carrousel d'applis", "App carousel"), "");
+        if (tile) {
+            if (carousel.pkgs.size() > 1) p.add(MenuRules.action(ui.t("Déplacer", "Move"), "arrows-left-right"), new Runnable() { public void run() { startCarMove(index); } });
+            p.add(MenuRules.action(ui.t("Retirer du carrousel", "Remove from carousel"), "trash"), new Runnable() { public void run() {
                 carousel.pkgs.remove(index); carousel.save(); carousel.rebuild(Math.max(0, index - 1)); } });
-        } else {
-            header = ui.t("Carrousel d'applis", "App carousel");
+            p.sep();
         }
-        labels.add(ui.t("Ajouter une appli", "Add an app")); actions.add(new Runnable() { public void run() { pickCarouselApp(); } });
-        labels.add(ui.t("Réinitialiser", "Reset")); actions.add(new Runnable() { public void run() {
+        p.add(MenuRules.action(ui.t("Ajouter une appli", "Add an app"), "plus"), new Runnable() { public void run() { pickCarouselApp(); } });
+        p.add(MenuRules.action(ui.t("Réinitialiser", "Reset"), "arrow-counter-clockwise"), new Runnable() { public void run() {
             config.prefs.edit().remove("carousel").putBoolean("carousel_user_set", false).apply();
             carousel.load(); carousel.rebuild(0); } });
-        ovs.showMenu(header, labels, actions);
+        menu(p);
     }
 
     void startCarMove(int index) {

@@ -66,17 +66,6 @@ class Ui {
         return b;
     }
 
-    /** Ligne de menu : le prefixe Fmt.CHECK / Fmt.NO_CHECK devient un glyphe « check » (visible ou transparent : meme alignement). */
-    CharSequence checkText(String label) {
-        boolean on = label.startsWith(Fmt.CHECK), off = label.startsWith(Fmt.NO_CHECK);
-        if (pReg == null || !(on || off)) return label;
-        android.text.SpannableStringBuilder b = new android.text.SpannableStringBuilder(
-                IconRules.glyph("check") + "  " + label.substring(on ? Fmt.CHECK.length() : Fmt.NO_CHECK.length()));
-        b.setSpan(new GlyphSpan(pReg, 1.1f), 0, 1, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-        if (off) b.setSpan(new android.text.style.ForegroundColorSpan(0x00FFFFFF), 0, 1, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-        return b;
-    }
-
     /** Police Phosphor (et taille) appliquee a un morceau de texte. */
     static class GlyphSpan extends android.text.style.MetricAffectingSpan {
         final Typeface tf;

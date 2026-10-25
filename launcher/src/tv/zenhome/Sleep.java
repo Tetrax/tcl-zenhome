@@ -40,16 +40,14 @@ class Sleep {
     }
 
     void show() {
-        long d = prefs.getLong("sleep_at", 0), now = System.currentTimeMillis();
-        boolean on = SleepRules.active(d, now);
-        int cur = on ? prefs.getInt("sleep_min", 0) : 0;
-        List<String> labels = new ArrayList<>();
-        List<Runnable> actions = new ArrayList<>();
-        for (final int m : SleepRules.CHOICES) {
-            labels.add(SleepRules.row(m, cur, ui.fr));
-            actions.add(new Runnable() { public void run() { set(m); } });
-        }
-        ovs.showMenu(on ? SleepRules.leftText(d, now, ui.fr) : ui.t("Mise en veille", "Sleep timer"), labels, actions, SleepRules.indexOf(cur));
+        ovs.showMenu(new MenuPanel.Source() { public MenuPanel.Page build() {
+            long d = prefs.getLong("sleep_at", 0), now = System.currentTimeMillis();
+            boolean on = SleepRules.active(d, now);
+            MenuPanel.Page p = new MenuPanel.Page(ui.t("Mise en veille", "Sleep timer"), on ? SleepRules.leftText(d, now, ui.fr) : "");
+            List<Runnable> actions = new ArrayList<>();
+            for (final int m : SleepRules.CHOICES) actions.add(new Runnable() { public void run() { set(m); } });
+            return p.addAll(MenuRules.sleepRows(on ? prefs.getInt("sleep_min", 0) : 0, ui.fr), actions);
+        } });
     }
 
     void set(int minutes) {

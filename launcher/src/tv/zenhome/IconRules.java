@@ -6,10 +6,12 @@ final class IconRules {
 
     static final String[] NAMES = {"television-simple", "squares-four", "gear-six", "pencil-simple", "image", "moon", "google-play-logo",
             "sun", "cloud-sun", "cloud-moon", "cloud", "cloud-fog", "cloud-rain", "cloud-lightning", "cloud-snow", "drop",
-            "plug", "plugs", "speaker-hifi", "plus", "caret-down", "check"};
+            "plug", "plugs", "speaker-hifi", "plus", "caret-down", "check",
+            "arrows-left-right", "swap", "trash", "text-aa", "palette", "arrow-counter-clockwise", "caret-right", "arrow-square-out"};
     static final int[] CODES = {0xEAE6, 0xE464, 0xE272, 0xE3B4, 0xE2CA, 0xE330, 0xE294,
             0xE472, 0xE540, 0xE53E, 0xE1AA, 0xE53C, 0xE1B4, 0xE1B2, 0xE1B8, 0xE210,
-            0xE946, 0xEB56, 0xEA08, 0xE3D4, 0xE136, 0xE182};
+            0xE946, 0xEB56, 0xEA08, 0xE3D4, 0xE136, 0xE182,
+            0xE0A0, 0xE83C, 0xE4A6, 0xE6EE, 0xE6C8, 0xE038, 0xE13A, 0xE5DE};
 
     /** Codepoint du glyphe, ou -1 si le nom est inconnu. */
     static int codepoint(String name) {
