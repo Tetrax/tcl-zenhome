@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="tv.zenhome" android:versionCode="9" android:versionName="2.6-zh1">
+    <uses-sdk android:minSdkVersion="21" android:targetSdkVersion="34" />
+    <!-- Photos perso (/sdcard/ZenHome) : pas de dialogue dans le launcher, la permission est accordee par adb.
+         Android 13+ (API 33+) :  adb shell pm grant tv.zenhome android.permission.READ_MEDIA_IMAGES
+         Android 12 et moins :    adb shell pm grant tv.zenhome android.permission.READ_EXTERNAL_STORAGE -->
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-feature android:name="android.software.leanback" android:required="false" />
+    <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
+    <!-- Visibilite des paquets (API 30+) : les intents ci-dessous suffisent au launcher (applis, entrees, YouTube),
+         plus les paquets nommes dans le code. QUERY_ALL_PACKAGES n'est pas necessaire. -->
+    <queries>
+        <intent><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LEANBACK_LAUNCHER" /></intent>
+        <intent><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent>
+        <intent><action android:name="com.android.tv.action.VIEW_INPUTS" /></intent>
+        <intent><action android:name="android.intent.action.VIEW" /><category android:name="android.intent.category.BROWSABLE" /><data android:scheme="https" android:host="www.youtube.com" /></intent>
+        <intent><action android:name="android.media.tv.TvInputService" /></intent>
+        <intent><action android:name="android.intent.action.VIEW" /><data android:scheme="content" android:host="android.media.tv" /></intent>
+        <package android:name="com.tcl.tvinput" />
+        <package android:name="com.netflix.ninja" />
+        <package android:name="com.google.android.youtube.tv" />
+        <package android:name="com.amazon.amazonvideo.livingroom" />
+        <package android:name="com.android.vending" />
+        <package android:name="com.android.tv.settings" />
+        <package android:name="com.android.settings" />
+        <package android:name="com.tcl.tv" />
+        <!-- Apps.KNOWN_INPUTS -->
+        <package android:name="com.mediatek.wwtv.tvcenter" />
+        <package android:name="org.droidtv.playtv" />
+        <package android:name="com.sony.dtv.tvx" />
+        <package android:name="com.mitv.tvplayer" />
+        <package android:name="com.mitv.livetv" />
+        <package android:name="com.hisense.tv" />
+        <package android:name="com.google.android.tv" />
+        <package android:name="com.android.tv" />
+        <!-- HomeConfig.KNOWN_DOCK -->
+        <package android:name="com.disney.disneyplus" />
+        <package android:name="com.canal.android.canal" />
+        <package android:name="com.wbd.stream" />
+        <package android:name="com.apple.atve.androidtv.appletv" />
+        <package android:name="com.spotify.tv.android" />
+        <package android:name="com.plexapp.android" />
+        <package android:name="fr.francetv.pluzz" />
+        <package android:name="fr.tf1.mytf1" />
+        <package android:name="fr.m6.m6replay" />
+        <package android:name="tv.arte.plus7" />
+        <package android:name="tv.molotov.app" />
+        <package android:name="com.cbs.ott" />
+        <package android:name="com.dazn" />
+        <package android:name="tv.twitch.android.app" />
+        <package android:name="org.xbmc.kodi" />
+        <package android:name="com.google.android.youtube.tvkids" />
+    </queries>
+    <application android:label="Zen Home" android:icon="@drawable/icon"
+        android:banner="@drawable/banner" android:allowBackup="false"
+        android:theme="@android:style/Theme.Material.NoActionBar.Fullscreen">
+        <activity android:name=".Home" android:exported="true" android:launchMode="singleTask" android:stateNotNeeded="true"
+            android:clearTaskOnLaunch="true" android:excludeFromRecents="true"
+            android:screenOrientation="landscape"
+            android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenSize|uiMode|locale">
+            <intent-filter android:priority="2">
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.HOME" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.LAUNCHER" />
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+            </intent-filter>
+        </activity>
+        <!-- Configuration par adb uniquement : la permission DUMP n'est accordee qu'au shell et au systeme -->
+        <receiver android:name=".ConfigReceiver" android:exported="true" android:permission="android.permission.DUMP">
+            <intent-filter>
+                <action android:name="tv.zenhome.CONFIG" />
+            </intent-filter>
+        </receiver>
+        <!-- Alarmes du minuteur de veille : atteint uniquement par notre PendingIntent -->
+        <receiver android:name=".SleepReceiver" android:exported="false" />
+        <service android:name=".KeyService" android:label="@string/keys_label"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE" android:exported="true">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data android:name="android.accessibilityservice" android:resource="@xml/zen_keys" />
+        </service>
+        <!-- Economiseur d'ecran (active par adb : Settings.Secure screensaver_components) -->
+        <service android:name=".ZenDream" android:label="Zen Home" android:exported="true"
+            android:permission="android.permission.BIND_DREAM_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.dreams.DreamService" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </service>
+    </application>
+</manifest>

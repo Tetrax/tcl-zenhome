@@ -1,0 +1,13 @@
+# Données propres à la télé (android_id, listes, captures) : ne pas versionner
+/sauvegarde-tv/
+/captures/
+# Sorties de build et clé de signature
+launcher/out/
+launcher/*.jks
+launcher/local.properties
+launcher/keystore.pass
+# Secrets et configuration personnelle
+tmdb.token
+tv/tv.conf
+# macOS
+.DS_Store

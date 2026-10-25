@@ -1,0 +1,146 @@
+# Fonctions communes à deployer.sh, verifier-tv.sh et photos.sh (à sourcer, pas à exécuter).
+# Attend que le script appelant ait fait `set -euo pipefail` et défini DRY_RUN (0 ou 1).
+
+TV_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+ROOT=$(dirname "$TV_DIR")
+APK="$ROOT/launcher/out/ZenHome.apk"
+PKG=tv.zenhome
+KEYSVC_FULL=tv.zenhome/tv.zenhome.KeyService
+KEYSVC_SHORT=tv.zenhome/.KeyService
+DREAM=tv.zenhome/tv.zenhome.ZenDream
+DRY_RUN=${DRY_RUN:-0}
+
+info() { printf '%s\n' "$*"; }
+warn() { printf 'Attention : %s\n' "$*" >&2; }
+die()  { printf 'Erreur : %s\n' "$*" >&2; exit 1; }
+
+# Quote une valeur pour le shell de la TV (apostrophes protégées).
+shq() { local s=${1//\'/\'\\\'\'}; printf "'%s'" "$s"; }
+
+# TV_HOST, LAT, LON, CITY : environnement > tv/tv.conf > défaut.
+# tv.conf n'est JAMAIS exécuté : lecture ligne à ligne des seules clés connues (VAR="valeur").
+charger_conf() {
+    local c_host="" c_lat="" c_lon="" c_city="" l k v
+    if [ -f "$TV_DIR/tv.conf" ]; then
+        while IFS= read -r l || [ -n "$l" ]; do
+            l=${l%$'\r'}
+            case "$l" in ''|'#'*) continue ;; esac
+            k=${l%%=*}; v=${l#*=}
+            k=${k// /}
+            case "$v" in \"*\") v=${v#\"}; v=${v%\"} ;; esac
+            case "$k" in
+                TV_HOST) c_host=$v ;;
+                LAT) c_lat=$v ;;
+                LON) c_lon=$v ;;
+                CITY) c_city=$v ;;
+            esac
+        done < "$TV_DIR/tv.conf"
+    fi
+    TV_HOST="${TV_HOST:-${c_host:-192.168.1.50}}"
+    LAT="${LAT:-$c_lat}"; LON="${LON:-$c_lon}"; CITY="${CITY:-$c_city}"
+    [[ $TV_HOST =~ ^[A-Za-z0-9.-]+(:[0-9]+)?$ ]] || die "TV_HOST invalide : « $TV_HOST » (attendu : 192.168.1.50 ou hôte:port)."
+    case "$TV_HOST" in *:*) SERIAL="$TV_HOST" ;; *) SERIAL="$TV_HOST:5555" ;; esac
+}
+
+# Commande adb qui modifie la TV (affichée au lieu d'être lancée en --dry-run).
+adb_tv() {
+    if [ "$DRY_RUN" = 1 ]; then printf '[dry-run] adb -s %s %s\n' "$SERIAL" "$*"; return 0; fi
+    adb -s "$SERIAL" "$@"
+}
+
+# Commande adb de lecture : sortie sur stdout sans CR, vide en --dry-run, jamais d'échec.
+adb_lire() {
+    if [ "$DRY_RUN" = 1 ]; then printf '[dry-run] adb -s %s %s\n' "$SERIAL" "$*" >&2; return 0; fi
+    { adb -s "$SERIAL" "$@" 2>/dev/null | tr -d '\r'; } || true
+}
+
+# Variante tolérante : affiche un avertissement si la commande échoue.
+adb_essayer() {
+    local sortie
+    if [ "$DRY_RUN" = 1 ]; then adb_tv "$@"; return 0; fi
+    if ! sortie=$(adb -s "$SERIAL" "$@" 2>&1) || printf '%s' "$sortie" | grep -qE 'Exception|Error|Unknown'; then
+        warn "refusé ou sans effet : $* ($(printf '%s' "$sortie" | head -1))"
+    fi
+}
+
+verifier_adb() {
+    [ "$DRY_RUN" = 1 ] || command -v adb >/dev/null || die "adb introuvable (brew install android-platform-tools)."
+}
+
+# Connexion + vérification que c'est la bonne TV. Arrêt si injoignable ou refus de confirmer.
+connecter_tv() {
+    local nom
+    if [ "$DRY_RUN" = 1 ]; then info "[dry-run] adb connect $SERIAL"; else adb connect "$SERIAL" || true; fi
+    if [ "$DRY_RUN" = 1 ]; then
+        adb_lire shell getprop ro.product.name
+        info "[dry-run] vérification : ro.product.name doit valoir G08_4K_GB (sinon confirmation demandée)"
+        return 0
+    fi
+    [ "$(adb -s "$SERIAL" get-state 2>/dev/null || true)" = device ] \
+        || die "la TV $SERIAL ne répond pas (débogage ADB activé ? autorisation acceptée à l'écran ? IP correcte ?)."
+    nom=$(adb_lire shell getprop ro.product.name)
+    if [ "$nom" != G08_4K_GB ]; then
+        warn "appareil inattendu : ro.product.name = « $nom » (attendu : G08_4K_GB)."
+        [ -t 0 ] || die "confirmation impossible hors terminal."
+        local rep; read -r -p "Continuer quand même ? [o/N] " rep
+        case "$rep" in o|O|oui|OUI) ;; *) die "abandon." ;; esac
+    fi
+    info "TV connectée : $SERIAL ($nom)"
+}
+
+# adb install -r. Retourne 1 en cas d'échec ; ne désinstalle jamais rien.
+installer_apk() {
+    local sortie
+    if [ "$DRY_RUN" = 1 ]; then adb_tv install -r "$APK"; return 0; fi
+    [ -f "$APK" ] || { warn "APK absent : $APK (lancer launcher/build-mac.sh)."; return 1; }
+    if sortie=$(adb -s "$SERIAL" install -r "$APK" 2>&1); then
+        info "Zen Home installé."
+        return 0
+    fi
+    if printf '%s' "$sortie" | grep -q INSTALL_FAILED_UPDATE_INCOMPATIBLE; then
+        warn "signature différente de la version installée (INSTALL_FAILED_UPDATE_INCOMPATIBLE)."
+        warn "La clé launcher/key.jks n'est pas celle qui a signé l'appli présente sur la TV."
+        warn "Retrouvez la bonne clé, ou désinstallez à la main (les réglages de Zen Home seront perdus) :"
+        warn "    adb -s $SERIAL uninstall $PKG"
+        warn "Rien n'a été désinstallé automatiquement."
+    else
+        warn "échec de l'installation : $sortie"
+    fi
+    return 1
+}
+
+# Ajoute KeyService à enabled_accessibility_services sans écraser les autres services.
+activer_accessibilite() {
+    local cur
+    cur=$(adb_lire shell settings get secure enabled_accessibility_services)
+    [ "$cur" = null ] && cur=""
+    case ":$cur:" in
+        *":$KEYSVC_FULL:"*|*":$KEYSVC_SHORT:"*) info "Accessibilité : KeyService déjà activé." ;;
+        *)
+            [ "$DRY_RUN" = 1 ] && info "[dry-run] (valeur actuelle conservée, KeyService ajouté à la suite)"
+            adb_tv shell settings put secure enabled_accessibility_services "$(shq "${cur:+$cur:}$KEYSVC_FULL")"
+            ;;
+    esac
+    adb_tv shell settings put secure accessibility_enabled 1
+}
+
+definir_accueil() {
+    adb_tv shell cmd role add-role-holder android.app.role.HOME "$PKG"
+    adb_tv shell cmd package set-home-activity "$PKG/.Home"
+}
+
+# Permissions runtime, tolérant : un refus n'arrête rien.
+# READ_EXTERNAL_STORAGE est déclarée avec maxSdkVersion=32 : on ne la demande que sur Android 12L et moins.
+accorder_permissions() {
+    local sdk
+    sdk=$(adb_lire shell getprop ro.build.version.sdk)
+    adb_essayer shell pm grant "$PKG" android.permission.READ_MEDIA_IMAGES
+    if [ "$DRY_RUN" = 1 ]; then
+        info "[dry-run] (READ_EXTERNAL_STORAGE : seulement si ro.build.version.sdk <= 32)"
+        adb_tv shell pm grant "$PKG" android.permission.READ_EXTERNAL_STORAGE
+    elif [[ $sdk =~ ^[0-9]+$ ]] && [ "$sdk" -le 32 ]; then
+        adb_essayer shell pm grant "$PKG" android.permission.READ_EXTERNAL_STORAGE
+    fi
+}
+
+touche_accueil() { adb_tv shell input keyevent KEYCODE_HOME; }

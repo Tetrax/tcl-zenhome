@@ -1,0 +1,32 @@
+# TCL G08 Smart TV Pro (G08_4K_GB), Google TV Android 14, plateforme merak
+# Construit depuis les listes CleanYourTV tcl-g10 / tcl-g05 / tcl-qm6k, filtré sur les paquets présents.
+# Tout est DÉSACTIVÉ (pm disable-user), rien n'est désinstallé. Annulation : pm enable <paquet>.
+
+# Pub, promos et contenu TCL
+com.tcl.channelplus                    # chaînes FAST TCL
+com.tcl.tv.tclhome_passive             # pousse du contenu TCL sur l'accueil
+com.tcl.waterfall.overseas             # flux de recommandations TCL
+com.tcl.esticker                       # bannières / autocollants promo
+com.tcl.exhibit                        # mode démo magasin
+com.tcl.interactive                    # contenus interactifs TCL
+com.tcl.messagebox                     # messages push TCL
+com.tcl.usercenter                     # compte TCL (tourne en fond, 15 Mo)
+com.tcl.ttvs                           # service TCL en fond (39 Mo)
+android.autoinstalls.config.google.gtvpai  # installe des applis partenaires en douce
+
+# Télémétrie / diagnostics
+com.tcl.logkit
+com.tcl.guard
+com.google.android.feedback
+com.android.tv.feedbackconsent
+
+# Applis inutiles
+com.tcl.smartalexa                     # intégration Alexa
+com.tcl.gamebar
+com.tcl.repairguide
+com.tcl.ocean.instructions             # manuel électronique
+com.google.android.play.games
+com.google.android.youtube.tvmusic     # YouTube Music (Spotify est installé)
+
+# Économiseur d'écran Google « Ambient » (45 Mo de RAM) -> remplacé par l'économiseur de base
+com.google.android.apps.tv.dreamx

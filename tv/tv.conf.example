@@ -1,0 +1,8 @@
+# Copier en tv.conf (ignoré par git) puis adapter.
+# Lu ligne à ligne, jamais exécuté : seules ces 4 clés sont prises en compte, au format CLE="valeur".
+# Adresse de la TV : IP ou nom d'hôte, port facultatif (défaut 5555). Idéalement une IP fixe réservée dans votre box ou routeur.
+TV_HOST="192.168.1.50"
+# Position pour la météo (degrés décimaux) et nom affiché
+LAT="48.86"
+LON="2.35"
+CITY="Paris"

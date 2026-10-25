@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="keys_label">Zen Home : boutons de la télécommande</string>
+    <string name="keys_desc">Fait marcher les boutons Netflix, YouTube et Prime Video de la télécommande TCL quand l\'accueil Google TV est désactivé. Aucune autre touche n\'est interceptée.</string>
+</resources>
