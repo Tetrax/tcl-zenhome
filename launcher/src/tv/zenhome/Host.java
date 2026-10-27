@@ -81,6 +81,9 @@ interface Host {
     /** Panneau des entrees TV (raccourci et touche Source). */
     void showInputs();
 
+    /** Vrai s'il y a au moins une entree physique visible (carte « Entrees » du dock, touche Source). */
+    boolean hasInputs();
+
     /** Un panneau plein ecran (entrees) cache (true) ou rend (false) le bloc du bas et les films. */
     void cover(boolean on);
 
