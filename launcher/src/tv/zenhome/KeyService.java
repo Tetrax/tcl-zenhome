@@ -67,7 +67,7 @@ public class KeyService extends AccessibilityService {
         }
         // Source / TV : le panneau des entrees de l'accueil, mais seulement quand l'accueil est au premier plan
         final Home h = Home.front;
-        if (KeyRules.shouldHandleSource(e.getKeyCode(), h != null)) {
+        if (KeyRules.shouldHandleSource(e.getKeyCode(), h != null, h != null && h.hasInputs)) {
             if (e.getAction() == KeyEvent.ACTION_DOWN && e.getRepeatCount() == 0)
                 h.runOnUiThread(new Runnable() { public void run() { h.onSourceKey(); } });
             return true;   // DOWN et UP consommes

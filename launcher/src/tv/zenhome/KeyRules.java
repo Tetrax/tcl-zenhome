@@ -24,10 +24,10 @@ final class KeyRules {
 
     /**
      * Source / TV : on la prend (et on ouvre le panneau des entrees) seulement quand l'accueil Zen Home est au premier plan ;
-     * dans les autres applis la touche suit son chemin normal (menu TCL).
+     * dans les autres applis la touche suit son chemin normal (menu TCL). Sans entree physique (Mi Box...) elle n'est jamais prise.
      */
-    static boolean shouldHandleSource(int code, boolean homeResumed) {
-        if (!homeResumed) return false;
+    static boolean shouldHandleSource(int code, boolean homeResumed, boolean hasInputs) {
+        if (!homeResumed || !hasInputs) return false;
         for (int k : SOURCE_KEYS) if (k == code) return true;
         return false;
     }

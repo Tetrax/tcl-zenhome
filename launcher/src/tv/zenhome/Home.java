@@ -69,6 +69,8 @@ public class Home extends Activity implements Host {
     /** Accueil au premier plan (entre onResume et onPause), lu par KeyService (meme processus) ; null sinon. */
     static volatile Home front;
 
+    volatile boolean hasInputs;      // calcule au demarrage, recalcule dans onResume tant qu'il est faux (lu par KeyService a chaque touche)
+
     boolean dockOnResume = true;     // vrai au lancement et apres la touche Accueil : focus sur le dock
     boolean needDockFocus = false;   // le prochain gain de focus fenetre / la prochaine mise en page doit viser le dock
 
@@ -105,6 +107,7 @@ public class Home extends Activity implements Host {
         sleep = new Sleep(this, ui, prefs, ovs, new Runnable() { public void run() { shortcuts.sleepBadge(sleep.badgeText()); } });
         sleep.restore();
         shortcuts = new Shortcuts(this, ui, apps, root, this);
+        hasInputs = !inputs.list().isEmpty();
         detail = new MovieDetail(this, ui, prefs, async, ovs, apps, this);
         movies = new Movies(this, ui, prefs, async, ovs, this);
         editor = new Editor(this, ui, apps, grid, ovs, config, dock, carousel, recents, this);
@@ -193,6 +196,8 @@ public class Home extends Activity implements Host {
     public void showAllApps() { grid.showApps(null); }
 
     public void showInputs() { inputs.show(); }
+
+    public boolean hasInputs() { return hasInputs; }
 
     public void cover(boolean on) { levels.cover(on); }
 
@@ -388,7 +393,7 @@ public class Home extends Activity implements Host {
             return true;
         }
         // touche Source / TV : sur certaines TV, seul l'accueil d'origine la gerait
-        if ((code == KeyEvent.KEYCODE_TV_INPUT || code == KeyEvent.KEYCODE_TV) && ovs.isEmpty() && editor.moveIndex < 0) {
+        if ((code == KeyEvent.KEYCODE_TV_INPUT || code == KeyEvent.KEYCODE_TV) && hasInputs && ovs.isEmpty() && editor.moveIndex < 0) {
             inputs.show();
             return true;
         }
@@ -441,6 +446,8 @@ public class Home extends Activity implements Host {
         List<String> cp = carousel.compute();
         if (!cp.equals(carousel.pkgs) && editor.moveIndex < 0 && ovs.isEmpty()) { carousel.pkgs = cp; carousel.rebuild(-1); }
         if (!ui.theme.name.equals(ThemeRules.normalize(prefs.getString("theme", ThemeRules.GLASS)))) ui.theme.set(prefs.getString("theme", ThemeRules.GLASS));
+        // au demarrage de la TV les entrees HDMI peuvent ne pas etre encore declarees : on reessaie tant qu'il n'y en a aucune
+        if (!hasInputs && editor.moveIndex < 0 && ovs.isEmpty() && !inputs.list().isEmpty()) { hasInputs = true; shortcuts.build(); }
         weather.render(); movies.render();
         detail.reloadBackdrop();
         banner.check(movies.myList());

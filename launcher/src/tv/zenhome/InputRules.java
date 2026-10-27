@@ -23,6 +23,9 @@ final class InputRules {
         return passthrough || (type == TYPE_TUNER && vendorTuner);
     }
 
+    /** Carte « Entrees » du dock : une appli ou cible d'entrees connue ET au moins une entree physique visible (sinon Chaines en direct s'ouvrirait pour rien). */
+    static boolean showCard(boolean target, boolean hasInputs) { return target && hasInputs; }
+
     static String clean(CharSequence s) { return s == null ? "" : s.toString().trim(); }
 
     /** Libelle personnalise (renomme dans les reglages TV) s'il existe, sinon libelle du systeme, sinon nom du type. */

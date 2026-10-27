@@ -52,7 +52,7 @@ class Shortcuts {
         final String[] input = apps.findInput();
         final ComponentName viewInputs = apps.viewInputsTarget();
         // appli TV connue, ou (projecteurs XGIMI...) le systeme sait ouvrir les entrees
-        if (input != null || viewInputs != null)
+        if (InputRules.showCard(input != null || viewInputs != null, host.hasInputs()))
             shortcut(Icons.LineIcon.INPUT, "television-simple", ui.t("Entrées TV", "TV inputs"), new Runnable() { public void run() { host.showInputs(); } });
         shortcut(Icons.LineIcon.GRID, "squares-four", ui.t("Toutes les applis", "All apps"), new Runnable() { public void run() { host.showAllApps(); } });
         shortcut(Icons.LineIcon.STACK, "stack", ui.t("Applis ouvertes", "Open apps"), new Runnable() { public void run() { host.showRecents(); } });

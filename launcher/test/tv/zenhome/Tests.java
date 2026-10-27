@@ -725,13 +725,18 @@ public class Tests {
 
     // ---------- Touche Source
     static void keyRules() {
-        ok("source: TV_INPUT, accueil au premier plan", KeyRules.shouldHandleSource(178, true));
-        ok("source: TV, accueil au premier plan", KeyRules.shouldHandleSource(170, true));
-        ok("source: TV_INPUT dans une autre appli", !KeyRules.shouldHandleSource(178, false));
-        ok("source: TV dans une autre appli", !KeyRules.shouldHandleSource(170, false));
-        ok("source: autre touche (OK)", !KeyRules.shouldHandleSource(23, true));
-        ok("source: touche TCL Netflix", !KeyRules.shouldHandleSource(4062, true));
-        ok("source: code 0", !KeyRules.shouldHandleSource(0, true));
+        ok("source: TV_INPUT, accueil au premier plan", KeyRules.shouldHandleSource(178, true, true));
+        ok("source: TV, accueil au premier plan", KeyRules.shouldHandleSource(170, true, true));
+        ok("source: TV_INPUT dans une autre appli", !KeyRules.shouldHandleSource(178, false, true));
+        ok("source: TV dans une autre appli", !KeyRules.shouldHandleSource(170, false, true));
+        ok("source: autre touche (OK)", !KeyRules.shouldHandleSource(23, true, true));
+        ok("source: touche TCL Netflix", !KeyRules.shouldHandleSource(4062, true, true));
+        ok("source: code 0", !KeyRules.shouldHandleSource(0, true, true));
+        ok("source: aucune entree physique (TV_INPUT)", !KeyRules.shouldHandleSource(178, true, false));
+        ok("source: aucune entree physique (TV)", !KeyRules.shouldHandleSource(170, true, false));
+        ok("carte entrees: cible et entrees", InputRules.showCard(true, true));
+        ok("carte entrees: aucune entree -> masquee", !InputRules.showCard(true, false));
+        ok("carte entrees: aucune cible -> masquee", !InputRules.showCard(false, true));
     }
 
     static void settingsKey() {
