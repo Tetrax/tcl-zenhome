@@ -62,11 +62,12 @@ enreg() {
     return 0
 }
 
-# Paquet qui détient l'accueil : rôle HOME si géré (Android 10+), sinon activité qui résout l'intent HOME.
+# Paquet qui détient l'accueil : rôle HOME si géré (Android 10+), sinon accueil préféré (set-home-activity).
+# Sans rôle, l'accueil d'origine (priorité système plus haute) passe devant l'accueil préféré tant qu'il est actif.
 detenteur_home() {
     local h
     if [ "$ROLE_HOME" = 1 ]; then adb_lire shell cmd role get-role-holders --user 0 android.app.role.HOME
-    else h=$(adb_lire shell cmd package resolve-activity --brief -a android.intent.action.MAIN -c android.intent.category.HOME | tail -1); printf '%s\n' "${h%%/*}"; fi
+    else h=$(adb_lire shell dumpsys package preferred-xml | awk -F'"' '/<item name=/ { n = $2 } /category.HOME/ { print n; exit }'); printf '%s\n' "${h%%/*}"; fi
 }
 
 # Vrai si le paquet est désactivé, ou absent de la TV.
