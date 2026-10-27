@@ -8,7 +8,7 @@ aide() {
     command cat <<'AIDE'
 Usage : tv/deployer.sh [--dry-run] [--capture] [--reset-dock] [--help]
 
-Enchaîne : tests, build, connexion adb (vérifie la TV G08_4K_GB), installation,
+Enchaîne : tests, build, connexion adb (vérifie le modèle attendu par PROFIL), installation,
 configuration (ville, jeton TMDB, permissions, accessibilité, écran de veille, accueil),
 touche Accueil. Idempotent : peut être relancé sans risque.
 
@@ -18,8 +18,8 @@ touche Accueil. Idempotent : peut être relancé sans risque.
                  Sans cette option, les réglages faits sur la TV ne sont jamais touchés.
   -h, --help     cette aide
 
-Configuration : tv/tv.conf (TV_HOST, LAT, LON, CITY ; voir tv.conf.example), jeton TMDB dans ./tmdb.token.
-TV_HOST peut aussi venir de l'environnement.
+Configuration : tv/tv.conf (TV_HOST, LAT, LON, CITY, PROFIL ; voir tv.conf.example), jeton TMDB dans ./tmdb.token.
+TV_HOST et PROFIL peuvent aussi venir de l'environnement.
 AIDE
 }
 

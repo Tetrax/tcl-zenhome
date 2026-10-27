@@ -11,7 +11,7 @@ Ce projet fait deux choses :
 
 ## Ce que ça fait
 
-**Debloat sans root.** Les paquets listés dans `tv/debloat-tcl-g08.txt` sont *désactivés* (`pm disable-user`), jamais désinstallés. Tout est réversible avec `tv/restaurer-tv.sh`.
+**Debloat sans root.** Les paquets listés dans la liste de l'appareil (`tv/debloat-tcl-g08.txt` ou `tv/debloat-mibox4.txt`) sont *désactivés* (`pm disable-user`), jamais désinstallés. Tout est réversible avec `tv/restaurer-tv.sh`.
 
 **Accueil Zen Home**
 - **Niveaux** : au repos, photo dégagée avec salutation, heure et dock d'applis. Haut = films et raccourcis, Bas = toutes vos applis.
@@ -31,9 +31,17 @@ Ce projet fait deux choses :
 
 *Photos de fond : Wikimedia Commons, voir [launcher/CREDITS.md](launcher/CREDITS.md). Affiches et images de films : TMDB.*
 
-## TV testée
+## Appareils testés
 
-**TCL G08** (QM6K, « Smart TV Pro »), Google TV, Android 14. Ça devrait fonctionner sur d'autres TCL Google TV, **à vos risques** : la liste de debloat (`tv/debloat-tcl-g08.txt`) est propre à ce modèle, relisez-la avant de l'appliquer. Les films sont réglés pour la France (région `FR`, textes en français) ; l'interface existe en français et en anglais selon la langue de la TV.
+L'appareil visé est choisi par la clé `PROFIL` de `tv/tv.conf` (ou la variable d'environnement), `tcl-g08` par défaut. Les scripts vérifient le modèle à la connexion et demandent confirmation s'il ne correspond pas.
+
+- **TCL G08** (QM6K, « Smart TV Pro »), Google TV, Android 14 : `PROFIL="tcl-g08"`. Ça devrait fonctionner sur d'autres TCL Google TV, **à vos risques** : la liste de debloat (`tv/debloat-tcl-g08.txt`) est propre à ce modèle, relisez-la avant de l'appliquer.
+- **Xiaomi Mi Box 4** (MIBOX4), Android TV 9 : `PROFIL="mibox4"`, liste `tv/debloat-mibox4.txt`. Différences avec la TCL :
+  - Android 9 n'a pas de rôle HOME : l'accueil Google (`tvlauncher`) passe devant Zen Home tant qu'il est actif, c'est donc `tv/verifier-tv.sh --fix` qui fait de Zen Home l'accueil en le désactivant (avec retour arrière si Zen Home n'apparaît pas).
+  - Pas d'entrée HDMI ni de tuner : la carte « Entrées » est masquée et la touche Source n'est pas interceptée.
+  - Les boutons Netflix et Prime Video de la télécommande sont gérés par le système et marchent sans l'accueil Google.
+
+Les films sont réglés pour la France (région `FR`, textes en français) ; l'interface existe en français et en anglais selon la langue de l'appareil.
 
 ## Prérequis
 
@@ -54,7 +62,7 @@ git clone https://github.com/Tetrax/tcl-zenhome.git
 cd tcl-zenhome
 ```
 
-1. **Configuration** : `cp tv/tv.conf.example tv/tv.conf`, puis éditez `TV_HOST` (IP de la TV), `LAT`, `LON` (météo) et `CITY` (nom affiché). Ce fichier n'est pas versionné.
+1. **Configuration** : `cp tv/tv.conf.example tv/tv.conf`, puis éditez `TV_HOST` (IP de la TV), `LAT`, `LON` (météo), `CITY` (nom affiché) et `PROFIL` (appareil, voir plus haut). Ce fichier n'est pas versionné. Pour viser ponctuellement un autre appareil : `PROFIL=mibox4 TV_HOST=192.168.1.60 tv/deployer.sh`.
 2. **Jeton TMDB (facultatif, pour les films)** : créez un compte gratuit sur [themoviedb.org](https://www.themoviedb.org), puis *Paramètres > API* et copiez le « API Read Access Token ». Enregistrez-le dans un fichier `tmdb.token` à la racine, **sans le coller dans un chat, un ticket ou une commande**. Depuis le terminal, sans afficher la valeur :
    ```sh
    (umask 077; pbpaste > tmdb.token); pbcopy </dev/null   # après avoir copié le jeton ; vide ensuite le presse-papiers
@@ -71,9 +79,9 @@ cd tcl-zenhome
 | `tv/deployer.sh [--capture] [--reset-dock]` | Tests, build, installation et configuration (ville, jeton, permissions, accessibilité, écran de veille, accueil). Idempotent. `--reset-dock` remet dock et disposition à zéro ; sans lui, vos réglages faits sur la TV sont conservés. |
 | `tv/verifier-tv.sh [--fix]` | Tableau OK / KO / AVERT, à lancer **après une mise à jour TCL ou Google** (elles réactivent parfois des paquets). `--fix` réapplique ce qui manque et revient en arrière si Zen Home n'apparaît pas. |
 | `tv/photos.sh [--replace] <dossier>` | Convertit vos photos (JPEG, 1920 px max) et les envoie dans `/sdcard/ZenHome/`. `--reset` revient aux photos fournies. |
-| `tv/restaurer-tv.sh` | Annule tout : réactive les paquets, remet l'accueil Google, retire Zen Home. |
+| `tv/restaurer-tv.sh` | Annule tout : réactive **tous** les paquets désactivés (y compris ceux désactivés à la main), remet l'accueil et l'écran de veille d'origine de l'appareil, retire Zen Home. |
 
-Tous (sauf `restaurer-tv.sh`) acceptent `--help` et `--dry-run`.
+Tous acceptent `--help` et `--dry-run`.
 
 ## Utilisation à la télécommande
 
@@ -133,9 +141,9 @@ Pour le jeton TMDB, passez par `tv/deployer.sh` : il l'envoie sans l'afficher.
 
 ## Avertissements honnêtes
 
-- **Désactiver des applis système peut casser des fonctions** (réglages TCL, recherche vocale, mises à jour, etc.). Chaque paquet est commenté dans `tv/debloat-tcl-g08.txt` : relisez, retirez une ligne si besoin. Aucun script ne désinstalle quoi que ce soit.
+- **Désactiver des applis système peut casser des fonctions** (réglages TCL, recherche vocale, mises à jour, etc.). Chaque paquet est commenté dans la liste de l'appareil (`tv/debloat-*.txt`) : relisez, retirez une ligne si besoin. Aucun script ne désinstalle quoi que ce soit.
 - **Une mise à jour système peut réactiver** des paquets ou changer l'accueil : relancez `tv/verifier-tv.sh --fix`.
-- **Sauvegarde / restauration** : `tv/restaurer-tv.sh` réactive les paquets et remet l'accueil Google. En cas d'écran noir au retour à l'accueil : `adb shell pm enable com.google.android.apps.tv.launcherx`.
+- **Sauvegarde / restauration** : `tv/restaurer-tv.sh` réactive les paquets et remet l'accueil Google. En cas d'écran noir au retour à l'accueil : `adb shell pm enable com.google.android.apps.tv.launcherx` (TCL) ou `adb shell pm enable com.google.android.tvlauncher` (Mi Box 4).
 - **Wi-Fi et `setupwraith`** : sur certaines TV, le Wi-Fi est lié à `com.google.android.tungsten.setupwraith`. Le script affiche AVERT et ne le désactive pas dans ce cas, pour ne pas vous faire perdre le réseau.
 - **Sauvegardez votre clé de signature** : `launcher/key.jks` et `launcher/keystore.pass` sont créés au premier build et ne sont pas versionnés. Sans eux, une nouvelle clé sera générée et Android refusera la mise à jour (`INSTALL_FAILED_UPDATE_INCOMPATIBLE`) : il faudra désinstaller Zen Home à la main (`adb uninstall tv.zenhome`) et perdre ses réglages.
 - **Dépannage rapide** : TV injoignable ? Vérifiez `TV_HOST`, l'IP fixe, que le débogage ADB est actif, et ré-acceptez l'autorisation sur la TV.
@@ -146,7 +154,7 @@ Pour le jeton TMDB, passez par `tv/deployer.sh` : il l'envoie sans l'afficher.
 ```
 launcher/   code de Zen Home (Java, sans Gradle), build-mac.sh, test-mac.sh, CREDITS.md
 tv/         deployer.sh, verifier-tv.sh, photos.sh, restaurer-tv.sh, lib.sh,
-            debloat-tcl-g08.txt, tv.conf.example
+            debloat-tcl-g08.txt, debloat-mibox4.txt, tv.conf.example
 docs/       architecture.md, captures/
 ```
 
@@ -172,7 +180,7 @@ L'architecture (classes pures testées sur le JVM, classes Android, navigation p
 
 ## English
 
-**tcl-zenhome** debloats a TCL Google TV (tested on the TCL G08 / QM6K, Android 14) and replaces its home screen with **Zen Home**, a lightweight launcher (about 35 to 40 MB of RAM versus about 340 MB for the stock Google TV home). Everything is driven from a Mac over `adb`, with no root.
+**tcl-zenhome** debloats a TCL Google TV (tested on the TCL G08 / QM6K, Android 14) or a Xiaomi Mi Box 4 (Android TV 9, set `PROFIL="mibox4"` in `tv/tv.conf`) and replaces its home screen with **Zen Home**, a lightweight launcher (about 35 to 40 MB of RAM versus about 340 MB for the stock Google TV home). Everything is driven from a Mac over `adb`, with no root.
 
 - Debloat: unwanted TCL/Google packages are **disabled, not uninstalled** (`pm disable-user`), and `tv/restaurer-tv.sh` undoes it all.
 - Launcher: photos, clock, weather (Open-Meteo), movies with trailers (TMDB, free token), TV inputs panel, sleep timer, ambient mode and screensaver, themes, your own photos.
