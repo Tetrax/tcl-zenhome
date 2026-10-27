@@ -45,6 +45,9 @@ final class ConfigRules {
         return out;
     }
 
+    /** Dock affiche different de la liste recalculee (appli desinstallee, desactivee ou reactivee) : il faut le reconstruire. */
+    static boolean dockStale(List<String> shown, List<String> fresh) { return !shown.equals(fresh); }
+
     /** Nombre d'applis du dock : 2 a 10, sinon 4. */
     static int layout(String s) {
         int n;

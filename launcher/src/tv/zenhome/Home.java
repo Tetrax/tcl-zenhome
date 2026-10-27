@@ -13,6 +13,7 @@ import android.view.View;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -431,9 +432,13 @@ public class Home extends Activity implements Host {
         super.onResume();
         front = this;
         async.fg = true;
-        // la configuration a pu changer via le kit pendant que l'accueil etait en fond
-        if (config.revChanged() && editor.moveIndex < 0 && ovs.isEmpty()) {
-            config.load(); ui.theme.set(prefs.getString("theme", ThemeRules.GLASS)); header.applyTitle(); dock.rebuild(0);
+        // la configuration a pu changer via le kit, ou une appli du dock etre desinstallee / reactivee, pendant que l'accueil etait en fond
+        if (editor.moveIndex < 0 && ovs.isEmpty()) {
+            boolean rev = config.revChanged();
+            List<String> shown = new ArrayList<>(config.dockPkgs);
+            config.load();
+            if (rev) { ui.theme.set(prefs.getString("theme", ThemeRules.GLASS)); header.applyTitle(); }
+            if (rev || ConfigRules.dockStale(shown, config.dockPkgs)) dock.rebuild(0);
         }
         async.h.removeCallbacksAndMessages(null);
         header.start();

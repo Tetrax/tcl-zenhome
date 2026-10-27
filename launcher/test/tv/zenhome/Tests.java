@@ -544,6 +544,13 @@ public class Tests {
         eq("layout texte -> 4", 4, ConfigRules.layout("x"));
         eq("layout vide -> 4", 4, ConfigRules.layout(""));
         eq("layout espace -> 4", 4, ConfigRules.layout(" 5"));
+        // dock affiche vs liste recalculee au retour sur l'accueil (appli desinstallee, desactivee ou reactivee entre-temps)
+        List<String> dk = java.util.Arrays.asList("com.netflix.ninja", "com.plexapp.android", "com.spotify.tv.android");
+        List<String> sansPlex = java.util.Arrays.asList("com.netflix.ninja", "com.spotify.tv.android");
+        ok("dock: appli desinstallee -> reconstruire", ConfigRules.dockStale(dk, sansPlex));
+        ok("dock: appli reactivee -> reconstruire", ConfigRules.dockStale(sansPlex, dk));
+        ok("dock: rien de change -> rien", !ConfigRules.dockStale(dk, new ArrayList<>(dk)));
+        ok("dock vide -> rien", !ConfigRules.dockStale(new ArrayList<String>(), new ArrayList<String>()));
     }
 
     // ---------- Entrees TV
