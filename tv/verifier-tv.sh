@@ -37,12 +37,11 @@ done
 charger_conf
 verifier_adb
 
-LAUNCHERX=com.google.android.apps.tv.launcherx
+LAUNCHERX=${ACCUEIL%%/*}
 WRAITH=com.google.android.tungsten.setupwraith
 SPOTIFY=com.spotify.tv.android
-LISTE="$TV_DIR/debloat-tcl-g08.txt"
+LISTE="$TV_DIR/$DEBLOAT"
 [ -f "$LISTE" ] || die "liste introuvable : $LISTE"
-RE_PAQUET='^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)+$'
 PAQUETS=()
 while IFS= read -r l || [ -n "$l" ]; do
     l=${l%%#*}; l=${l//[[:space:]]/}
@@ -61,6 +60,13 @@ enreg() {
     R_NOM+=("$1"); R_ST+=("$etat"); R_DET+=("$det"); LAST_OK=$etat
     [ "$etat" = 0 ] && KO=$((KO + 1))
     return 0
+}
+
+# Paquet qui détient l'accueil : rôle HOME si géré (Android 10+), sinon activité qui résout l'intent HOME.
+detenteur_home() {
+    local h
+    if [ "$ROLE_HOME" = 1 ]; then adb_lire shell cmd role get-role-holders --user 0 android.app.role.HOME
+    else h=$(adb_lire shell cmd package resolve-activity --brief -a android.intent.action.MAIN -c android.intent.category.HOME | tail -1); printf '%s\n' "${h%%/*}"; fi
 }
 
 # Vrai si le paquet est désactivé, ou absent de la TV.
@@ -97,7 +103,7 @@ controler() {
     else enreg "Zen Home installé" 0 "absent"; fi
     ST_INST=$LAST_OK
 
-    holder=$(adb_lire shell cmd role get-role-holders --user 0 android.app.role.HOME)
+    holder=$(detenteur_home)
     if [ "$holder" = "$PKG" ]; then enreg "Rôle HOME = $PKG" 1 ""; else enreg "Rôle HOME = $PKG" 0 "actuel : ${holder:-aucun}"; fi
     ST_ROLE=$LAST_OK
 
@@ -163,7 +169,7 @@ afficher() {
 
 role_ok() {
     [ "$DRY_RUN" = 1 ] && return 0
-    [ "$(adb_lire shell cmd role get-role-holders --user 0 android.app.role.HOME)" = "$PKG" ]
+    [ "$(detenteur_home)" = "$PKG" ]
 }
 
 au_premier_plan() {

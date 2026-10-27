@@ -1,0 +1,4 @@
+# Xiaomi Mi Box 4 (MIBOX4, ro.product.name=oneday), Android TV 9
+# Tout est DÉSACTIVÉ (pm disable-user), rien n'est désinstallé. Annulation : pm enable <paquet>.
+# Ne jamais y mettre com.google.android.tvlauncher ni com.google.android.tungsten.setupwraith : verifier-tv.sh --fix les gère.
+# Liste à compléter.
