@@ -1,4 +1,4 @@
-# Fonctions communes à deployer.sh, verifier-tv.sh et photos.sh (à sourcer, pas à exécuter).
+# Fonctions communes à deployer.sh, verifier-tv.sh, photos.sh et restaurer-tv.sh (à sourcer, pas à exécuter).
 # Attend que le script appelant ait fait `set -euo pipefail` et défini DRY_RUN (0 ou 1).
 
 TV_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -9,6 +9,7 @@ KEYSVC_FULL=tv.zenhome/tv.zenhome.KeyService
 KEYSVC_SHORT=tv.zenhome/.KeyService
 DREAM=tv.zenhome/tv.zenhome.ZenDream
 DRY_RUN=${DRY_RUN:-0}
+RE_PAQUET='^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)+$'
 
 info() { printf '%s\n' "$*"; }
 warn() { printf 'Attention : %s\n' "$*" >&2; }
@@ -17,10 +18,10 @@ die()  { printf 'Erreur : %s\n' "$*" >&2; exit 1; }
 # Quote une valeur pour le shell de la TV (apostrophes protégées).
 shq() { local s=${1//\'/\'\\\'\'}; printf "'%s'" "$s"; }
 
-# TV_HOST, LAT, LON, CITY : environnement > tv/tv.conf > défaut.
+# TV_HOST, LAT, LON, CITY, PROFIL : environnement > tv/tv.conf > défaut.
 # tv.conf n'est JAMAIS exécuté : lecture ligne à ligne des seules clés connues (VAR="valeur").
 charger_conf() {
-    local c_host="" c_lat="" c_lon="" c_city="" l k v
+    local c_host="" c_lat="" c_lon="" c_city="" c_profil="" l k v
     if [ -f "$TV_DIR/tv.conf" ]; then
         while IFS= read -r l || [ -n "$l" ]; do
             l=${l%$'\r'}
@@ -33,13 +34,32 @@ charger_conf() {
                 LAT) c_lat=$v ;;
                 LON) c_lon=$v ;;
                 CITY) c_city=$v ;;
+                PROFIL) c_profil=$v ;;
             esac
         done < "$TV_DIR/tv.conf"
     fi
     TV_HOST="${TV_HOST:-${c_host:-192.168.1.50}}"
     LAT="${LAT:-$c_lat}"; LON="${LON:-$c_lon}"; CITY="${CITY:-$c_city}"
+    PROFIL="${PROFIL:-${c_profil:-tcl-g08}}"
     [[ $TV_HOST =~ ^[A-Za-z0-9.-]+(:[0-9]+)?$ ]] || die "TV_HOST invalide : « $TV_HOST » (attendu : 192.168.1.50 ou hôte:port)."
     case "$TV_HOST" in *:*) SERIAL="$TV_HOST" ;; *) SERIAL="$TV_HOST:5555" ;; esac
+    charger_profil
+}
+
+# Propriétés de l'appareil selon PROFIL : PRODUIT (ro.product.name), DEBLOAT (liste dans tv/), ROLE_HOME (1 = rôle HOME
+# géré par `cmd role`, Android 10+), ACCUEIL (accueil d'origine), VEILLE (écran de veille d'origine).
+charger_profil() {
+    case "$PROFIL" in
+        tcl-g08)
+            PRODUIT=G08_4K_GB; DEBLOAT=debloat-tcl-g08.txt; ROLE_HOME=1
+            ACCUEIL=com.google.android.apps.tv.launcherx/.home.HomeActivity
+            VEILLE=com.google.android.apps.tv.dreamx/.service.Backdrop ;;
+        mibox4)
+            PRODUIT=oneday; DEBLOAT=debloat-mibox4.txt; ROLE_HOME=0
+            ACCUEIL=com.google.android.tvlauncher/.MainActivity
+            VEILLE=com.google.android.backdrop/.Backdrop ;;
+        *) die "PROFIL inconnu : « $PROFIL » (attendu : tcl-g08 ou mibox4)." ;;
+    esac
 }
 
 # Commande adb qui modifie la TV (affichée au lieu d'être lancée en --dry-run).
@@ -73,14 +93,14 @@ connecter_tv() {
     if [ "$DRY_RUN" = 1 ]; then info "[dry-run] adb connect $SERIAL"; else adb connect "$SERIAL" || true; fi
     if [ "$DRY_RUN" = 1 ]; then
         adb_lire shell getprop ro.product.name
-        info "[dry-run] vérification : ro.product.name doit valoir G08_4K_GB (sinon confirmation demandée)"
+        info "[dry-run] vérification : ro.product.name doit valoir $PRODUIT (sinon confirmation demandée)"
         return 0
     fi
     [ "$(adb -s "$SERIAL" get-state 2>/dev/null || true)" = device ] \
         || die "la TV $SERIAL ne répond pas (débogage ADB activé ? autorisation acceptée à l'écran ? IP correcte ?)."
     nom=$(adb_lire shell getprop ro.product.name)
-    if [ "$nom" != G08_4K_GB ]; then
-        warn "appareil inattendu : ro.product.name = « $nom » (attendu : G08_4K_GB)."
+    if [ "$nom" != "$PRODUIT" ]; then
+        warn "appareil inattendu : ro.product.name = « $nom » (attendu : $PRODUIT)."
         [ -t 0 ] || die "confirmation impossible hors terminal."
         local rep; read -r -p "Continuer quand même ? [o/N] " rep
         case "$rep" in o|O|oui|OUI) ;; *) die "abandon." ;; esac
@@ -131,16 +151,19 @@ activer_accessibilite() {
 }
 
 definir_accueil() {
-    adb_tv shell cmd role add-role-holder android.app.role.HOME "$PKG"
+    if [ "$ROLE_HOME" = 1 ]; then adb_tv shell cmd role add-role-holder android.app.role.HOME "$PKG"; fi
     adb_tv shell cmd package set-home-activity "$PKG/.Home"
 }
 
 # Permissions runtime, tolérant : un refus n'arrête rien.
-# READ_EXTERNAL_STORAGE est déclarée avec maxSdkVersion=32 : on ne la demande que sur Android 12L et moins.
+# READ_MEDIA_IMAGES n'existe qu'à partir d'Android 13 (SDK 33) ; READ_EXTERNAL_STORAGE est déclarée avec
+# maxSdkVersion=32 : on ne la demande que sur Android 12L et moins.
 accorder_permissions() {
     local sdk
     sdk=$(adb_lire shell getprop ro.build.version.sdk)
-    adb_essayer shell pm grant "$PKG" android.permission.READ_MEDIA_IMAGES
+    if [ "$DRY_RUN" = 1 ] || { [[ $sdk =~ ^[0-9]+$ ]] && [ "$sdk" -ge 33 ]; }; then
+        adb_essayer shell pm grant "$PKG" android.permission.READ_MEDIA_IMAGES
+    fi
     # Stats d'usage (écran « Applis ouvertes ») : opération appops, pas une permission runtime
     adb_essayer shell appops set "$PKG" GET_USAGE_STATS allow
     if [ "$DRY_RUN" = 1 ]; then
