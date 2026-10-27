@@ -9,13 +9,14 @@ aide() {
 Usage : tv/verifier-tv.sh [--fix] [--dry-run] [--help]
 
 Affiche un tableau OK / KO / AVERT :
-  Zen Home installé (version), rôle HOME, launcherx et setupwraith désactivés, paquets de
-  tv/debloat-tcl-g08.txt désactivés, KeyService activé, écran de veille ZenDream,
+  Zen Home installé (version), rôle HOME (accueil préféré sous Android 9), accueil d'origine
+  (launcherx sur la TCL, tvlauncher sur la Mi Box) et setupwraith désactivés, paquets de la liste
+  du profil (tv/debloat-<profil>.txt) désactivés, KeyService activé, écran de veille ZenDream,
   restriction d'arrière-plan de Spotify (appops RUN_ANY_IN_BACKGROUND = ignore), Wi-Fi non lié à setupwraith.
 
   --fix       réapplique uniquement ce qui est KO, dans un ordre sûr (Zen Home et rôle HOME avant de
-              désactiver launcherx ; setupwraith seulement si le Wi-Fi n'y est pas lié), appuie sur
-              Accueil et vérifie que tv.zenhome est au premier plan, sinon réactive launcherx
+              désactiver l'accueil d'origine ; setupwraith seulement si le Wi-Fi n'y est pas lié), appuie sur
+              Accueil et vérifie que tv.zenhome est au premier plan, sinon réactive l'accueil d'origine
   --dry-run   affiche les commandes adb sans les lancer (tous les contrôles sont alors simulés KO)
   -h, --help  cette aide
 
