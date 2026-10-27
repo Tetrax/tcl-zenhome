@@ -1,4 +1,27 @@
 # Xiaomi Mi Box 4 (MIBOX4, ro.product.name=oneday), Android TV 9
 # Tout est DÉSACTIVÉ (pm disable-user), rien n'est désinstallé. Annulation : pm enable <paquet>.
 # Ne jamais y mettre com.google.android.tvlauncher ni com.google.android.tungsten.setupwraith : verifier-tv.sh --fix les gère.
-# Liste à compléter.
+
+# Pistage et télémétrie
+tv.alphonso.alphonso_eula              # Alphonso : reconnaissance du contenu regardé, pour la pub
+com.miui.tv.analytics                  # télémétrie Xiaomi
+com.google.android.feedback            # envoi de rapports à Google
+com.google.android.tv.bugreportsender  # envoi de rapports de bug
+
+# Pub, promos et contenu Xiaomi / Google
+com.mitv.tvhome.atv                    # PatchWall, accueil Xiaomi
+com.mitv.tvhome.michannel              # chaînes de contenus Xiaomi
+com.xm.webcontent                      # contenus web et promos Xiaomi
+android.autoinstalls.config.xioami.mibox3  # installe des applis partenaires en douce
+com.xiaomi.android.tvsetup.partnercustomizer  # rangées partenaires sur l'accueil Google
+com.google.android.tvrecommendations   # recommandations de l'accueil Google
+
+# Remplacés par Zen Home ou Chromecast
+com.google.android.backdrop            # écran de veille Google (remplacé par ZenDream)
+com.mitv.milinkservice                 # diffusion Mi Link (Chromecast reste actif)
+com.mitv.videoplayer                   # lecteur vidéo Xiaomi
+
+# Applis Google inutilisées
+com.google.android.play.games          # Play Jeux
+com.google.android.youtube.tvmusic     # YouTube Music
+com.google.android.videos              # Google TV / Play Films
