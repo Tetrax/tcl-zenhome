@@ -85,8 +85,10 @@ erreur() {
     exit 1
 }
 
+MODIFIE=0   # 1 dès que des choix ont commencé à être appliqués
 arreter() {
-    printf '\n%s\n' "Arrêté à votre demande. Aucune appli n'a été désactivée ni désinstallée."
+    if [ "$MODIFIE" = 1 ]; then printf '\n%s\n' "Arrêté à votre demande. Une partie des choix a pu être appliquée : relancez le kit et choisissez « Réparer » pour terminer."
+    else printf '\n%s\n' "Arrêté à votre demande. Aucune appli n'a été désactivée ni désinstallée."; fi
     exit 0
 }
 
@@ -327,6 +329,7 @@ sauver() { local f=$1; shift; adb_lire shell "$@" > "$SAUV/$f.txt"; }
 inventaire() {
     local tai der l p t d
     etape "État des lieux et sauvegarde (rien n'est modifié)"
+    assurer_connexion
     sauver paquets-tous pm list packages -f
     printf '%s\n' "$DESACTIVES" > "$SAUV/paquets-desactives.txt"
     printf '%s\n' "$USERS" > "$SAUV/paquets-utilisateur.txt"
@@ -428,10 +431,50 @@ Vous pouvez laisser vide : tout fonctionnera, sauf les films.") || arreter
     printf '%s' "$tok" > "$TOKFILE"
 }
 
+# ---------------------------------------------------------------- coupures de la box (veille, Wi-Fi)
+
+connexion_ok() { [ "$(adb -s "$SERIAL" get-state 2>/dev/null | tr -d '\r')" = device ]; }
+
+# Reconnecte la box si elle a décroché ; sinon demande à l'utilisateur de la réveiller (Réessayer / Arrêter).
+assurer_connexion() {
+    local essai rep
+    while :; do
+        connexion_ok && return 0
+        for essai in 1 2 3 4 5; do
+            info "Connexion à la box perdue, reconnexion (essai $essai/5)…"
+            adb disconnect "$SERIAL" >/dev/null 2>&1; adb connect "$SERIAL" >/dev/null 2>&1
+            sleep "$PAUSE"
+            if connexion_ok; then info "Box reconnectée."; return 0; fi
+        done
+        rep=$(osa btn "La box ne répond plus" "La connexion avec la Mi Box ($IP) a été perdue.
+
+Vérifiez qu'elle est allumée et pas en veille (appuyez sur une touche de la télécommande), et toujours sur le même Wi-Fi que ce Mac. Puis cliquez sur « Réessayer ».
+
+Ce qui a déjà été fait est conservé : le kit reprend là où il s'est arrêté." Réessayer Arrêter Réessayer) || arreter
+        [ "$rep" = Réessayer ] || arreter
+    done
+}
+
+# Lance un script du kit (rejouable sans risque) ; s'il échoue parce que la box a décroché, reconnecte et recommence.
+lancer_script() {
+    local n rc=1 out
+    out=$(mktemp "${TMPDIR:-/tmp}/zenhome-sortie.XXXXXX") || out=/dev/null
+    for n in 1 2 3; do
+        assurer_connexion
+        /bin/bash "$@" 2>&1 | tee -a "$RAPPORT" "$out"; rc=${PIPESTATUS[0]}
+        [ "$rc" -eq 0 ] && break
+        # vraie erreur, sauf si la box a décroché (même brièvement : messages de coupure d'adb dans la sortie)
+        if connexion_ok && ! grep -Eq 'device offline|device .* not found|ne répond pas|error: closed|no devices|Connection refused|No route to host' "$out" 2>/dev/null; then break; fi
+        info "La box a décroché pendant l'opération : nouvelle tentative."
+        [ "$out" = /dev/null ] || : > "$out"
+    done
+    [ "$out" = /dev/null ] || rm -f "$out"
+    return "$rc"
+}
+
 installer() {
     etape "Installation de Zen Home"
-    /bin/bash "$ROOT/tv/deployer.sh" --sans-build 2>&1 | tee -a "$RAPPORT"
-    [ "${PIPESTATUS[0]}" -eq 0 ] || erreur "L'installation de Zen Home a échoué (détails dans la fenêtre Terminal et dans $RAPPORT). Rien n'a été désactivé ni désinstallé."
+    lancer_script "$ROOT/tv/deployer.sh" --sans-build || erreur "L'installation de Zen Home a échoué (détails dans la fenêtre Terminal et dans $RAPPORT). Rien n'a été désactivé ni désinstallé."
 }
 
 # ---------------------------------------------------------------- 6. noms lisibles
@@ -440,6 +483,7 @@ lire_libelles() {
     local essai sortie data l pkg
     L_PKG=(); L_LAB=()
     etape "Noms lisibles des applis"
+    assurer_connexion
     for essai in 1 2 3; do
         sortie=$(adb_lire shell am broadcast -a tv.zenhome.CONFIG -n tv.zenhome/.ConfigReceiver --ez labels true)
         case "$sortie" in *'Broadcast completed: result=1, data="'*) break ;; esac
@@ -557,23 +601,30 @@ Une sauvegarde de l'état actuel est déjà enregistrée dans Documents/Zen Home
 # ---------------------------------------------------------------- 8. application
 
 appliquer() {
-    local p g="" rel sortie
+    local p g="" rel sortie essai
     etape "Application de vos choix"
+    MODIFIE=1
     for p in ${OPT_G[@]+"${OPT_G[@]}"}; do
         if paquet_valide "$p" && idx_debloat "$p" && [ -n "${D_TAG[IDX]}" ]; then g="${g:+$g,}$p"; fi
     done
-    if [ -z "$g" ]; then adb_tv shell settings delete global zenhome_garder
-    else adb_tv shell settings put global zenhome_garder "$g"; fi
-    rel=$(adb_lire shell settings get global zenhome_garder)
-    if [ "$rel" = null ]; then rel=""; fi
+    for essai in 1 2 3; do   # écriture puis relecture : recommencée si la box a décroché entre les deux
+        assurer_connexion
+        if [ -z "$g" ]; then adb_tv shell settings delete global zenhome_garder
+        else adb_tv shell settings put global zenhome_garder "$g"; fi
+        rel=$(adb_lire shell settings get global zenhome_garder)
+        if [ "$rel" = null ]; then rel=""; fi
+        [ "$rel" = "$g" ] && break
+        connexion_ok && break
+    done
     [ "$rel" = "$g" ] || erreur "Vos choix n'ont pas pu être mémorisés sur la box. Rien d'autre n'a été modifié ; relancez le kit."
     for p in ${OPT_G[@]+"${OPT_G[@]}"}; do
-        if dans_liste "$DESACTIVES" "$p"; then info "Réactivation de $(lab_debloat "$p")"; adb_tv shell pm enable "$p"; fi
+        if dans_liste "$DESACTIVES" "$p"; then info "Réactivation de $(lab_debloat "$p")"; assurer_connexion; adb_tv shell pm enable "$p"; fi
     done
     DESINSTALLES=""; ECHECS=""
     for p in ${UN_PKG[@]+"${UN_PKG[@]}"}; do
         protege "$p" && continue
         paquet_valide "$p" && dans_liste "$USERS" "$p" || continue
+        assurer_connexion
         sortie=$(adb_tv uninstall "$p" 2>&1 | tr -d '\r')
         case "$sortie" in
             *Success*) DESINSTALLES="$DESINSTALLES• $p"$'\n'; info "Désinstallée : $p" ;;
@@ -584,8 +635,7 @@ appliquer() {
 
 verifier() {
     etape "Vérification et réglage final"
-    /bin/bash "$ROOT/tv/verifier-tv.sh" --fix 2>&1 | tee -a "$RAPPORT"
-    OK_VERIF=$([ "${PIPESTATUS[0]}" -eq 0 ] && echo 1 || echo 0)
+    if lancer_script "$ROOT/tv/verifier-tv.sh" --fix; then OK_VERIF=1; else OK_VERIF=0; fi
 }
 
 # ---------------------------------------------------------------- 9. fin
@@ -607,7 +657,7 @@ Rapport et sauvegarde : Documents/Zen Home/sauvegardes"
     rep=$(osa btn "Terminé" "$resume
 
 Pour votre sécurité, vous pouvez couper le « débogage USB » de la box : sinon n'importe quel appareil de votre réseau Wi-Fi pourrait la piloter. Il faudra le réactiver pour utiliser « Réparer »." "Laisser activé" "Couper le débogage" "Laisser activé") || rep="Laisser activé"
-    if [ "$rep" = "Couper le débogage" ]; then adb_tv shell settings put global adb_enabled 0; info "Débogage coupé."; fi
+    if [ "$rep" = "Couper le débogage" ]; then assurer_connexion; adb_tv shell settings put global adb_enabled 0; info "Débogage coupé."; fi
 }
 
 # ---------------------------------------------------------------- déroulé
@@ -672,9 +722,8 @@ case "$MODE" in
 Les applis que vous avez désinstallées ne reviennent pas." Annuler "Tout annuler" Annuler) || arreter
         [ "$rep" = "Tout annuler" ] || arreter
         etape "Retour à l'état d'origine"
-        /bin/bash "$ROOT/tv/restaurer-tv.sh" 2>&1 | tee -a "$RAPPORT"
-        rc=${PIPESTATUS[0]}
-        adb_tv shell settings delete global zenhome_garder
+        lancer_script "$ROOT/tv/restaurer-tv.sh"; rc=$?
+        assurer_connexion; adb_tv shell settings delete global zenhome_garder
         [ "$rc" -eq 0 ] || erreur "La restauration a rencontré un problème (voir le Terminal et $RAPPORT)."
         fenetre "Terminé" "Votre box est revenue à son état d'origine." ;;
 esac
