@@ -40,7 +40,7 @@ fn nettoyer_nom(brut: &str) -> String {
 }
 
 /// IPv4 d'un réseau local (privée ou link-local) : une box ne peut pas être ailleurs.
-fn valider_ipv4(s: &str) -> Option<Ipv4Addr> {
+pub fn valider_ipv4(s: &str) -> Option<Ipv4Addr> {
     let ip = s.trim().parse::<Ipv4Addr>().ok()?;
     (ip.is_private() || ip.is_link_local()).then_some(ip)
 }

@@ -43,6 +43,13 @@ pub trait Observateur {
     fn attente_utilisateur(&mut self, _non_autorise: bool) -> Decision {
         Decision::Arreter
     }
+    /// Vrai quand l'appelant demande l'arrêt (annulation, délai global) : l'opération suivante n'est pas lancée et
+    /// l'action se met en pause.
+    fn annule(&self) -> bool {
+        false
+    }
+    /// La reprise a changé (paquet désactivé noté) : l'appelant peut la conserver pour qu'elle survive à une fermeture.
+    fn reprise_changee(&mut self, _reprise: &Reprise) {}
 }
 
 /// Observateur qui ignore tout et arrête à la première attente utilisateur.
@@ -186,6 +193,11 @@ impl<'a> Session<'a> {
         self.avertissements.push(message);
     }
 
+    /// Prévient l'observateur que `reprise` a changé.
+    pub fn signaler_reprise(&mut self) {
+        self.obs.reprise_changee(&self.reprise);
+    }
+
     pub fn attendre(&self, duree: std::time::Duration) {
         self.t.attendre(duree);
     }
@@ -280,6 +292,9 @@ impl<'a> Session<'a> {
     pub fn op<T>(&mut self, nom: &str, mut f: impl FnMut(&dyn Transport) -> Result<T, ErreurTransport>) -> Result<T, Arret> {
         let mut essai = 0;
         loop {
+            if self.obs.annule() {
+                return Err(Arret::EnPause(Box::new(self.pause(nom, false))));
+            }
             let e = match f(self.t) {
                 Ok(v) => return Ok(v),
                 Err(e) => e,

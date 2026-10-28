@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-verifier"
+description = "Enables the verifier command without any pre-configured scope."
+commands.allow = ["verifier"]
+
+[[permission]]
+identifier = "deny-verifier"
+description = "Denies the verifier command without any pre-configured scope."
+commands.deny = ["verifier"]

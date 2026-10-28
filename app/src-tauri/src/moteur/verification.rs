@@ -224,6 +224,7 @@ fn au_premier_plan(s: &mut Session) -> Result<bool, Arret> {
 fn noter_desactive(s: &mut Session, paquet: &str) {
     if !s.reprise.desactives.iter().any(|d| d == paquet) {
         s.reprise.desactives.push(paquet.to_string());
+        s.signaler_reprise();
     }
 }
 

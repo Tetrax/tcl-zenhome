@@ -4487,7 +4487,10 @@ dependencies = [
 name = "zen-home"
 version = "0.0.2"
 dependencies = [
+ "chrono",
  "serde",
+ "serde_json",
+ "sha2",
  "tauri",
  "tauri-build",
  "zh-reseau",

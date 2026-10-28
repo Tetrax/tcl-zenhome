@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-restaurer"
+description = "Enables the restaurer command without any pre-configured scope."
+commands.allow = ["restaurer"]
+
+[[permission]]
+identifier = "deny-restaurer"
+description = "Denies the restaurer command without any pre-configured scope."
+commands.deny = ["restaurer"]

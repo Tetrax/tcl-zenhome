@@ -97,7 +97,7 @@ const TEXTE_BOX_MAX: usize = 300;
 
 /// Texte venant de la box, avant tout affichage : sans contrôles C0/C1 (`\r` compris), formats Unicode (bidi,
 /// largeur nulle) ni séparateurs de ligne ; sauts de ligne et tabulations deviennent des espaces ; 300 caractères au plus.
-pub(super) fn assainir(brut: &str) -> String {
+pub fn assainir(brut: &str) -> String {
     let propre: String = brut
         .chars()
         .filter_map(|c| match c {
@@ -514,6 +514,8 @@ pub trait Transport {
     /// `adb connect` : `Ok` ne garantit pas que le lien est `Device` (voir `etat`).
     fn connecter(&self) -> Result<(), ErreurTransport>;
     fn deconnecter(&self);
+    /// Arrête le serveur adb dédié (fin de session). Sans effet pour les faux transports.
+    fn arreter_serveur(&self) {}
     /// Pause entre deux tentatives ; les faux transports la rendent instantanée.
     fn attendre(&self, duree: Duration) {
         std::thread::sleep(duree);
@@ -678,6 +680,10 @@ impl Transport for AdbProcess {
 
     fn deconnecter(&self) {
         let _ = self.lancer(&["disconnect", &self.serie], None, DELAI_CONNEXION);
+    }
+
+    fn arreter_serveur(&self) {
+        let _ = self.lancer(&["kill-server"], None, DELAI_CONNEXION);
     }
 }
 
