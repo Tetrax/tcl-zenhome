@@ -44,7 +44,7 @@ final class ConfigRules {
      */
     static String labelLine(String pkg, CharSequence label) {
         if (pkg == null || !pkg.matches("[A-Za-z][A-Za-z0-9_]*(\\.[A-Za-z][A-Za-z0-9_]*)+")) return null;
-        String l = label == null ? "" : label.toString().replaceAll("[\\p{Cntrl}\\p{Cf}\\p{Zl}\\p{Zp}\"]", "").trim();
+        String l = label == null ? "" : label.toString().replaceAll("[\\p{Cc}\\p{Cf}\\p{Zl}\\p{Zp}\"]", "").trim();
         if (l.length() > 60) {
             int n = Character.isHighSurrogate(l.charAt(59)) ? 59 : 60;   // ne coupe pas une paire de substitution
             l = l.substring(0, n).trim();

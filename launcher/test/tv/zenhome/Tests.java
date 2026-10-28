@@ -493,6 +493,7 @@ public class Tests {
         eq("labelLine normal", "com.nst.iptv\tIPTV Smarters Pro", ConfigRules.labelLine("com.nst.iptv", "IPTV Smarters Pro"));
         eq("labelLine tab/\\n/\\r", "a.b\tAB C", ConfigRules.labelLine("a.b", "A\tB\n \rC"));
         eq("labelLine U+202E", "a.b\tABC", ConfigRules.labelLine("a.b", "A\u202EBC"));
+        eq("labelLine controles C1 (U+0085, U+0080, U+009F)", "a.b\tABCD", ConfigRules.labelLine("a.b", "A\u0085B\u0080C\u009FD"));
         eq("labelLine guillemets", "a.b\tAB", ConfigRules.labelLine("a.b", "\"A\"B\""));
         eq("labelLine vide", "a.b\ta.b", ConfigRules.labelLine("a.b", ""));
         eq("labelLine que des controles", "a.b\ta.b", ConfigRules.labelLine("a.b", "\t\n\u202E"));

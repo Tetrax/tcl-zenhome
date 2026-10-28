@@ -44,12 +44,14 @@ WRAITH=com.google.android.tungsten.setupwraith
 SPOTIFY=com.spotify.tv.android
 LISTE="$TV_DIR/$DEBLOAT"
 [ -f "$LISTE" ] || die "liste introuvable : $LISTE"
-PAQUETS=()
+PAQUETS=(); OPTIONS=","
 while IFS= read -r l || [ -n "$l" ]; do
+    o=0; case "$l" in *"# [option"*) o=1 ;; esac
     l=${l%%#*}; l=${l//[[:space:]]/}
     [ -n "$l" ] || continue
     [[ $l =~ $RE_PAQUET ]] || die "nom de paquet invalide dans $(basename "$LISTE") : « $l »"
     PAQUETS+=("$l")
+    if [ "$o" = 1 ]; then OPTIONS="$OPTIONS$l,"; fi
 done < "$LISTE"
 [ "${#PAQUETS[@]}" -gt 0 ] || die "aucun paquet dans $(basename "$LISTE")"
 
@@ -133,7 +135,8 @@ controler() {
     for p in "${PAQUETS[@]}"; do
         etat=$(etat_pkg "$p"); det=""
         if [ "$etat" = 0 ]; then
-            case "$GARDER" in *",$p,"*) etat=2; det="gardé actif (votre choix)" ;; esac
+            # seuls les paquets [option] de la liste peuvent être gardés (le pistage est toujours désactivé)
+            case "$OPTIONS" in *",$p,"*) case "$GARDER" in *",$p,"*) etat=2; det="gardé actif (votre choix)" ;; esac ;; esac
         fi
         enreg "Désactivé : $p" "$etat" "$det"
         if [ "$LAST_OK" = 0 ]; then DEBLOAT_KO+=("$p"); fi
