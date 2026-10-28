@@ -21,6 +21,7 @@ Affiche un tableau OK / KO / AVERT :
   -h, --help  cette aide
 
 AVERT = situation connue, non corrigée volontairement (n'entraîne pas de code de sortie 1).
+Les paquets listés dans « settings global zenhome_garder » (choix « garder » du kit) restent actifs : AVERT, jamais désactivés par --fix.
 setupwraith n'est désactivé que si le Wi-Fi est vérifié non lié ; si dumpsys wifi est vide ou inattendu : AVERT « non vérifié ».
 Code de sortie : 0 si aucun KO et état des paquets lisible, 1 sinon.
 AIDE
@@ -82,7 +83,7 @@ etat_pkg() { if [ "$INCONNU" = 1 ]; then echo 2; elif inactif "$1"; then echo 1;
 
 controler() {
     R_NOM=(); R_ST=(); R_DET=(); KO=0
-    local TOUS DESACTIVES dump ver holder a11y dream spot wifi p n etat det usage
+    local TOUS DESACTIVES dump ver holder a11y dream spot wifi p n etat det usage g e gl=()
     # Wi-Fi : 1 vérifié et non lié, 2 lié à setupwraith, 3 non vérifiable (sortie vide ou format inattendu).
     # Dans les cas 2 et 3, setupwraith n'est JAMAIS désactivé.
     wifi=$(adb_lire shell dumpsys wifi)
@@ -118,9 +119,23 @@ controler() {
         if [ "$p" = "$LAUNCHERX" ]; then ST_LX=$LAST_OK; else ST_SW=$LAST_OK; fi
     done
 
+    # Paquets que l'utilisateur a choisi de garder (liste séparée par des virgules, entrées invalides ignorées).
+    GARDER=","
+    if [ "$DRY_RUN" != 1 ]; then
+        g=$(adb_lire shell settings get global zenhome_garder)
+        IFS=, read -ra gl <<<"$g" || true
+        for e in ${gl[@]+"${gl[@]}"}; do
+            if [[ $e =~ $RE_PAQUET ]]; then GARDER="$GARDER$e,"; fi
+        done
+    fi
+
     DEBLOAT_KO=()
     for p in "${PAQUETS[@]}"; do
-        enreg "Désactivé : $p" "$(etat_pkg "$p")" ""
+        etat=$(etat_pkg "$p"); det=""
+        if [ "$etat" = 0 ]; then
+            case "$GARDER" in *",$p,"*) etat=2; det="gardé actif (votre choix)" ;; esac
+        fi
+        enreg "Désactivé : $p" "$etat" "$det"
         if [ "$LAST_OK" = 0 ]; then DEBLOAT_KO+=("$p"); fi
     done
 
