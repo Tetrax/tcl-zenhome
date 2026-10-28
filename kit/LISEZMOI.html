@@ -61,7 +61,8 @@
   <li>Activez <strong>Débogage USB</strong>.</li>
 </ol>
 <!-- capture : Options pour les développeurs, Débogage USB activé -->
-<h3>C. Noter l'adresse IP de la box</h3>
+<h3>C. Noter l'adresse IP de la box (au cas où)</h3>
+<p>Le kit cherche lui-même la Mi Box sur votre réseau. Notez quand même son adresse : elle sert si la recherche ne la trouve pas.</p>
 <ol>
   <li><strong>Préférences de l'appareil</strong>, puis <strong>À propos</strong>, puis <strong>État</strong>.</li>
   <li>Notez l'<strong>adresse IP</strong> : quatre nombres séparés par des points, par exemple <code>192.168.1.23</code>.</li>
@@ -98,9 +99,10 @@
 <h2>Étape 3 : suivre les fenêtres</h2>
 <p>Le kit vous parle par des fenêtres macOS. Lisez-les, elles expliquent chaque choix.</p>
 <ol>
+  <li>Une première fenêtre rappelle ce qu'il faut : <strong>TV et Mi Box allumées</strong> et laissées allumées pendant toute l'installation (environ 10 minutes), même Wi-Fi que le Mac, télécommande à portée de main.</li>
   <li>Choisissez <strong>Installer ou modifier mes choix</strong> (la première fois).</li>
   <li>Si l'outil officiel de Google « adb » n'est pas sur votre Mac, le kit propose de le télécharger (environ 18 Mo, vérifié automatiquement). Rien d'autre n'est installé sur le Mac.</li>
-  <li>Saisissez l'<strong>adresse IP</strong> notée à l'étape 1.</li>
+  <li>Le kit <strong>cherche la Mi Box</strong> sur le réseau et vous demande de confirmer celle qu'il a trouvée (par son nom, par exemple « SALON »). macOS peut demander si « Terminal » peut <strong>trouver des appareils sur votre réseau local</strong> : acceptez. S'il ne la trouve pas, saisissez l'<strong>adresse IP</strong> notée à l'étape 1.</li>
   <li><strong>Sur la TV</strong>, un message demande d'autoriser le Mac : cochez <strong>« Toujours autoriser cet ordinateur »</strong> puis validez. Revenez sur le Mac et cliquez sur « Réessayer » si besoin.</li>
 </ol>
 <!-- capture : message d'autorisation affiché sur la TV -->

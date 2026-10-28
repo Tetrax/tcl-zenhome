@@ -164,11 +164,64 @@ ip_valide() {
     for o in $1; do [ "$((10#$o))" -le 255 ] || return 1; done
 }
 
+# dns-sd ARGS... pendant $1 secondes (il ne s'arrête jamais seul) ; sortie dans le fichier $2.
+dnssd_pendant() {
+    local duree=$1 f=$2 pid; shift 2
+    dns-sd "$@" > "$f" 2>/dev/null & pid=$!
+    sleep "$duree"; kill "$pid" 2>/dev/null; wait "$pid" 2>/dev/null
+}
+
+# Mi Box allumées sur le réseau : elles s'annoncent en Chromecast (_googlecast._tcp) avec md=MIBOX…
+# Remplit F_NOM / F_IP. Tout ce qui vient du réseau est validé ou filtré avant usage.
+chercher_box() {
+    local d inst host nom ip
+    F_NOM=(); F_IP=()
+    command -v dns-sd >/dev/null 2>&1 || return 0
+    d=$(mktemp -d "${TMPDIR:-/tmp}/zenhome-recherche.XXXXXX") || return 0
+    etape "Recherche de la Mi Box sur le réseau"
+    dnssd_pendant 4 "$d/b" -B _googlecast._tcp local
+    awk '$2 == "Add" { sub(/^.*_googlecast\._tcp\.[ \t]+/, ""); print }' "$d/b" | sort -u > "$d/inst"
+    while IFS= read -r inst; do
+        [[ $inst =~ ^MIBOX[A-Za-z0-9-]{1,80}$ ]] || continue
+        dnssd_pendant 2 "$d/l" -L "$inst" _googlecast._tcp local
+        grep -q 'md=MIBOX' "$d/l" || continue
+        host=$(sed -n 's/.* can be reached at \([^ :]*\):[0-9]*.*/\1/p' "$d/l" | head -1)
+        [[ $host =~ ^[A-Za-z0-9.-]{1,120}$ ]] || continue
+        nom=$(perl -ne 'if (/\bfn=((?:\\.|[^ \\])*)/) { ($n = $1) =~ s/\\(.)/$1/g; print $n; exit }' "$d/l" 2>/dev/null \
+            | LC_ALL=C tr -cd 'A-Za-z0-9 ._-' | cut -c1-30)
+        dnssd_pendant 2 "$d/g" -G v4 "$host"
+        ip=$(grep -oE '([0-9]{1,3}\.){3}[0-9]{1,3}' "$d/g" | head -1)
+        ip_valide "$ip" || continue
+        case " ${F_IP[*]-} " in *" $ip "*) continue ;; esac
+        F_NOM+=("${nom:-Mi Box}"); F_IP+=("$ip")
+    done < "$d/inst"
+    rm -rf "$d"
+    info "${#F_IP[@]} Mi Box trouvée(s)."
+}
+
 saisir_ip() {
-    local prec="" texte
+    local prec="" texte rep i items=() intro=""
     if [ -f "$APPSUP/ip.txt" ]; then prec=$(head -1 "$APPSUP/ip.txt" | tr -d ' \r'); fi
     ip_valide "$prec" || prec=""
-    texte="Quelle est l'adresse IP de votre box ?
+    chercher_box
+    if [ "${#F_IP[@]}" -eq 1 ]; then
+        rep=$(osa btn "Mi Box trouvée" "J'ai trouvé votre Mi Box « ${F_NOM[0]} » à l'adresse ${F_IP[0]}.
+
+Est-ce bien la vôtre ?" "Oui" "Autre adresse" "Oui") || arreter
+        if [ "$rep" = Oui ]; then IP=${F_IP[0]}; PROFIL=mibox4; TV_HOST=$IP; export PROFIL TV_HOST; charger_conf; return 0; fi
+    elif [ "${#F_IP[@]}" -gt 1 ]; then
+        for ((i = 0; i < ${#F_IP[@]}; i++)); do items+=("${F_NOM[i]} (${F_IP[i]})"); done
+        items+=("Aucune : je tape l'adresse moi-même")
+        rep=$(osa list "Mi Box trouvées" "J'ai trouvé plusieurs Mi Box sur ce réseau. Laquelle voulez-vous configurer ?" 0 "${items[@]}") || arreter
+        for ((i = 0; i < ${#F_IP[@]}; i++)); do
+            if [ "$rep" = "${items[i]}" ]; then IP=${F_IP[i]}; PROFIL=mibox4; TV_HOST=$IP; export PROFIL TV_HOST; charger_conf; return 0; fi
+        done
+    else
+        intro="Je n'ai pas trouvé de Mi Box allumée sur ce réseau. Vérifiez qu'elle est allumée (pas en veille) et sur le même Wi-Fi que ce Mac, ou indiquez son adresse.
+
+"
+    fi
+    texte="${intro}Quelle est l'adresse IP de votre box ?
 
 Sur la box : Paramètres > Préférences de l'appareil > À propos > État > Adresse IP.
 Elle ressemble à 192.168.1.23.
@@ -560,6 +613,16 @@ Pour votre sécurité, vous pouvez couper le « débogage USB » de la box : sin
 # ---------------------------------------------------------------- déroulé
 
 printf 'Zen Home, kit %s\nNe fermez pas cette fenêtre : elle montre ce qui se passe.\n' "$KIT_VERSION"
+
+rep=$(osa btn "Zen Home, kit $KIT_VERSION" "Bienvenue ! Avant de commencer :
+
+1. Allumez la TV et la Mi Box, et laissez-les allumées pendant toute l'installation (environ 10 minutes).
+2. La Mi Box et ce Mac doivent être sur le même réseau Wi-Fi.
+3. Le « débogage USB » doit être activé sur la box : Paramètres > Préférences de l'appareil > Options pour les développeurs. Si ce menu n'existe pas : Préférences de l'appareil > À propos, puis cliquez 7 fois sur « Build » (voir le mode d'emploi LISEZMOI).
+4. Gardez la télécommande à portée de main : une demande d'autorisation va s'afficher sur la TV, il faudra l'accepter.
+
+macOS peut aussi demander si « Terminal » peut trouver des appareils sur votre réseau local : acceptez, c'est ce qui permet de retrouver la box." "C'est prêt" Quitter "C'est prêt") || arreter
+[ "$rep" = "C'est prêt" ] || arreter
 
 choix=$(osa list "Zen Home, kit $KIT_VERSION" "Que voulez-vous faire ?" 0 \
     "Installer ou modifier mes choix" "Réparer (après une mise à jour de la box)" "Tout annuler") || arreter
