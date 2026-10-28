@@ -72,6 +72,14 @@ cd tcl-zenhome
 4. **Installer** : `tv/deployer.sh`. Au premier contact, acceptez l'autorisation ADB sur l'écran de la TV. Le script lance les tests, compile l'appli, l'installe, la configure, active l'écran de veille et ouvre l'accueil.
 5. **Appliquer le debloat** : `tv/verifier-tv.sh --fix`.
 
+## Partager avec des amis (kit Mac)
+
+Le dossier `kit/` contient un kit « double-clic » pour la Xiaomi Mi Box 4 : `Zen Home.command` guide un non-technicien par des fenêtres macOS (adb téléchargé et vérifié, choix du debloat, sauvegarde, retour arrière), avec le mode d'emploi `kit/LISEZMOI.html`.
+
+- **Produire l'archive** : `kit/empaqueter.sh <version>` (la version doit égaler `KIT_VERSION` de `Zen Home.command`, l'arbre git doit être propre). Il lance tests et build, vérifie l'empreinte du certificat de signature (`kit/certificat-attendu.txt`), assemble une liste blanche de fichiers et crée `kit/dist/ZenHome-MiBox4-<version>.zip`. La publication reste manuelle : la commande `gh release create` est affichée à la fin.
+- **Sauvegardez impérativement `launcher/key.jks` et `launcher/keystore.pass`** (jamais publiés). Avec une autre clé, les mises à jour de vos amis échoueraient ; `empaqueter.sh` refuse alors d'empaqueter.
+- **Options de `tv/deployer.sh` utilisées par le kit** : `--sans-build` (utilise l'APK déjà compilé du kit) et `TMDB_TOKEN_FILE=<fichier>` (jeton TMDB ailleurs que dans `./tmdb.token` ; vide = pas de jeton).
+
 ## Les scripts
 
 | Script | Rôle |

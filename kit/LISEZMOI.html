@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Zen Home pour Xiaomi Mi Box 4 : mode d'emploi</title>
+<style>
+  body { font-family: -apple-system, "Helvetica Neue", Arial, sans-serif; font-size: 18px; line-height: 1.55; color: #222; max-width: 760px; margin: 0 auto; padding: 24px 20px 60px; }
+  h1 { font-size: 30px; margin-bottom: 4px; }
+  h2 { font-size: 23px; margin-top: 40px; padding-bottom: 4px; border-bottom: 2px solid #ccc; }
+  h3 { font-size: 19px; margin-top: 26px; }
+  .intro { color: #555; margin-top: 0; }
+  .etape { background: #eef4fb; border-left: 6px solid #2a6ebb; padding: 4px 18px 10px; margin: 28px 0; border-radius: 4px; }
+  .etape h2 { border: 0; margin-top: 12px; }
+  .note { background: #fff7e0; border-left: 6px solid #e0a800; padding: 8px 16px; margin: 18px 0; border-radius: 4px; }
+  code { font-family: Menlo, Consolas, monospace; background: #f0f0f0; padding: 1px 6px; border-radius: 4px; font-size: 0.92em; }
+  dt { font-weight: bold; margin-top: 14px; }
+  dd { margin-left: 0; }
+  li { margin-bottom: 6px; }
+  @media print {
+    body { font-size: 12pt; max-width: none; padding: 0; }
+    .etape, .note { break-inside: avoid; }
+    h2, h3 { break-after: avoid; }
+  }
+</style>
+</head>
+<body>
+
+<h1>Zen Home pour Xiaomi Mi Box 4</h1>
+<p class="intro">Mode d'emploi du kit d'installation pour Mac.</p>
+
+<h2>Ce que fait ce kit</h2>
+<ul>
+  <li><strong>Il installe Zen Home</strong>, un écran d'accueil simple et rapide : une belle photo, l'heure, la météo, les films du moment et vos applis.</li>
+  <li><strong>Il allège la box</strong> : il désactive les programmes qui servent à la publicité, au pistage ou qui tournent pour rien.</li>
+  <li><strong>C'est vous qui choisissez</strong> : le kit vous pose des questions avant de toucher à quoi que ce soit, et vous montre un récapitulatif avant d'appliquer.</li>
+  <li><strong>C'est réversible</strong> : les programmes sont désactivés, pas supprimés, et le choix « Tout annuler » remet la box comme avant. Seule exception : les applis que vous cocheriez vous-même pour les désinstaller ne reviennent pas (et leurs données non plus).</li>
+</ul>
+<!-- capture : écran d'accueil Zen Home sur la TV -->
+
+<h2>Ce qu'il vous faut</h2>
+<ul>
+  <li>Un <strong>Mac</strong> avec une connexion Internet.</li>
+  <li>Une <strong>Xiaomi Mi Box 4</strong>, allumée et branchée sur <strong>le même Wi-Fi (ou le même réseau)</strong> que le Mac.</li>
+</ul>
+
+<div class="etape">
+<h2>Étape 1 : préparer la box</h2>
+<p>Tout se fait avec la télécommande de la box.</p>
+<h3>A. Faire apparaître les options développeur</h3>
+<ol>
+  <li>Ouvrez <strong>Paramètres</strong> (la roue dentée).</li>
+  <li>Allez dans <strong>Préférences de l'appareil</strong>, puis <strong>À propos</strong>.</li>
+  <li>Descendez jusqu'à <strong>Build</strong> et appuyez <strong>7 fois</strong> sur OK. Un message indique que vous êtes maintenant développeur.</li>
+</ol>
+<!-- capture : menu À propos, ligne « Build » -->
+<h3>B. Activer le débogage USB</h3>
+<ol>
+  <li>Revenez en arrière, dans <strong>Préférences de l'appareil</strong>.</li>
+  <li>Ouvrez <strong>Options pour les développeurs</strong>.</li>
+  <li>Activez <strong>Débogage USB</strong>.</li>
+</ol>
+<!-- capture : Options pour les développeurs, Débogage USB activé -->
+<h3>C. Noter l'adresse IP de la box</h3>
+<ol>
+  <li><strong>Préférences de l'appareil</strong>, puis <strong>À propos</strong>, puis <strong>État</strong>.</li>
+  <li>Notez l'<strong>adresse IP</strong> : quatre nombres séparés par des points, par exemple <code>192.168.1.23</code>.</li>
+</ol>
+<!-- capture : écran État avec l'adresse IP -->
+</div>
+
+<div class="etape">
+<h2>Étape 2 : lancer le kit sur le Mac</h2>
+<ol>
+  <li>Décompressez l'archive (double-clic sur le fichier <code>.zip</code>). Un dossier <code>ZenHome-MiBox4-…</code> apparaît.</li>
+  <li>Ouvrez ce dossier et <strong>double-cliquez sur « Zen Home.command »</strong>. Une fenêtre Terminal s'ouvre : laissez-la ouverte, elle montre ce qui se passe.</li>
+</ol>
+<!-- capture : dossier décompressé avec « Zen Home.command » -->
+
+<h3>Si macOS bloque le fichier</h3>
+<p>Un message du type « <em>impossible de vérifier le développeur</em> » est normal : le kit ne vient pas de l'App Store. Vous pouvez en lire le contenu, c'est un simple fichier texte.</p>
+<ul>
+  <li><strong>macOS 15 et plus récent</strong> : fermez le message, ouvrez <strong>Réglages Système</strong>, <strong>Confidentialité et sécurité</strong>, descendez tout en bas jusqu'au message sur « Zen Home.command » et cliquez sur <strong>Ouvrir quand même</strong>. Confirmez avec votre mot de passe si on vous le demande.</li>
+  <li><strong>Versions plus anciennes de macOS</strong> : faites un <strong>clic droit</strong> (ou Contrôle + clic) sur « Zen Home.command », choisissez <strong>Ouvrir</strong>, puis <strong>Ouvrir</strong> dans la fenêtre qui s'affiche.</li>
+</ul>
+<!-- capture : Réglages Système, bouton « Ouvrir quand même » -->
+
+<h3>Solution de secours</h3>
+<ol>
+  <li>Ouvrez l'application <strong>Terminal</strong> (Applications, Utilitaires, Terminal).</li>
+  <li>Tapez <code>bash</code> puis <strong>un espace</strong> (sans appuyer sur Entrée).</li>
+  <li><strong>Glissez le fichier « Zen Home.command »</strong> depuis le Finder dans la fenêtre du Terminal : son chemin s'écrit tout seul.</li>
+  <li>Appuyez sur <strong>Entrée</strong>.</li>
+</ol>
+</div>
+
+<div class="etape">
+<h2>Étape 3 : suivre les fenêtres</h2>
+<p>Le kit vous parle par des fenêtres macOS. Lisez-les, elles expliquent chaque choix.</p>
+<ol>
+  <li>Choisissez <strong>Installer ou modifier mes choix</strong> (la première fois).</li>
+  <li>Si l'outil officiel de Google « adb » n'est pas sur votre Mac, le kit propose de le télécharger (environ 18 Mo, vérifié automatiquement). Rien d'autre n'est installé sur le Mac.</li>
+  <li>Saisissez l'<strong>adresse IP</strong> notée à l'étape 1.</li>
+  <li><strong>Sur la TV</strong>, un message demande d'autoriser le Mac : cochez <strong>« Toujours autoriser cet ordinateur »</strong> puis validez. Revenez sur le Mac et cliquez sur « Réessayer » si besoin.</li>
+</ol>
+<!-- capture : message d'autorisation affiché sur la TV -->
+<p>Le kit enregistre alors une <strong>sauvegarde de l'état de la box</strong>, sans rien modifier. Ensuite il demande :</p>
+<dl>
+  <dt>Votre ville (facultatif)</dt>
+  <dd>Pour afficher la météo. Le nom de la ville est envoyé au service gratuit Open-Meteo pour trouver sa position. Laissez vide pour ne pas avoir de météo.</dd>
+  <dt>Un jeton TMDB (facultatif)</dt>
+  <dd>Pour afficher les films et les bandes-annonces. Sans lui, tout fonctionne sauf les films. Pour l'obtenir, gratuitement :
+    <ol>
+      <li>créez un compte sur <code>www.themoviedb.org</code> ;</li>
+      <li>ouvrez <strong>Paramètres</strong>, puis <strong>API</strong> ;</li>
+      <li>copiez le <strong>« API Read Access Token »</strong> (un très long texte) ;</li>
+      <li>collez-le dans la fenêtre du kit (il reste masqué).</li>
+    </ol>
+  </dd>
+  <dt>Les applis désactivées d'office</dt>
+  <dd>La liste de ce qui sera désactivé : publicité, pistage, rapports envoyés à Xiaomi ou Google, doublons de Zen Home.</dd>
+  <dt>Les options, une par une</dt>
+  <dd>Pour chaque programme optionnel, vous répondez <strong>Garder</strong> ou <strong>Désactiver</strong>. Un choix est proposé par défaut : la touche Entrée le valide. Voir la liste plus bas.</dd>
+  <dt>Vos propres applis</dt>
+  <dd>Le kit liste les applis que vous avez installées, avec leur taille et leur dernière utilisation. <strong>Rien n'est coché d'avance.</strong> Ne cochez que celles que vous voulez vraiment <strong>désinstaller</strong> : c'est définitif.</dd>
+  <dt>Le récapitulatif</dt>
+  <dd>Les applis ne sont désactivées ou désinstallées qu'après votre clic sur <strong>Appliquer</strong>.</dd>
+</dl>
+<!-- capture : fenêtre de choix « Garder / Désactiver » -->
+<!-- capture : fenêtre de récapitulatif -->
+<p>À la fin, une fenêtre « Terminé » résume ce qui a été fait. La TV affiche alors Zen Home.</p>
+</div>
+
+<h2>Après coup</h2>
+<h3>Après une mise à jour de la box</h3>
+<p>Une mise à jour de la box peut réactiver certains programmes ou remettre l'ancien accueil. Réactivez le débogage USB si vous l'aviez coupé, relancez « Zen Home.command » et choisissez <strong>Réparer (après une mise à jour de la box)</strong>. Vos choix précédents sont conservés.</p>
+
+<h3>Revenir en arrière</h3>
+<p>Relancez « Zen Home.command » et choisissez <strong>Tout annuler</strong> : toutes les applis désactivées sont réactivées, l'accueil d'origine revient et Zen Home est retiré. Les applis que vous aviez désinstallées ne reviennent pas.</p>
+
+<h3>La sauvegarde et le rapport</h3>
+<p>À chaque lancement, le kit crée un dossier daté dans <strong>Documents / Zen Home / sauvegardes</strong>. Vous y trouvez l'état de la box avant modification (listes d'applis, réglages) et le fichier <code>rapport.txt</code> qui raconte ce qui a été fait. Gardez-le si vous demandez de l'aide.</p>
+
+<div class="note">
+<h3 style="margin-top:6px">Sécurité : coupez le débogage USB</h3>
+<p>Tant que le débogage USB est activé, n'importe quel appareil de votre réseau Wi-Fi qui a été autorisé peut piloter la box. À la fin, le kit vous propose de le couper : acceptez. Vous pourrez le réactiver (même chemin qu'à l'étape 1) pour utiliser « Réparer » ou « Tout annuler ».</p>
+</div>
+
+<h2>Les options proposées et leurs conséquences</h2>
+<p>Si vous hésitez, gardez : vous pourrez changer d'avis en relançant le kit. Sont proposés « gardés » par défaut : la recherche vocale et les deux services de mise à jour Xiaomi ; les autres options sont proposées « désactivées » par défaut.</p>
+<dl>
+  <dt>Recherche vocale (gardée par défaut)</dt>
+  <dd>Le bouton micro de la télécommande. Si vous la désactivez, le micro ne fera plus rien, mais vous libérez environ 115 Mo de mémoire.</dd>
+  <dt>Chaînes en direct</dt>
+  <dd>Sert aux tuners TV. La Mi Box n'en a pas, l'appli tourne pour rien.</dd>
+  <dt>Synthèse vocale</dt>
+  <dd>Lit les textes à voix haute pour le lecteur d'écran. Inutile si personne n'en a besoin, libère environ 300 Mo.</dd>
+  <dt>Lecteur d'écran (TalkBack)</dt>
+  <dd>Aide pour les personnes malvoyantes. Inutile si personne n'en a besoin.</dd>
+  <dt>Mi Link</dt>
+  <dd>Diffuser depuis un téléphone Xiaomi. Le Chromecast intégré reste disponible pour tous les téléphones.</dd>
+  <dt>Lecteur vidéo Xiaomi</dt>
+  <dd>Lit les vidéos d'une clé USB. Gardez-le si vous regardez des fichiers sur clé USB.</dd>
+  <dt>Play Jeux</dt>
+  <dd>L'appli de jeux Google. Gardez-la si vous jouez sur la box.</dd>
+  <dt>YouTube Music</dt>
+  <dd>Gardez-la si vous écoutez de la musique avec.</dd>
+  <dt>Google TV (films Google)</dt>
+  <dd>Location et achat de films chez Google. Gardez-la si vous en avez acheté.</dd>
+  <dt>Appareil photo</dt>
+  <dd>La box n'a pas de caméra.</dd>
+  <dt>Impression</dt>
+  <dd>La box ne sert pas à imprimer.</dd>
+  <dt>Mises à jour Xiaomi (gardées par défaut)</dt>
+  <dd>Installe les mises à jour de sécurité de la box. Recommandé de garder.</dd>
+  <dt>Téléchargements Xiaomi (gardés par défaut)</dt>
+  <dd>Utilisé par les mises à jour Xiaomi. Recommandé de garder.</dd>
+</dl>
+
+<h2>Si ça ne marche pas</h2>
+<ul>
+  <li><strong>« La box ne répond pas »</strong> : vérifiez que la box est allumée (pas en veille), que le débogage USB est activé, que l'adresse IP est la bonne (elle peut changer après un redémarrage) et que Mac et box sont sur le même Wi-Fi.</li>
+  <li><strong>La fenêtre d'autorisation n'apparaît pas sur la TV</strong> : désactivez puis réactivez le débogage USB sur la box, et relancez le kit.</li>
+</ul>
+
+<h2>Crédits et licences</h2>
+<p>Ce kit est un projet communautaire, non affilié à Xiaomi, Google, Netflix ni TMDB. Il est fourni tel quel, sans garantie.</p>
+<ul>
+  <li>Licences du projet : fichiers <code>LICENSE</code> et <code>launcher/LICENSE</code> (MIT).</li>
+  <li>Photos de fond (Wikimedia Commons), police Poppins, icônes Phosphor : auteurs et licences dans <code>launcher/CREDITS.md</code>.</li>
+  <li>Météo : données Open-Meteo.com (licence CC BY 4.0).</li>
+  <li>Films : ce produit utilise l'API de TMDB mais n'est ni approuvé ni certifié par TMDB.</li>
+</ul>
+
+</body>
+</html>
