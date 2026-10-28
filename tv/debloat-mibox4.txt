@@ -4,14 +4,15 @@
 #
 # Format (lu par le kit d'installation, textes affichés aux utilisateurs) :
 #   paquet  # [balise] Libellé : explication
-# Sans balise         : désactivé d'office (pistage, pub, remplacé par Zen Home).
-# [option]            : au choix, désactivé par défaut.
-# [option:garder]     : au choix, gardé par défaut.
-# Les paquets refusés sont notés sur la box dans settings global zenhome_garder et verifier-tv.sh --fix les laisse actifs.
-# Un nouveau paquet [option] est désactivé par --fix tant que le kit n'a pas reposé la question.
+# Tout paquet est au choix dans le kit ; la balise ne fixe que le choix recommandé :
+# Sans balise         : à désactiver (pistage, pub, remplacé par Zen Home).
+# [option]            : à désactiver, mais utile à certains.
+# [option:garder]     : à garder.
+# Les paquets gardés sont notés sur la box dans settings global zenhome_garder et verifier-tv.sh --fix les laisse actifs.
+# Un nouveau paquet de la liste est désactivé par --fix tant qu'il n'est pas noté comme gardé.
 # Pas de « | » ni de saut de ligne dans les textes.
 
-# Pistage et pub : désactivés d'office
+# Pistage et pub : à désactiver
 tv.alphonso.alphonso_eula              # Alphonso : reconnaît ce que vous regardez pour cibler la publicité.
 com.miui.tv.analytics                  # Statistiques Xiaomi : envoie votre usage de la box à Xiaomi.
 com.google.android.feedback            # Rapports Google : envoie des rapports d'utilisation à Google.
