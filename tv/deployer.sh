@@ -6,13 +6,14 @@ set -euo pipefail
 
 aide() {
     command cat <<'AIDE'
-Usage : tv/deployer.sh [--dry-run] [--capture] [--reset-dock] [--help]
+Usage : tv/deployer.sh [--dry-run] [--sans-build] [--capture] [--reset-dock] [--help]
 
 Enchaîne : tests, build, connexion adb (vérifie le modèle attendu par PROFIL), installation,
 configuration (ville, jeton TMDB, permissions, accessibilité, écran de veille, accueil),
 touche Accueil. Idempotent : peut être relancé sans risque.
 
   --dry-run      affiche les commandes (tests, build, adb) sans les exécuter ; le jeton est masqué (***)
+  --sans-build   saute les tests et le build ; exige un APK déjà compilé (launcher/out/ZenHome.apk)
   --capture      enregistre une capture d'écran dans captures/ à la fin
   --reset-dock   réinitialise le dock et la disposition (zenhome_dock=auto, zenhome_layout=4).
                  Sans cette option, les réglages faits sur la TV ne sont jamais touchés.
@@ -23,10 +24,11 @@ TV_HOST et PROFIL peuvent aussi venir de l'environnement.
 AIDE
 }
 
-CAPTURE=0; RESET_DOCK=0
+CAPTURE=0; RESET_DOCK=0; SANS_BUILD=0
 for a in "$@"; do
     case "$a" in
         --dry-run) DRY_RUN=1 ;;
+        --sans-build) SANS_BUILD=1 ;;
         --capture) CAPTURE=1 ;;
         --reset-dock) RESET_DOCK=1 ;;
         -h|--help) aide; exit 0 ;;
@@ -50,10 +52,16 @@ envoyer_config() {
     printf '%s' "$sortie" | grep -Fq 'Broadcast completed' || warn "broadcast de configuration sans confirmation (sortie non affichée)."
 }
 
-info "== 1/6 Tests"
-lancer_local "$ROOT/launcher/test-mac.sh"
-info "== 2/6 Build"
-lancer_local "$ROOT/launcher/build-mac.sh"
+if [ "$SANS_BUILD" = 1 ]; then
+    [ -f "$APK" ] || die "--sans-build : APK absent ($APK ; lancer launcher/build-mac.sh)."
+    info "== 1/6 Tests : sautés (--sans-build)"
+    info "== 2/6 Build : sauté (--sans-build), APK existant : $APK"
+else
+    info "== 1/6 Tests"
+    lancer_local "$ROOT/launcher/test-mac.sh"
+    info "== 2/6 Build"
+    lancer_local "$ROOT/launcher/build-mac.sh"
+fi
 info "== 3/6 Connexion"
 connecter_tv
 info "== 4/6 Installation"
