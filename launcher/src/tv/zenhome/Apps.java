@@ -6,8 +6,11 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
+import android.content.pm.ResolveInfo;
 import android.graphics.drawable.Drawable;
 import android.provider.Settings;
+
+import java.util.LinkedHashMap;
 
 /** Lancement des applis, entrees TV, icones et libelles. */
 class Apps {
@@ -111,6 +114,20 @@ class Apps {
             try { ctx.startActivity(new Intent(a).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)); return true; } catch (Exception ignored) { }
         }
         return false;
+    }
+
+    /** Applis lancables (leanback puis launcher), une par paquet, hors Zen Home : meme critere que « Toutes les applis ». */
+    static LinkedHashMap<String, ResolveInfo> launchable(Context ctx) {
+        PackageManager pm = ctx.getPackageManager();
+        LinkedHashMap<String, ResolveInfo> map = new LinkedHashMap<>();
+        for (String cat : new String[]{Intent.CATEGORY_LEANBACK_LAUNCHER, Intent.CATEGORY_LAUNCHER}) {
+            Intent q = new Intent(Intent.ACTION_MAIN); q.addCategory(cat);
+            for (ResolveInfo ri : pm.queryIntentActivities(q, 0)) {
+                String p = ri.activityInfo.packageName;
+                if (!map.containsKey(p) && !p.equals(ctx.getPackageName())) map.put(p, ri);
+            }
+        }
+        return map;
     }
 
     /** Partage avec KeyService (qui n'a pas de Context applicatif ici, seulement le PackageManager). */
