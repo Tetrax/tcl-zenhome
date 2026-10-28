@@ -38,6 +38,20 @@ final class ConfigRules {
         return city;
     }
 
+    /**
+     * Ligne « paquet<TAB>libelle » pour la sortie de am broadcast, ou null si le paquet est invalide.
+     * Libelle sans controle / format (bidi) / separateurs de ligne ni guillemets, 60 caracteres max ; vide = nom du paquet.
+     */
+    static String labelLine(String pkg, CharSequence label) {
+        if (pkg == null || !pkg.matches("[A-Za-z][A-Za-z0-9_]*(\\.[A-Za-z][A-Za-z0-9_]*)+")) return null;
+        String l = label == null ? "" : label.toString().replaceAll("[\\p{Cntrl}\\p{Cf}\\p{Zl}\\p{Zp}\"]", "").trim();
+        if (l.length() > 60) {
+            int n = Character.isHighSurrogate(l.charAt(59)) ? 59 : 60;   // ne coupe pas une paire de substitution
+            l = l.substring(0, n).trim();
+        }
+        return pkg + "\t" + (l.isEmpty() ? pkg : l);
+    }
+
     /** Liste CSV de paquets (separateurs , ; espaces) -> elements non vides, tels quels. */
     static List<String> csv(String csv) {
         List<String> out = new ArrayList<>();

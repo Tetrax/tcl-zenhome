@@ -1,7 +1,6 @@
 package tv.zenhome;
 
 import android.content.Context;
-import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.graphics.drawable.Drawable;
@@ -18,7 +17,6 @@ import android.widget.TextView;
 
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.LinkedHashMap;
 import java.util.List;
 
 /** Liste de toutes les applis (ouvre l'appli) ou selecteur d'appli (renvoie le choix). */
@@ -38,15 +36,7 @@ class AppsGrid {
     /** Liste de toutes les applis. picker == null : ouvre l'appli ; sinon renvoie l'appli choisie. */
     void showApps(final Picker picker) {
         final PackageManager pm = ctx.getPackageManager();
-        LinkedHashMap<String, ResolveInfo> map = new LinkedHashMap<>();
-        for (String cat : new String[]{Intent.CATEGORY_LEANBACK_LAUNCHER, Intent.CATEGORY_LAUNCHER}) {
-            Intent q = new Intent(Intent.ACTION_MAIN); q.addCategory(cat);
-            for (ResolveInfo ri : pm.queryIntentActivities(q, 0)) {
-                String p = ri.activityInfo.packageName;
-                if (!map.containsKey(p) && !p.equals(ctx.getPackageName())) map.put(p, ri);
-            }
-        }
-        List<ResolveInfo> list = new ArrayList<>(map.values());
+        List<ResolveInfo> list = new ArrayList<>(Apps.launchable(ctx).values());
         Collections.sort(list, new java.util.Comparator<ResolveInfo>() {
             public int compare(ResolveInfo a, ResolveInfo b) { return a.loadLabel(pm).toString().compareToIgnoreCase(b.loadLabel(pm).toString()); } });
         final FrameLayout ov = new FrameLayout(ctx);

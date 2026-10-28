@@ -490,6 +490,21 @@ public class Tests {
         eq("jeton que des blancs", null, ConfigRules.token(" \t\r\n  "));
         eq("jeton non ASCII", null, ConfigRules.token("abcd\u00e9fgh"));
 
+        eq("labelLine normal", "com.nst.iptv\tIPTV Smarters Pro", ConfigRules.labelLine("com.nst.iptv", "IPTV Smarters Pro"));
+        eq("labelLine tab/\\n/\\r", "a.b\tAB C", ConfigRules.labelLine("a.b", "A\tB\n \rC"));
+        eq("labelLine U+202E", "a.b\tABC", ConfigRules.labelLine("a.b", "A\u202EBC"));
+        eq("labelLine guillemets", "a.b\tAB", ConfigRules.labelLine("a.b", "\"A\"B\""));
+        eq("labelLine vide", "a.b\ta.b", ConfigRules.labelLine("a.b", ""));
+        eq("labelLine que des controles", "a.b\ta.b", ConfigRules.labelLine("a.b", "\t\n\u202E"));
+        eq("labelLine null", "a.b\ta.b", ConfigRules.labelLine("a.b", null));
+        eq("labelLine 60 car.", "a.b\t" + rep('x', 60), ConfigRules.labelLine("a.b", rep('x', 60)));
+        eq("labelLine 61 car.", "a.b\t" + rep('x', 60), ConfigRules.labelLine("a.b", rep('x', 61)));
+        eq("labelLine paire coupee", "a.b\t" + rep('x', 59), ConfigRules.labelLine("a.b", rep('x', 59) + "\uD83D\uDE00"));
+        eq("labelLine paquet invalide", null, ConfigRules.labelLine("a b", "X"));
+        eq("labelLine paquet sans point", null, ConfigRules.labelLine("abc", "X"));
+        eq("labelLine paquet tab", null, ConfigRules.labelLine("a.b\tc", "X"));
+        eq("labelLine paquet null", null, ConfigRules.labelLine(null, "X"));
+
         ok("lat 90", ConfigRules.valid("90", 90));
         ok("lat 90.000000001", !ConfigRules.valid("90.000000001", 90));
         ok("lat 90.1", !ConfigRules.valid("90.1", 90));

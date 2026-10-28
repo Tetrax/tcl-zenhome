@@ -4,8 +4,11 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
+import android.content.pm.ResolveInfo;
 
 import java.io.File;
+import java.util.Map;
 
 /**
  * Configuration privee envoyee par adb (protegee par la permission DUMP : seul le shell/systeme peut l'appeler).
@@ -16,13 +19,17 @@ import java.io.File;
  *   adb shell am broadcast -a tv.zenhome.CONFIG -n tv.zenhome/.ConfigReceiver --ez clear_tmdb true
  *
  * (jeton lu dans un fichier local : jamais en clair dans la commande ni dans l'historique du shell)
- * Extras (tous optionnels) : tmdb_token, lat, lon, city (chaines), clear_tmdb (booleen).
+ *   adb shell am broadcast -a tv.zenhome.CONFIG -n tv.zenhome/.ConfigReceiver --ez labels true
+ *
+ * Extras (tous optionnels) : tmdb_token, lat, lon, city (chaines), clear_tmdb, labels (booleens).
+ * labels : renvoie (setResultData, code 1) une ligne « paquet<TAB>libelle » par appli lancable ; rien d'autre n'est modifie.
  * Valeurs invalides ignorees sans bruit.
  */
 public class ConfigReceiver extends BroadcastReceiver {
     @Override
     public void onReceive(Context c, Intent i) {
         if (i == null || !"tv.zenhome.CONFIG".equals(i.getAction())) return;
+        if (i.getBooleanExtra("labels", false)) { labels(c); return; }   // lecture seule : aucune pref touchee
         SharedPreferences.Editor e = c.getSharedPreferences("zenhome", Context.MODE_PRIVATE).edit();
         boolean posters = false;
 
@@ -56,6 +63,17 @@ public class ConfigReceiver extends BroadcastReceiver {
                 if (fs != null) for (File f : fs) f.delete();
             }
         }
+    }
+
+    void labels(Context c) {
+        PackageManager pm = c.getPackageManager();
+        StringBuilder sb = new StringBuilder();
+        for (Map.Entry<String, ResolveInfo> en : Apps.launchable(c).entrySet()) {
+            String line = ConfigRules.labelLine(en.getKey(), en.getValue().loadLabel(pm));
+            if (line != null) sb.append(sb.length() > 0 ? "\n" : "").append(line);
+        }
+        setResultCode(1);
+        setResultData(sb.toString());
     }
 
     /**
