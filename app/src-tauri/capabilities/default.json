@@ -3,5 +3,5 @@
   "identifier": "default",
   "description": "Fenêtre principale : accès minimal aux fenêtres et à nos propres commandes",
   "windows": ["main"],
-  "permissions": ["core:window:default", "allow-ping"]
+  "permissions": ["core:window:default", "allow-ping", "allow-test-reseau"]
 }

@@ -1,6 +1,6 @@
 [package]
 name = "zen-home"
-version = "0.1.0"
+version = "0.0.2"
 description = "Installe Zen Home sur une Xiaomi Mi Box 4"
 authors = ["Tetrax"]
 edition = "2024"
@@ -17,6 +17,7 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 tauri = { version = "2", features = [] }
 serde = { version = "1", features = ["derive"] }
+mdns-sd = "0.21.6"
 
 [profile.release]
 codegen-units = 1

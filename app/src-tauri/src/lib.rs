@@ -1,3 +1,5 @@
+mod reseau;
+
 use serde::Serialize;
 
 #[derive(Serialize, Debug, PartialEq)]
@@ -23,7 +25,7 @@ fn ping(app: tauri::AppHandle) -> PingInfo {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![ping])
+        .invoke_handler(tauri::generate_handler![ping, reseau::test_reseau])
         .run(tauri::generate_context!())
         .expect("erreur au lancement de Zen Home");
 }
