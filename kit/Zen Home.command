@@ -4,15 +4,16 @@
 # KIT_TEST=1 (tests) : osascript est remplacé par un faux qui lit ses réponses dans le fichier KIT_REPONSES
 # (une ligne par fenêtre ; CANCEL ou fin de fichier = fenêtre fermée, VIDE = réponse vide), sans pause ni attente.
 set -uo pipefail
+# Outils du système uniquement (adb : celui téléchargé et vérifié par le kit), sauf en test (faux adb dans le PATH).
+if [ -z "${KIT_TEST:-}" ]; then PATH=/usr/bin:/bin:/usr/sbin:/sbin; export PATH; fi
 
 KIT_VERSION=1.0
 PT_URL=https://dl.google.com/android/repository/platform-tools_r37.0.1-darwin.zip
 PT_SHA256=ee39ad5967e95c2a07f04dbcbde96b1a0c916ba376096db5d2f498b7727a5d1d
-if [ -n "${KIT_TEST:-}" ]; then PT_SHA256=${KIT_SHA256:-$PT_SHA256}; fi
 APPSUP="$HOME/Library/Application Support/ZenHome"
 PT_DIR="$APPSUP/platform-tools"
 RE_PKG='^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z][A-Za-z0-9_]*)+$'
-# Jamais touchés par le kit, quoi qu'il arrive.
+# Jamais désinstallés par le kit (verifier-tv.sh --fix gère lui-même l'accueil d'origine et setupwraith).
 PROTEGES=" tv.zenhome com.google.android.tvlauncher com.google.android.tungsten.setupwraith com.android.vending com.android.tv.settings "
 PAUSE=3; if [ -n "${KIT_TEST:-}" ]; then PAUSE=0; fi
 umask 077
@@ -105,6 +106,10 @@ DIR=$(cd "$(dirname "$0")" && pwd)
 if [ -f "$DIR/tv/lib.sh" ]; then ROOT=$DIR
 elif [ -f "$DIR/../tv/lib.sh" ]; then ROOT=$DIR/..
 else erreur "Le kit est incomplet (dossier « tv » introuvable). Décompressez l'archive en entier avant de lancer ce fichier."
+fi
+# Dans l'archive, un tv.conf ne peut venir que d'une erreur d'empaquetage : il enverrait la position de quelqu'un d'autre.
+if [ "$ROOT" = "$DIR" ] && [ -e "$ROOT/tv/tv.conf" ]; then
+    erreur "Le kit contient un fichier tv/tv.conf qui ne devrait pas s'y trouver. Supprimez-le, ou retéléchargez le kit."
 fi
 # shellcheck source=../tv/lib.sh
 . "$ROOT/tv/lib.sh"
@@ -280,7 +285,9 @@ inventaire() {
     sauver diskstats dumpsys diskstats
     sauver usagestats dumpsys usagestats
     sauver accueil cmd package resolve-activity --brief -a android.intent.action.MAIN -c android.intent.category.HOME
+    grep -q '^package:' "$SAUV/paquets-tous.txt" 2>/dev/null || erreur "La sauvegarde de la box a échoué ($SAUV). Rien n'a été modifié ; relancez le kit."
     tai=$(tailles "$SAUV/diskstats.txt"); der=$(utilisations "$SAUV/usagestats.txt")
+    rm -f "$SAUV/usagestats.txt"   # historique d'usage détaillé : seule la date de dernière utilisation est gardée (resume.txt)
     APPS=""
     while IFS= read -r l; do
         [[ $l == package:* ]] || continue
@@ -580,6 +587,7 @@ case "$MODE" in
         choisir_jeton
         export LAT LON CITY TMDB_TOKEN_FILE=$TOKFILE
         installer
+        if [ -n "$TOKFILE" ]; then rm -f "$TOKFILE"; TOKFILE=""; fi   # jeton envoyé : plus besoin du fichier
         lire_libelles
         choisir
         appliquer
