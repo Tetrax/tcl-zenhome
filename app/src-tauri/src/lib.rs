@@ -1,3 +1,6 @@
+// Étape 4 : moteur non encore branché sur l'interface (étapes suivantes).
+#[allow(dead_code)]
+mod moteur;
 mod reseau;
 
 use serde::Serialize;

@@ -1,0 +1,9 @@
+Broadcasting: Intent { act=tv.zenhome.CONFIG cmp=tv.zenhome/.ConfigReceiver (has extras) }
+Broadcast completed: result=1, data="com.spotify.tv.android	Spotify
+com.exemple.lecteur	‮Lecteur‏ TV
+com.exemple.musique	Mu	sique
+com.invalide..x	Nom
+tv.zenhome	Zen Home
+sans-tabulation
+fr.tf1.mytf1	 "MyTF1"
+"

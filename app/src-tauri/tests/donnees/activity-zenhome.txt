@@ -1,0 +1,6 @@
+ACTIVITY MANAGER ACTIVITIES (dumpsys activity activities)
+Display #0 (activities from top to bottom):
+  Stack #1: type=home mode=fullscreen
+    * TaskRecord{4f3a1b2 #2 I=tv.zenhome/.Home U=0 StackId=1 sz=1}
+  mResumedActivity: ActivityRecord{2c1d9e0 u0 tv.zenhome/.Home t2}
+  mLastPausedActivity: ActivityRecord{51aa7c3 u0 com.google.android.tvlauncher/.MainActivity t3}

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes" ?>
+<preferred-activities>
+<item name="tv.zenhome/.Home" match="100000" always="true" set="2">
+<set name="com.google.android.tvlauncher/.MainActivity" />
+<set name="tv.zenhome/.Home" />
+<filter>
+<action name="android.intent.action.MAIN" />
+<cat name="android.intent.category.HOME" />
+<cat name="android.intent.category.DEFAULT" />
+</filter>
+</item>
+</preferred-activities>

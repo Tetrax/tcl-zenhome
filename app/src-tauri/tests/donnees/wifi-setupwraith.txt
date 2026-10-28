@@ -1,0 +1,7 @@
+Wi-Fi state: enabled
+
+Configured networks
+WifiConfiguration:
+ID: 0 SSID: "RESEAU-TEST" PROVIDER-NAME: null BSSID: 02:00:00:00:00:aa FQDN: null PRIO: 0
+creatorName=com.google.android.tungsten.setupwraith creatorUid=10012
+cuid=10012 cname=com.google.android.tungsten.setupwraith luid=10012
