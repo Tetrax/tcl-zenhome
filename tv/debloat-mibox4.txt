@@ -25,3 +25,11 @@ com.mitv.videoplayer                   # lecteur vidéo Xiaomi
 com.google.android.play.games          # Play Jeux
 com.google.android.youtube.tvmusic     # YouTube Music
 com.google.android.videos              # Google TV / Play Films
+com.google.android.katniss             # recherche vocale (115 Mo de RAM) : le micro de la télécommande ne marche plus
+
+# Sans objet sur une box
+com.google.android.tv                  # Chaînes en direct : pas de tuner
+com.google.android.tts                 # synthèse vocale (300 Mo), ne sert qu'à TalkBack
+com.google.android.marvin.talkback     # lecteur d'écran
+com.android.camera2                    # appareil photo : pas de caméra
+com.android.printspooler               # impression
