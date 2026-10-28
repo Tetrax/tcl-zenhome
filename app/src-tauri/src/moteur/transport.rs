@@ -43,7 +43,7 @@ pub fn shq(s: &str) -> String {
 }
 
 /// Découpe une ligne de commande comme un shell POSIX (apostrophes, antislash). Sert au `FakeBox` et aux tests de `shq`.
-pub(super) fn decouper_shell(ligne: &str) -> Vec<String> {
+pub fn decouper_shell(ligne: &str) -> Vec<String> {
     let (mut mots, mut cour, mut en_mot, mut guillemet) = (Vec::new(), String::new(), false, false);
     let mut it = ligne.chars();
     while let Some(c) = it.next() {
@@ -390,6 +390,21 @@ impl Commande {
             return refus(format!("appops invalide : {paquet} {operation} {mode}"));
         }
         Ok(Self::simple(format!("cmd appops set {paquet} {operation} {mode}")))
+    }
+
+    /// `pm grant` d'une permission runtime (nom de permission pointé, comme un nom de paquet).
+    pub fn pm_grant(paquet: &str, permission: &str) -> Result<Self, ErreurTransport> {
+        if !paquet_valide(paquet) || !paquet_valide(permission) {
+            return refus(format!("permission invalide : {paquet} {permission}"));
+        }
+        Ok(Self::simple(format!("pm grant {paquet} {permission}")))
+    }
+
+    pub fn standby_bucket(paquet: &str, bucket: &str) -> Result<Self, ErreurTransport> {
+        if !paquet_valide(paquet) || !["active", "working_set", "frequent", "rare"].contains(&bucket) {
+            return refus(format!("standby bucket invalide : {paquet} {bucket}"));
+        }
+        Ok(Self::simple(format!("am set-standby-bucket {paquet} {bucket}")))
     }
 
     pub fn touche_accueil() -> Self {

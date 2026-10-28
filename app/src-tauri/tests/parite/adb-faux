@@ -1,0 +1,157 @@
+#!/bin/bash
+# Faux adb pour le test de parité (app/src-tauri/tests/parite/main.rs) : se comporte comme la fausse Mi Box 4 du moteur
+# (src/moteur/fake_box.rs), mais à partir d'un état sur disque ($FAKE_ADB_ETAT) pour servir les scripts bash tv/*.sh.
+# Seules les commandes qui MODIFIENT la box sont journalisées ($FAKE_ADB_ETAT/journal), un mot par champ séparé par une
+# tabulation ; le jeton TMDB y est masqué (***). Toute commande inconnue est journalisée « INCONNU » et échoue (127).
+# Test uniquement : `shell` passe la ligne par `eval "set -- ..."` pour reproduire le découpage du shell de la box.
+set -u
+E=${FAKE_ADB_ETAT:?FAKE_ADB_ETAT manquant}
+
+journal() { local IFS=$'\t'; printf '%s\n' "$*" >> "$E/journal"; }
+
+# ---- réglages : fichiers global.kv, secure.kv, system.kv (lignes clé=valeur)
+kv_get() { awk -F= -v k="$2" '$1 == k { sub(/^[^=]*=/, ""); print; f = 1; exit } END { if (!f) print "null" }' "$E/$1.kv"; }
+kv_del() { awk -F= -v k="$2" '$1 != k' "$E/$1.kv" > "$E/$1.kv.tmp"; mv "$E/$1.kv.tmp" "$E/$1.kv"; }
+kv_put() { kv_del "$1" "$2"; printf '%s=%s\n' "$2" "$3" >> "$E/$1.kv"; }
+
+# ---- paquets : fichier pkgs (lignes « nom système(0/1) désactivé(0/1) »)
+pkg_existe() { awk -v n="$1" '$1 == n { f = 1 } END { exit !f }' "$E/pkgs"; }
+pkg_actif() { awk -v n="$1" '$1 == n && $3 == 0 { f = 1 } END { exit !f }' "$E/pkgs"; }
+pkg_dis() { awk -v n="$1" -v v="$2" 'BEGIN { OFS = " " } $1 == n { $3 = v } { print }' "$E/pkgs" > "$E/pkgs.tmp"; mv "$E/pkgs.tmp" "$E/pkgs"; }
+pkg_retirer() { awk -v n="$1" '$1 != n' "$E/pkgs" > "$E/pkgs.tmp"; mv "$E/pkgs.tmp" "$E/pkgs"; }
+
+pm_list() {
+    local d=0 t=0 s=0 o
+    for o in "$@"; do case "$o" in -d) d=1 ;; -3) t=1 ;; -s) s=1 ;; esac; done
+    awk -v d=$d -v t=$t -v s=$s '(!d || $3 == 1) && (!t || $2 == 0) && (!s || $2 == 1) { print "package:" $1 }' "$E/pkgs" | LC_ALL=C sort
+}
+
+# Ce que la touche Accueil affiche : l'accueil d'origine tant qu'il est actif, sinon l'accueil préféré.
+accueil_affiche() {
+    local c p
+    if pkg_actif com.google.android.tvlauncher; then echo com.google.android.tvlauncher/.MainActivity; return 0; fi
+    c=$(cat "$E/accueil_prefere"); [ -n "$c" ] || return 0
+    p=${c%%/*}
+    if pkg_actif "$p" && { [ "$p" != tv.zenhome ] || [ "$(cat "$E/zen_visible")" = 1 ]; }; then echo "$c"; fi
+    return 0
+}
+
+appops_dev() {   # get|set PAQUET OPERATION [mode]
+    local mode
+    case "$1" in
+        get)
+            mode=$(awk -v p="$2" -v o="$3" '$1 == p && $2 == o { print $3; exit }' "$E/appops")
+            if [ -z "$mode" ]; then if [ "$3" = RUN_ANY_IN_BACKGROUND ]; then mode=allow; else mode=default; fi; fi
+            echo "$3: $mode" ;;
+        set)
+            awk -v p="$2" -v o="$3" '!($1 == p && $2 == o)' "$E/appops" > "$E/appops.tmp"; mv "$E/appops.tmp" "$E/appops"
+            printf '%s %s %s\n' "$2" "$3" "$4" >> "$E/appops" ;;
+        *) return 1 ;;
+    esac
+}
+
+inconnu() { journal INCONNU "$@"; echo "/system/bin/sh: $1: not found" >&2; exit 127; }
+
+dev() {
+    local w c out prev
+    case "$1" in
+        getprop)
+            if [ $# -eq 1 ]; then awk -F= '{ printf "[%s]: [%s]\n", $1, substr($0, index($0, "=") + 1) }' "$E/props"
+            else awk -F= -v k="$2" '$1 == k { sub(/^[^=]*=/, ""); print; exit }' "$E/props"; fi ;;
+        pm)
+            case "${2:-}" in
+                list) pm_list "${@:4}" ;;
+                disable-user) journal "$@"; pkg_existe "$5" || { echo "Exception: Unknown package: $5" >&2; exit 1; }
+                    pkg_dis "$5" 1; echo "Package $5 new state: disabled-user" ;;
+                enable) journal "$@"; pkg_existe "$3" || { echo "Exception: Unknown package: $3" >&2; exit 1; }
+                    pkg_dis "$3" 0; echo "Package $3 new state: enabled" ;;
+                grant) journal "$@"; pkg_existe "$3" || { echo "Exception: Unknown package: $3" >&2; exit 1; } ;;
+                *) inconnu "$@" ;;
+            esac ;;
+        settings)
+            case "${2:-}" in
+                get) kv_get "$3" "$4" ;;
+                list) cat "$E/$3.kv" ;;
+                put) journal "$@"; kv_put "$3" "$4" "$5" ;;
+                delete) journal "$@"; kv_del "$3" "$4"; echo "Deleted 1 rows" ;;
+                *) inconnu "$@" ;;
+            esac ;;
+        cmd|appops)
+            if [ "$1" = cmd ] && [ "${2:-}" = appops ]; then
+                case "${3:-}" in set) journal "$@" ;; esac
+                appops_dev "${@:3}"
+            elif [ "$1" = appops ]; then
+                case "${2:-}" in set) journal "$@" ;; esac
+                appops_dev "${@:2}"
+            elif [ "$1" = cmd ] && [ "${2:-}" = package ] && [ "${3:-}" = set-home-activity ]; then
+                journal "$@"; c=${4%%/*}
+                pkg_existe "$c" || { echo "Error: Unknown package: $c" >&2; exit 1; }
+                printf '%s\n' "$4" > "$E/accueil_prefere"; echo Success
+            else inconnu "$@"; fi ;;
+        input)
+            [ "${2:-}" = keyevent ] && [ "${3:-}" = KEYCODE_HOME ] || inconnu "$@"
+            journal "$@"; accueil_affiche > "$E/premier_plan" ;;
+        am)
+            case "${2:-}" in
+                broadcast)
+                    out=(); prev=""
+                    for w in "$@"; do
+                        if [ "$prev" = tmdb_token ]; then out+=('***'); else out+=("$w"); fi
+                        prev=$w
+                    done
+                    journal "${out[@]}"; printf 'Broadcast completed: result=0\n' ;;
+                set-standby-bucket) journal "$@"; pkg_existe "$3" || { echo "Exception: Unknown package: $3" >&2; exit 1; } ;;
+                *) inconnu "$@" ;;
+            esac ;;
+        dumpsys)
+            case "${2:-} ${3:-}" in
+                "wifi ")
+                    case "$(cat "$E/wifi")" in
+                        vide) printf 'Wi-Fi is disabled\n\nLatest scan results:\n' ;;
+                        lie) printf 'Configured networks\nID: 0 SSID: "RESEAU-TEST"\ncreatorName=com.google.android.tungsten.setupwraith\ncuid=10012 cname=com.google.android.tungsten.setupwraith\n' ;;
+                        *) printf 'Configured networks\nID: 0 SSID: "RESEAU-TEST"\ncuid=1000 cname=android.uid.system:1000\n' ;;
+                    esac ;;
+                "activity activities")
+                    c=$(cat "$E/premier_plan")
+                    if [ -n "$c" ]; then printf '  mResumedActivity: ActivityRecord{2c1d9e0 u0 %s t2}\n' "$c"; else echo '  mResumedActivity: null'; fi ;;
+                "package preferred-xml")
+                    c=$(cat "$E/accueil_prefere")
+                    printf '<?xml version="1.0" encoding="utf-8" standalone="yes" ?>\n<preferred-activities>\n'
+                    if [ -n "$c" ]; then
+                        printf '<item name="%s" match="100000" always="true" set="2">\n<set name="%s" />\n<filter>\n' "$c" "$c"
+                        printf '<action name="android.intent.action.MAIN" />\n<cat name="android.intent.category.HOME" />\n</filter>\n</item>\n'
+                    fi
+                    printf '</preferred-activities>\n' ;;
+                "package "*)
+                    if pkg_existe "$3"; then printf 'Packages:\n  Package [%s] (abc123):\n    versionName=1.0\n' "$3"; fi ;;
+                *) inconnu "$@" ;;
+            esac ;;
+        *) inconnu "$@" ;;
+    esac
+}
+
+# ---- ligne de commande d'adb
+if [ "${1:-}" = -s ]; then shift 2; fi
+cmd=${1:-}; [ $# -gt 0 ] && shift
+case "$cmd" in
+    connect) echo "connected to ${1:-}" ;;
+    disconnect) echo "disconnected ${1:-}" ;;
+    get-state) echo device ;;
+    shell)
+        if [ $# -gt 0 ]; then ligne="$*"; else IFS= read -r ligne || true; fi
+        eval "set -- $ligne"
+        dev "$@" ;;
+    install)
+        [ "${1:-}" = -r ] || inconnu install "$@"
+        journal install "$2"
+        pkg_retirer tv.zenhome; echo "tv.zenhome 0 0" >> "$E/pkgs"
+        printf 'Performing Streamed Install\nSuccess\n' ;;
+    uninstall)
+        journal uninstall "$1"
+        if awk -v n="$1" '$1 == n && $2 == 0 { f = 1 } END { exit !f }' "$E/pkgs"; then
+            pkg_retirer "$1"
+            case "$(cat "$E/accueil_prefere")" in "$1"/*) : > "$E/accueil_prefere" ;; esac
+            echo Success
+        else echo "Failure [DELETE_FAILED_INTERNAL_ERROR]"; exit 1; fi ;;
+    *) inconnu "$cmd" "$@" ;;
+esac

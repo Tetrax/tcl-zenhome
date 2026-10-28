@@ -1,6 +1,5 @@
-// Étape 4 : moteur non encore branché sur l'interface (étapes suivantes).
-#[allow(dead_code)]
-mod moteur;
+// Moteur public : les tests d'intégration (tests/parite) le pilotent ; l'exposition en commandes Tauri viendra ensuite.
+pub mod moteur;
 mod reseau;
 
 use serde::Serialize;

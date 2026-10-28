@@ -40,6 +40,8 @@ pub struct EtatBox {
     pub produit: String,
     pub modele: String,
     pub android: String,
+    /// `ro.build.version.sdk`.
+    pub sdk: String,
     pub serie: String,
     pub paquets: BTreeMap<String, PaquetFake>,
     pub global: BTreeMap<String, String>,
@@ -60,6 +62,10 @@ pub struct EtatBox {
 #[derive(Debug, Default)]
 struct Scenario {
     coupures: u32,
+    /// Commandes qui passent avant que `coupures` ne commence.
+    sauter: u32,
+    /// `uninstall` exécuté sur la box mais dont la réponse se perd (coupure).
+    reponse_perdue_desinstallation: u32,
     lectures_vides: u32,
     autorisation_en_attente: bool,
     injoignable: bool,
@@ -129,6 +135,7 @@ impl EtatBox {
             produit: "oneday".into(),
             modele: "MIBOX4".into(),
             android: "9".into(),
+            sdk: "28".into(),
             serie: "TESTSERIAL0001".into(),
             paquets,
             global: BTreeMap::from([("device_name".to_string(), "BOX-TEST".to_string())]),
@@ -194,8 +201,12 @@ impl Interne {
             return Err(coupure());
         }
         if s.coupures > 0 {
-            s.coupures -= 1;
-            return Err(coupure());
+            if s.sauter > 0 {
+                s.sauter -= 1;
+            } else {
+                s.coupures -= 1;
+                return Err(coupure());
+            }
         }
         if s.lectures_vides > 0 {
             s.lectures_vides -= 1;
@@ -214,6 +225,7 @@ impl Interne {
                     ("ro.product.name", &e.produit),
                     ("ro.product.model", &e.modele),
                     ("ro.build.version.release", &e.android),
+                    ("ro.build.version.sdk", &e.sdk),
                     ("ro.serialno", &e.serie),
                 ]
                 .iter()
@@ -224,6 +236,7 @@ impl Interne {
                 "ro.product.name" => format!("{}\n", e.produit),
                 "ro.product.model" => format!("{}\n", e.modele),
                 "ro.build.version.release" => format!("{}\n", e.android),
+                "ro.build.version.sdk" => format!("{}\n", e.sdk),
                 _ => "\n".into(),
             }),
             ["pm", "list", "packages", opts @ ..] => {
@@ -250,6 +263,12 @@ impl Interne {
                 }
                 None => Err(echec(1, &format!("Exception: Unknown package: {p}"))),
             },
+            ["pm", "grant", p, _permission] => {
+                if e.paquets.contains_key(*p) { sortie("") } else { Err(echec(1, &format!("Exception: Unknown package: {p}"))) }
+            }
+            ["am", "set-standby-bucket", p, _bucket] => {
+                if e.paquets.contains_key(*p) { sortie("") } else { Err(echec(1, &format!("Exception: Unknown package: {p}"))) }
+            }
             ["settings", "get", ns, k] => {
                 let m = espace(e, ns)?;
                 sortie(format!("{}\n", m.get(*k).map_or("null", String::as_str)))
@@ -399,6 +418,18 @@ impl FakeBox {
         self.interne().scenario.coupures = n;
     }
 
+    /// Après `k` commandes qui passent, les `n` suivantes échouent par une coupure.
+    pub fn couper_apres(&self, k: u32, n: u32) {
+        let mut i = self.interne();
+        i.scenario.sauter = k;
+        i.scenario.coupures = n;
+    }
+
+    /// Les `n` prochaines désinstallations sont exécutées mais leur réponse est perdue (coupure).
+    pub fn perdre_reponse_desinstallation(&self, n: u32) {
+        self.interne().scenario.reponse_perdue_desinstallation = n;
+    }
+
     /// Les `n` prochaines commandes répondent vide (lien instable).
     pub fn lectures_vides(&self, n: u32) {
         self.interne().scenario.lectures_vides = n;
@@ -487,6 +518,10 @@ impl Transport for FakeBox {
                 i.etat.paquets.remove(paquet);
                 if i.etat.accueil_prefere.as_deref().is_some_and(|c| c.starts_with(&format!("{paquet}/"))) {
                     i.etat.accueil_prefere = None;
+                }
+                if i.scenario.reponse_perdue_desinstallation > 0 {
+                    i.scenario.reponse_perdue_desinstallation -= 1;
+                    return Err(coupure());
                 }
                 sortie("Success\n")
             }
