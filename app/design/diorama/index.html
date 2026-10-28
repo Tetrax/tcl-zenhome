@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <title>Zen Home – prototype « Diorama »</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body data-step="welcome" data-theme="day">
+    <canvas id="scene" aria-hidden="true"></canvas>
+    <div id="fallback" aria-hidden="true"></div>
+    <div class="vignette" aria-hidden="true"></div>
+
+    <header class="topbar">
+      <div class="brand">Zen Home</div>
+      <ol class="steps" aria-label="Progression">
+        <li data-s="welcome">Accueil</li>
+        <li data-s="search">Recherche</li>
+        <li data-s="choose">Choix</li>
+        <li data-s="done">Terminé</li>
+      </ol>
+    </header>
+
+    <main id="ui">
+      <!-- 1. Accueil -->
+      <section class="screen pos-left" id="s-welcome" aria-labelledby="t-welcome">
+        <div class="panel">
+          <p class="eyebrow">Xiaomi Mi Box 4</p>
+          <h1 id="t-welcome">Zen Home</h1>
+          <p class="lead">Un accueil apaisé pour votre Mi Box, sans pub ni pistage.</p>
+          <p class="hint"><span class="pulse-dot"></span>Allumez la TV et la Mi Box.</p>
+          <div class="row"><button class="btn primary" data-action="start">Commencer</button></div>
+        </div>
+      </section>
+
+      <!-- 2. Recherche -->
+      <section class="screen pos-bottom" id="s-search" aria-labelledby="t-search">
+        <div class="panel">
+          <h2 id="t-search">Recherche de votre Mi Box…</h2>
+          <p class="lead" id="search-status" role="status">Nous écoutons le réseau de la maison.</p>
+          <div class="searching" aria-hidden="true"><i></i><i></i><i></i></div>
+
+          <div class="found" id="found" hidden>
+            <p class="found-title">Mi Box « SALON » trouvée</p>
+            <p class="found-ip" id="found-ip">192.168.50.14</p>
+            <div class="row">
+              <button class="btn primary" data-action="confirm">C’est elle</button>
+              <button class="btn ghost" data-action="other">Autre adresse</button>
+            </div>
+          </div>
+
+          <form class="manual" id="manual" hidden novalidate>
+            <label for="ip">Adresse de la Mi Box</label>
+            <input id="ip" name="ip" inputmode="decimal" autocomplete="off" spellcheck="false" placeholder="192.168.1.20" />
+            <p class="err" id="ip-err" role="alert"></p>
+            <div class="row">
+              <button class="btn primary" type="submit">Utiliser cette adresse</button>
+              <button class="btn ghost" type="button" data-action="back">Retour</button>
+            </div>
+          </form>
+        </div>
+      </section>
+
+      <!-- 3. Choix des applis + progression -->
+      <section class="screen pos-left tall" id="s-choose" aria-labelledby="t-choose">
+        <div class="panel">
+          <div class="phase" id="phase-pick">
+            <h2 id="t-choose">Que souhaitez-vous alléger ?</h2>
+            <p class="lead">Nous avons précoché ce qui est recommandé. Rien n’est supprimé : tout peut être réactivé.</p>
+            <ul class="apps" id="apps" role="group" aria-labelledby="t-choose"></ul>
+            <div class="footer">
+              <p class="count" id="count" aria-live="polite"></p>
+              <div class="row">
+                <button class="btn ghost" id="toggle-all" type="button">Tout sélectionner</button>
+                <button class="btn primary" id="apply" type="button" data-action="apply">Appliquer</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="phase" id="phase-run" hidden>
+            <h2>Allègement en cours…</h2>
+            <p class="lead" id="run-label" aria-live="polite">Préparation</p>
+            <div class="bar" role="progressbar" aria-label="Progression" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="bar"><i></i></div>
+            <p class="percent" id="percent">0 %</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- 4. Terminé -->
+      <section class="screen pos-bottom-left" id="s-done" aria-labelledby="t-done">
+        <div class="panel">
+          <p class="eyebrow">Tout est en place</p>
+          <h1 id="t-done" class="h1-sm">Zen Home est prêt</h1>
+          <p class="lead">Votre Mi Box démarre désormais sur un accueil calme.</p>
+          <dl class="stats">
+            <div><dt>désactivées</dt><dd id="n-off">0</dd></div>
+            <div><dt>gardées</dt><dd id="n-keep">0</dd></div>
+          </dl>
+          <div class="row"><button class="btn primary" data-action="close">Fermer</button></div>
+        </div>
+      </section>
+    </main>
+
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>
