@@ -15,6 +15,9 @@
 //! apk             le chemin de l'APK diffère (chemin fourni à l'action / chemin de la copie de tv/) ; normalisé en `APK`.
 //! garder          après la restauration, le kit (pas restaurer-tv.sh) supprime `zenhome_garder` ; l'action Rust le fait
 //!                 en dernière commande. Vérifié puis retiré de la suite Rust avant comparaison.
+//! position        le moteur masque lat/lon/ville (`***`) dans son journal, comme le jeton ; le faux adb du banc journalise
+//!                 les valeurs en clair. Valeurs normalisées en `***` des deux côtés : la parité des valeurs elles-mêmes
+//!                 n'est plus comparée ici (elle l'est dans les tests unitaires de installation.rs, via la fausse box).
 //! lectures        ordre et nombre des lectures différents (non comparées : aucune ne modifie la box).
 //! echecs          le moteur ne s'arrête pas sur une commande de réparation refusée (avertissement) là où le script
 //!                 s'arrête (`set -e`) ; aucun scénario ne le provoque.
@@ -219,6 +222,13 @@ fn normaliser(mut m: Vec<String>) -> Vec<String> {
     }
     if m.first().map(String::as_str) == Some("install") {
         m[1] = "APK".into();
+    }
+    if m.first().map(String::as_str) == Some("am") {
+        for i in 1..m.len() - 1 {
+            if matches!(m[i].as_str(), "lat" | "lon" | "city") && m[i - 1] == "--es" {
+                m[i + 1] = "***".into();
+            }
+        }
     }
     m
 }

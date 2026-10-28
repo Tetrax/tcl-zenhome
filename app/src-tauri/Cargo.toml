@@ -17,7 +17,6 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 tauri = { version = "2", features = [] }
 serde = { version = "1", features = ["derive"] }
-mdns-sd = "0.21.6"
 zh-reseau = { path = "../crates/reseau" }
 
 [profile.release]

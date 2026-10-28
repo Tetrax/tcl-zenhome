@@ -81,7 +81,33 @@ fn refus<T>(msg: impl Into<String>) -> Result<T, ErreurTransport> {
 
 /// Clé de réglage ou de propriété : lettres, chiffres, `_`, `.`, `-`.
 fn cle_valide(s: &str) -> bool {
-    (1..=128).contains(&s.len()) && s.chars().all(|c| c.is_ascii_alphanumeric() || "_.-".contains(c))
+    (1..=128).contains(&s.len()) && !s.starts_with('-') && s.chars().all(|c| c.is_ascii_alphanumeric() || "_.-".contains(c))
+}
+
+/// Caractères de format Unicode (catégorie Cf) : bidi, largeur nulle, etc.
+pub(super) fn est_format(c: char) -> bool {
+    matches!(u32::from(c),
+        0xAD | 0x600..=0x605 | 0x61C | 0x6DD | 0x70F | 0x8E2 | 0x180E | 0x200B..=0x200F | 0x202A..=0x202E
+        | 0x2060..=0x2064 | 0x2066..=0x206F | 0xFEFF | 0xFFF9..=0xFFFB | 0x110BD | 0x1D173..=0x1D17A
+        | 0xE0001 | 0xE0020..=0xE007F)
+}
+
+/// Longueur maximale d'un texte venant de la box dans une erreur, un avertissement ou un événement.
+const TEXTE_BOX_MAX: usize = 300;
+
+/// Texte venant de la box, avant tout affichage : sans contrôles C0/C1 (`\r` compris), formats Unicode (bidi,
+/// largeur nulle) ni séparateurs de ligne ; sauts de ligne et tabulations deviennent des espaces ; 300 caractères au plus.
+pub(super) fn assainir(brut: &str) -> String {
+    let propre: String = brut
+        .chars()
+        .filter_map(|c| match c {
+            '\n' | '\t' => Some(' '),
+            c if c.is_control() || est_format(c) || c == '\u{2028}' || c == '\u{2029}' => None,
+            c => Some(c),
+        })
+        .take(TEXTE_BOX_MAX)
+        .collect();
+    propre.trim().to_string()
 }
 
 /// Nombre décimal : `^-?[0-9]+(\.[0-9]+)?$` (LAT/LON du kit).
@@ -189,9 +215,9 @@ pub fn classer_erreur(code: i32, texte: &str) -> ErreurTransport {
         || a("cannot connect")
         || a("broken pipe")
     {
-        ErreurTransport::Coupure(texte.trim().chars().take(200).collect())
+        ErreurTransport::Coupure(assainir(texte))
     } else {
-        ErreurTransport::Commande { code, stderr: texte.trim().to_string() }
+        ErreurTransport::Commande { code, stderr: assainir(texte) }
     }
 }
 
@@ -206,7 +232,7 @@ fn etat_depuis(code: i32, texte: &str) -> EtatLien {
     } else if t.contains("not found") || t.contains("no devices") {
         EtatLien::Absent
     } else {
-        EtatLien::Autre(t.chars().take(80).collect())
+        EtatLien::Autre(assainir(&t.chars().take(80).collect::<String>()))
     }
 }
 
@@ -247,7 +273,8 @@ pub enum Dumpsys {
 }
 
 /// Arguments du broadcast `tv.zenhome.CONFIG` (ConfigReceiver de Zen Home).
-#[derive(Debug, Clone, PartialEq)]
+/// `Debug` masque la position et le jeton.
+#[derive(Clone, PartialEq)]
 pub enum ArgConfig {
     Lat(String),
     Lon(String),
@@ -256,8 +283,20 @@ pub enum ArgConfig {
     Libelles,
 }
 
+impl fmt::Debug for ArgConfig {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Lat(_) => f.write_str("Lat(***)"),
+            Self::Lon(_) => f.write_str("Lon(***)"),
+            Self::Ville(_) => f.write_str("Ville(***)"),
+            Self::Jeton(_) => f.write_str("Jeton(***)"),
+            Self::Libelles => f.write_str("Libelles"),
+        }
+    }
+}
+
 /// Commande exécutée par le shell de la box. Seuls les constructeurs ci-dessous la fabriquent.
-/// Le texte réel d'une commande sensible (jeton) n'est jamais affiché : `Debug`/`Display` montrent la version masquée.
+/// Le texte réel d'une commande sensible (jeton, position) n'est jamais affiché : `Debug`/`Display` montrent la version masquée.
 #[derive(Clone, PartialEq)]
 pub struct Commande {
     texte: String,
@@ -279,7 +318,7 @@ impl Commande {
         self.masque.as_deref().unwrap_or(&self.texte)
     }
 
-    /// Vrai si la commande contient un secret : elle ne passe que par `shell_stdin`.
+    /// Vrai si la commande contient un secret ou la position : elle ne passe que par `shell_stdin`.
     pub fn sensible(&self) -> bool {
         self.masque.is_some()
     }
@@ -411,7 +450,7 @@ impl Commande {
         Self::simple("input keyevent KEYCODE_HOME")
     }
 
-    /// Broadcast de configuration de Zen Home. Avec un jeton, la commande est sensible (version masquée `***`).
+    /// Broadcast de configuration de Zen Home. Avec un jeton ou une position, la commande est sensible (version masquée `***`).
     pub fn broadcast_config(args: &[ArgConfig]) -> Result<Self, ErreurTransport> {
         if args.is_empty() {
             return refus("broadcast sans argument");
@@ -421,10 +460,19 @@ impl Commande {
         for a in args {
             let (reel, cache) = match a {
                 ArgConfig::Lat(v) | ArgConfig::Lon(v) if !nombre_valide(v) => return refus("coordonnée invalide"),
-                ArgConfig::Lat(v) => (format!(" --es lat {v}"), format!(" --es lat {v}")),
-                ArgConfig::Lon(v) => (format!(" --es lon {v}"), format!(" --es lon {v}")),
+                ArgConfig::Lat(v) => {
+                    sensible = true;
+                    (format!(" --es lat {v}"), " --es lat ***".to_string())
+                }
+                ArgConfig::Lon(v) => {
+                    sensible = true;
+                    (format!(" --es lon {v}"), " --es lon ***".to_string())
+                }
                 ArgConfig::Ville(v) if v.is_empty() || !texte_libre_valide(v, 60) => return refus("ville invalide"),
-                ArgConfig::Ville(v) => (format!(" --es city {}", shq(v)), format!(" --es city {}", shq(v))),
+                ArgConfig::Ville(v) => {
+                    sensible = true;
+                    (format!(" --es city {}", shq(v)), " --es city ***".to_string())
+                }
                 ArgConfig::Jeton(v) if !jeton_valide(v) => return refus("jeton au format inattendu"),
                 ArgConfig::Jeton(v) => {
                     sensible = true;
@@ -497,8 +545,10 @@ impl Brut {
 fn lire_borne(flux: Option<impl Read + Send + 'static>) -> std::thread::JoinHandle<Vec<u8>> {
     std::thread::spawn(move || {
         let mut buf = Vec::new();
-        if let Some(f) = flux {
-            let _ = f.take(SORTIE_MAX as u64).read_to_end(&mut buf);
+        if let Some(mut f) = flux {
+            let _ = f.by_ref().take(SORTIE_MAX as u64).read_to_end(&mut buf);
+            // Le reste est lu puis jeté : adb ne doit pas recevoir de SIGPIPE ni rester bloqué sur un tube plein.
+            let _ = std::io::copy(&mut f, &mut std::io::sink());
         }
         buf
     })
@@ -575,7 +625,7 @@ impl AdbProcess {
         if brut.code == 0 && brut.stdout.contains("Success") {
             Ok(Sortie { stdout: brut.stdout, stderr: brut.stderr })
         } else if brut.code == 0 {
-            Err(ErreurTransport::Commande { code: 0, stderr: brut.stdout.trim().to_string() })
+            Err(ErreurTransport::Commande { code: 0, stderr: assainir(&brut.stdout) })
         } else {
             Err(classer_erreur(brut.code, &brut.texte_erreur()))
         }
@@ -718,7 +768,7 @@ mod tests {
             b.texte(),
             "am broadcast -a tv.zenhome.CONFIG -n tv.zenhome/.ConfigReceiver --es lat 48.86 --es lon -2.35 --es city 'L'\\''Aigle'"
         );
-        assert!(!b.sensible());
+        assert!(b.sensible(), "la position est masquée comme le jeton");
     }
 
     #[test]
@@ -783,6 +833,64 @@ mod tests {
         assert_eq!(Sortie::default().non_vide(), Err(ErreurTransport::Vide));
         assert_eq!(Sortie { stdout: " \n".into(), stderr: String::new() }.non_vide(), Err(ErreurTransport::Vide));
         assert!(Sortie { stdout: "x".into(), stderr: String::new() }.non_vide().is_ok());
+    }
+
+    #[test]
+    fn texte_de_la_box_nettoye_et_borne_dans_les_erreurs() {
+        let sale = format!("Failure \u{1b}[31m\u{85}\u{202e}x\r\nligne2 {}", "a".repeat(1000));
+        let ErreurTransport::Commande { stderr, .. } = classer_erreur(1, &sale) else { panic!("attendu : Commande") };
+        assert!(stderr.chars().count() <= 300, "{}", stderr.len());
+        assert!(stderr.starts_with("Failure [31mx"), "{stderr:?}");
+        assert!(!stderr.chars().any(|c| c.is_control() || c == '\u{202e}'), "{stderr:?}");
+        let ErreurTransport::Coupure(m) = classer_erreur(1, &format!("error: device offline\u{7}{}", "b".repeat(1000))) else {
+            panic!("attendu : Coupure")
+        };
+        assert!(m.chars().count() <= 300 && !m.contains('\u{7}'));
+        let brut = Brut { code: 0, stdout: format!("pas de succès \u{1b}[0m\u{202e}{}", "c".repeat(1000)), stderr: String::new() };
+        let Err(ErreurTransport::Commande { stderr, .. }) = AdbProcess::en_succes(brut) else { panic!("attendu : Commande") };
+        assert!(stderr.chars().count() <= 300 && !stderr.chars().any(|c| c.is_control() || c == '\u{202e}'), "{stderr:?}");
+        // la classification se fait sur le texte complet : un marqueur loin dans le texte reste reconnu
+        assert_eq!(classer_erreur(1, &format!("{} unauthorized", "x".repeat(1000))), ErreurTransport::NonAutorise);
+    }
+
+    #[test]
+    fn lecture_bornee_continue_de_lire_et_jette() {
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        struct Flot(usize, Arc<AtomicUsize>);
+        impl Read for Flot {
+            fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+                let n = buf.len().min(self.0);
+                buf[..n].fill(b'x');
+                self.0 -= n;
+                self.1.fetch_add(n, Ordering::SeqCst);
+                Ok(n)
+            }
+        }
+        let lus = Arc::new(AtomicUsize::new(0));
+        let garde = lire_borne(Some(Flot(SORTIE_MAX + 5000, lus.clone()))).join().unwrap();
+        assert_eq!(garde.len(), SORTIE_MAX);
+        assert_eq!(lus.load(Ordering::SeqCst), SORTIE_MAX + 5000, "le reste est lu puis jeté : pas de SIGPIPE côté adb");
+    }
+
+    #[test]
+    fn cle_sans_tiret_en_tete_et_position_masquee() {
+        assert!(Commande::settings_get(Espace::Global, "-x").is_err());
+        assert!(Commande::getprop("--help").is_err());
+        assert!(Commande::settings_delete(Espace::Global, "-k").is_err());
+        assert!(Commande::settings_put(Espace::Global, "a-b.c_d", "v").is_ok());
+        for a in [ArgConfig::Jeton("SECRET".into()), ArgConfig::Lat("48.8566".into()), ArgConfig::Lon("2.3522".into()), ArgConfig::Ville("Paris".into())] {
+            let d = format!("{a:?}");
+            assert!(!d.contains("SECRET") && !d.contains("48.8566") && !d.contains("2.3522") && !d.contains("Paris"), "{d}");
+        }
+        let c = Commande::broadcast_config(&[ArgConfig::Lat("48.8566".into()), ArgConfig::Lon("2.3522".into()), ArgConfig::Ville("Paris".into())])
+            .unwrap();
+        assert!(c.sensible(), "la position ne passe que par shell_stdin");
+        for vue in [c.afficher().to_string(), format!("{c}"), format!("{c:?}")] {
+            assert!(!vue.contains("48.8566") && !vue.contains("2.3522") && !vue.contains("Paris"), "{vue}");
+        }
+        assert!(c.texte().contains("--es lat 48.8566 --es lon 2.3522 --es city 'Paris'"));
+        assert!(!Commande::broadcast_config(&[ArgConfig::Libelles]).unwrap().sensible());
     }
 
     #[test]

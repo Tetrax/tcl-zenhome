@@ -68,6 +68,11 @@ struct Scenario {
     reponse_perdue_desinstallation: u32,
     lectures_vides: u32,
     autorisation_en_attente: bool,
+    /// Les commandes répondent « unauthorized » alors que `get-state` dit « device » ; `refus_non_autorise` les compte.
+    shell_non_autorise: bool,
+    refus_non_autorise: u32,
+    /// `ro.serialno` répond vide.
+    serie_illisible: bool,
     injoignable: bool,
     signature_incompatible: bool,
     /// Reconnexions encore nécessaires avant que le lien repasse de « offline » à « device ».
@@ -197,6 +202,11 @@ impl Interne {
         if s.autorisation_en_attente {
             return Err(ErreurTransport::NonAutorise);
         }
+        if s.shell_non_autorise {
+            s.refus_non_autorise += 1;
+            assert!(s.refus_non_autorise < 50, "la box refuse en boucle : l'appelant ne s'arrête pas");
+            return Err(ErreurTransport::NonAutorise);
+        }
         if s.lien_perdu > 0 {
             return Err(coupure());
         }
@@ -237,6 +247,7 @@ impl Interne {
                 "ro.product.model" => format!("{}\n", e.modele),
                 "ro.build.version.release" => format!("{}\n", e.android),
                 "ro.build.version.sdk" => format!("{}\n", e.sdk),
+                "ro.serialno" if !self.scenario.serie_illisible => format!("{}\n", e.serie),
                 _ => "\n".into(),
             }),
             ["pm", "list", "packages", opts @ ..] => {
@@ -447,6 +458,16 @@ impl FakeBox {
         self.interne().scenario.autorisation_en_attente = true;
     }
 
+    /// Les commandes sont refusées (« unauthorized ») alors que le lien reste « device ».
+    pub fn shell_non_autorise(&self, oui: bool) {
+        self.interne().scenario.shell_non_autorise = oui;
+    }
+
+    /// `ro.serialno` répond vide (numéro de série illisible).
+    pub fn serie_illisible(&self, oui: bool) {
+        self.interne().scenario.serie_illisible = oui;
+    }
+
     pub fn accepter_autorisation(&self) {
         self.interne().scenario.autorisation_en_attente = false;
     }
@@ -480,7 +501,11 @@ impl FakeBox {
             return Err(ErreurTransport::Refusee("commande sensible : utiliser shell_stdin".into()));
         }
         if i.pannes()? {
-            return Ok(Sortie::default());
+            if cmd.texte() != "getprop ro.serialno" {
+                return Ok(Sortie::default());
+            }
+            // les lectures vides du scénario ne visent pas le contrôle d'identité (voir `serie_illisible`)
+            i.scenario.lectures_vides += 1;
         }
         i.executer(cmd.texte())
     }

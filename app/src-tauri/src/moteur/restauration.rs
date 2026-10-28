@@ -5,7 +5,7 @@ use super::connexion::Politique;
 use super::installation::PKG;
 use super::session::{Arret, Observateur, Reprise, Session};
 use super::transport::{Commande, Espace, ErreurTransport, OptionPm, Transport, paquet_valide};
-use super::verification::SPOTIFY;
+use super::verification::{LAUNCHERX, SPOTIFY};
 
 pub const ACCUEIL_ORIGINE: &str = "com.google.android.tvlauncher/.MainActivity";
 pub const VEILLE_ORIGINE: &str = "com.google.android.backdrop/.Backdrop";
@@ -15,6 +15,8 @@ const REGLAGES_KIT: [&str; 7] =
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct RapportRestauration {
+    /// Faux si Zen Home a été conservé (accueil d'origine non confirmé actif) : la restauration est à refaire.
+    pub incomplete: bool,
     pub reactives: Vec<String>,
     pub avertissements: Vec<String>,
 }
@@ -32,6 +34,7 @@ fn services_restants(brut: &str) -> String {
 pub fn restaurer(t: &dyn Transport, pol: &Politique, obs: &mut dyn Observateur, depuis: &Reprise) -> Result<RapportRestauration, Arret> {
     let mut s = Session::nouvelle(t, pol, obs, "restauration", 5, depuis);
     let mut reactives = Vec::new();
+    let mut incomplete = false;
 
     if s.etape(0, "Réactivation des applis désactivées") {
         // Liste relue à chaque passage (reprise) : seuls les noms valides sont utilisés.
@@ -54,21 +57,37 @@ pub fn restaurer(t: &dyn Transport, pol: &Politique, obs: &mut dyn Observateur, 
     }
     if s.etape(2, "Accueil d'origine et désinstallation de Zen Home") {
         s.essayer(&Commande::set_home_activity(ACCUEIL_ORIGINE)?)?;
-        // Idempotent : si Zen Home n'est plus installé (reprise), rien à désinstaller.
-        let liste = Commande::pm_list(&[]);
-        let resultat = s.op("désinstallation de Zen Home", |t| {
-            let l = t.shell(&liste)?.stdout;
-            if !l.trim().is_empty() && !super::inventaire::noms_paquets(&l).iter().any(|p| p == PKG) {
-                return Ok(None);
+        // Zen Home n'est désinstallé que si l'accueil d'origine est PRÉSENT et ACTIF : lectures relues, sinon on le garde.
+        let tous = s.lire_non_vide(&Commande::pm_list(&[]))?;
+        let desactives = s.lire(&Commande::pm_list(&[OptionPm::Desactives]))?;
+        let installes = tous.as_deref().map(super::inventaire::noms_paquets);
+        if installes.as_ref().is_some_and(|l| !l.iter().any(|p| p == PKG)) {
+            // déjà désinstallé (reprise) : rien à faire
+        } else if installes.as_ref().is_some_and(|l| l.iter().any(|p| p == LAUNCHERX))
+            && !super::inventaire::noms_paquets(&desactives).iter().any(|p| p == LAUNCHERX)
+        {
+            // Idempotent : si Zen Home n'est plus installé (reprise), rien à désinstaller.
+            let liste = Commande::pm_list(&[]);
+            let resultat = s.op("désinstallation de Zen Home", |t| {
+                let l = t.shell(&liste)?.stdout;
+                if !l.trim().is_empty() && !super::inventaire::noms_paquets(&l).iter().any(|p| p == PKG) {
+                    return Ok(None);
+                }
+                match t.uninstall(PKG) {
+                    Ok(_) => Ok(None),
+                    Err(ErreurTransport::Commande { stderr, .. }) => Ok(Some(stderr)),
+                    Err(e) => Err(e),
+                }
+            })?;
+            if let Some(m) = resultat {
+                s.avertir(format!("refusé ou sans effet : désinstallation de {PKG} ({})", m.lines().next().unwrap_or_default()));
             }
-            match t.uninstall(PKG) {
-                Ok(_) => Ok(None),
-                Err(ErreurTransport::Commande { stderr, .. }) => Ok(Some(stderr)),
-                Err(e) => Err(e),
-            }
-        })?;
-        if let Some(m) = resultat {
-            s.avertir(format!("refusé ou sans effet : désinstallation de {PKG} ({})", m.lines().next().unwrap_or_default()));
+        } else {
+            incomplete = true;
+            s.avertir(format!(
+                "restauration incomplète : Zen Home est conservé, car l'accueil d'origine ({LAUNCHERX}) n'est pas confirmé présent et actif. \
+                 Relancez la restauration."
+            ));
         }
         s.essayer(&Commande::touche_accueil())?;
     }
@@ -87,7 +106,7 @@ pub fn restaurer(t: &dyn Transport, pol: &Politique, obs: &mut dyn Observateur, 
             s.essayer(&Commande::settings_delete(Espace::Global, k)?)?;
         }
     }
-    Ok(RapportRestauration { reactives, avertissements: s.avertissements })
+    Ok(RapportRestauration { incomplete, reactives, avertissements: s.avertissements })
 }
 
 fn noms_valides(sortie: &str) -> Vec<String> {
@@ -134,7 +153,7 @@ mod tests {
         assert!(e.global.keys().all(|k| !k.starts_with("zenhome_")));
         assert_eq!(e.global["window_animation_scale"], "1.0");
         assert_eq!(e.appops[&(SPOTIFY.to_string(), "RUN_ANY_IN_BACKGROUND".to_string())], "allow");
-        assert!(r.avertissements.is_empty(), "{:?}", r.avertissements);
+        assert!(r.avertissements.is_empty() && !r.incomplete, "{:?}", r.avertissements);
         assert_eq!(f.journal().last().map(String::as_str), Some("shell: settings delete global zenhome_garder"));
     }
 
@@ -164,6 +183,18 @@ mod tests {
     }
 
     #[test]
+    fn accueil_d_origine_encore_desactive_ne_desinstalle_pas_zen_home() {
+        let f = installee();
+        // la lecture des applis désactivées (étape 0) revient vide : rien n'est réactivé, l'accueil d'origine reste éteint
+        f.lectures_vides(1);
+        let r = restaurer(&f, &Politique::default(), &mut Silencieux, &Reprise::default()).unwrap();
+        assert!(f.journal().iter().all(|l| !l.starts_with("uninstall:")), "{:?}", f.journal());
+        assert!(f.instantane().paquets.contains_key(PKG));
+        assert!(r.avertissements.iter().any(|a| a.contains("Zen Home") && a.contains("conservé")), "{:?}", r.avertissements);
+        assert!(r.incomplete);
+    }
+
+    #[test]
     fn echec_isole_n_arrete_pas_la_restauration() {
         let f = installee();
         // Spotify absent : appops/standby ne sont pas refusés par la fausse box, mais l'accueil d'origine l'est si désinstallé
@@ -172,6 +203,8 @@ mod tests {
         });
         let r = restaurer(&f, &Politique::default(), &mut Silencieux, &Reprise::default()).unwrap();
         assert!(r.avertissements.iter().any(|a| a.contains("set-home-activity")), "{:?}", r.avertissements);
-        assert!(!f.instantane().paquets.contains_key(PKG));
+        // accueil d'origine absent : Zen Home est conservé (la box resterait sans accueil)
+        assert!(f.instantane().paquets.contains_key(PKG));
+        assert!(r.incomplete);
     }
 }

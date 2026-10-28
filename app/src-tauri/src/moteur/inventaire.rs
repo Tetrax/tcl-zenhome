@@ -5,8 +5,8 @@ use std::collections::HashMap;
 use std::fmt;
 use std::path::Path;
 
-use super::connexion::{EtatConnexion, Politique, assurer_connexion};
-use super::transport::{Commande, Dumpsys, Espace, ErreurTransport, OptionPm, Transport, paquet_valide};
+use super::connexion::{EtatConnexion, Politique, assurer_connexion, nettoyer_modele};
+use super::transport::{Commande, Dumpsys, Espace, ErreurTransport, OptionPm, Transport, est_format, paquet_valide};
 
 /// Jamais désinstallés ni proposés à la désinstallation (PROTEGES du kit).
 pub const PROTEGES: [&str; 5] = [
@@ -130,14 +130,6 @@ pub fn libelles_broadcast(sortie: &str) -> Option<Vec<(String, String)>> {
             .map(|(p, lib)| (p.to_string(), lib.to_string()))
             .collect(),
     )
-}
-
-/// Caractères de format Unicode (catégorie Cf) : bidi, largeur nulle, etc.
-fn est_format(c: char) -> bool {
-    matches!(u32::from(c),
-        0xAD | 0x600..=0x605 | 0x61C | 0x6DD | 0x70F | 0x8E2 | 0x180E | 0x200B..=0x200F | 0x202A..=0x202E
-        | 0x2060..=0x2064 | 0x2066..=0x206F | 0xFEFF | 0xFFF9..=0xFFFB | 0x110BD | 0x1D173..=0x1D17A
-        | 0xE0001 | 0xE0020..=0xE007F)
 }
 
 /// Libellé renettoyé (revue sécurité) : sans contrôles C0/C1, formats/bidi, séparateurs de ligne/paragraphe ni guillemets,
@@ -307,9 +299,9 @@ fn construire_resume(horodatage: &str, inv: &Inventaire) -> String {
     let mut s = format!(
         "État des lieux de la box, le {horodatage}\nModèle : {} ({}), Android {}\nApplis installées : {}, dont désactivées : {}\n\
          Accueil actuel : {accueil}\n\nApplis installées par vous (paquet : taille, dernière utilisation) :\n",
-        inv.modele,
-        inv.produit,
-        inv.android,
+        nettoyer_modele(&inv.modele),
+        nettoyer_modele(&inv.produit),
+        nettoyer_modele(&inv.android),
         inv.tous.len(),
         inv.desactives.len(),
     );
@@ -324,31 +316,39 @@ fn construire_resume(horodatage: &str, inv: &Inventaire) -> String {
 #[cfg(unix)]
 fn creer_dossier_prive(d: &Path) -> std::io::Result<()> {
     use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
-    std::fs::DirBuilder::new().recursive(true).mode(0o700).create(d)?;
+    // Le dossier lui-même doit être neuf : un dossier ou un lien déjà là n'est jamais réutilisé.
+    if let Some(parent) = d.parent().filter(|p| !p.as_os_str().is_empty()) {
+        std::fs::DirBuilder::new().recursive(true).mode(0o700).create(parent)?;
+    }
+    std::fs::DirBuilder::new().mode(0o700).create(d)?;
     std::fs::set_permissions(d, std::fs::Permissions::from_mode(0o700))
 }
 
 #[cfg(not(unix))]
 fn creer_dossier_prive(d: &Path) -> std::io::Result<()> {
-    std::fs::create_dir_all(d)
+    if let Some(parent) = d.parent().filter(|p| !p.as_os_str().is_empty()) {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::create_dir(d)
 }
 
 #[cfg(unix)]
 fn ecrire_prive(f: &Path, contenu: &str) -> std::io::Result<()> {
     use std::io::Write;
     use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
-    let mut fichier = std::fs::OpenOptions::new().write(true).create(true).truncate(true).mode(0o600).open(f)?;
+    let mut fichier = std::fs::OpenOptions::new().write(true).create_new(true).mode(0o600).open(f)?;
     fichier.write_all(contenu.as_bytes())?;
     std::fs::set_permissions(f, std::fs::Permissions::from_mode(0o600))
 }
 
 #[cfg(not(unix))]
 fn ecrire_prive(f: &Path, contenu: &str) -> std::io::Result<()> {
-    std::fs::write(f, contenu)
+    use std::io::Write;
+    std::fs::OpenOptions::new().write(true).create_new(true).open(f)?.write_all(contenu.as_bytes())
 }
 
 /// Lit l'état de la box (rien n'est modifié), écrit la sauvegarde brute et `resume.txt` dans `dossier`
-/// (créé en 700, fichiers en 600) et renvoie l'inventaire. `horodatage` : « JJ/MM/AAAA HH:MM », fourni par l'appelant.
+/// (neuf : créé en 700, jamais réutilisé ; fichiers en 600, jamais écrasés) et renvoie l'inventaire. `horodatage` : « JJ/MM/AAAA HH:MM », fourni par l'appelant.
 ///
 /// Fichiers comme le kit : paquets-{tous,desactives,utilisateur,systeme}, reglages-{global,secure,system}, proprietes,
 /// diskstats, accueil, resume. `dumpsys usagestats` (historique détaillé) et `dumpsys wifi` (SSID) ne sont PAS conservés.
@@ -701,6 +701,42 @@ mod tests {
         g.zen_home_visible(false);
         g.modifier(|e| e.premier_plan = None);
         assert_eq!(inventaire(&g, &Temp::nouveau().0, "h").unwrap().premier_plan, None);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn sauvegarde_refuse_un_dossier_existant_et_les_liens() {
+        let t = Temp::nouveau();
+        let cible = t.0.parent().unwrap().join("cible.txt");
+        std::fs::create_dir_all(&t.0).unwrap();
+        std::fs::write(&cible, "intact").unwrap();
+        std::os::unix::fs::symlink(&cible, t.0.join("resume.txt")).unwrap();
+        let r = inventaire(&FakeBox::mibox4(), &t.0, "h");
+        assert!(matches!(r, Err(ErreurInventaire::Ecriture(_))), "{r:?}");
+        assert_eq!(std::fs::read_to_string(&cible).unwrap(), "intact", "le lien n'est pas suivi");
+    }
+
+    #[test]
+    fn resume_filtre_modele_produit_et_version() {
+        let inv = Inventaire {
+            modele: "MIBOX4\u{202e}\n\u{1b}[31m; evil".into(),
+            produit: "one\r\nday\u{85}".into(),
+            android: "9\u{200b}\nInjecté".into(),
+            tous: vec![],
+            desactives: vec![],
+            utilisateur: vec![],
+            systeme: vec![],
+            applis: vec![],
+            accueil_actuel: String::new(),
+            accueil_prefere: None,
+            premier_plan: None,
+            wifi: EtatWifi::Libre,
+            garder: vec![],
+            avertissements: vec![],
+        };
+        let r = construire_resume("h", &inv);
+        assert!(!r.chars().any(|c| c.is_control() && c != '\n') && !r.contains('\u{202e}') && !r.contains('\u{200b}'), "{r:?}");
+        assert_eq!(r.lines().nth(1), Some("Modèle : MIBOX431m evil (oneday), Android 9Inject"), "{r:?}");
     }
 
     #[cfg(unix)]

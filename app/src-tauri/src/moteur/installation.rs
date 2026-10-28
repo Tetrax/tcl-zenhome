@@ -28,9 +28,9 @@ impl fmt::Debug for Parametres {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Parametres")
             .field("apk", &self.apk)
-            .field("lat", &self.lat)
-            .field("lon", &self.lon)
-            .field("ville", &self.ville)
+            .field("lat", &self.lat.as_ref().map(|_| "***"))
+            .field("lon", &self.lon.as_ref().map(|_| "***"))
+            .field("ville", &self.ville.as_ref().map(|_| "***"))
             .field("jeton", &self.jeton.as_ref().map(|_| "***"))
             .finish()
     }
@@ -76,6 +76,7 @@ pub(super) fn installer_apk(s: &mut Session, apk: &std::path::Path) -> Result<()
     if !apk.is_file() {
         return Err(ErreurAction::ApkAbsent(apk.display().to_string()).into());
     }
+    s.verifier_identite()?;
     match s.op("installation de l'APK", |t| t.install(apk)) {
         Ok(_) => Ok(()),
         Err(Arret::Echec(ErreurAction::Transport(ErreurTransport::Commande { stderr, .. }))) => Err(if stderr.contains("INSTALL_FAILED_UPDATE_INCOMPATIBLE") {
@@ -153,7 +154,10 @@ pub fn installer(
             None => s.avertir("LAT/LON absents : météo non configurée."),
         }
         match &jeton {
-            Some(c) => envoyer_config(&mut s, c)?,
+            Some(c) => {
+                s.verifier_identite()?;
+                envoyer_config(&mut s, c)?
+            }
             None => s.avertir("jeton TMDB absent : films désactivés."),
         }
     }
@@ -310,6 +314,49 @@ mod tests {
         installer(&f, &Politique::default(), &mut Silencieux, &params(), &pause.reprise).unwrap();
         assert_eq!(f.journal().iter().filter(|l| l.starts_with("install:")).count(), 1, "l'étape 0 n'est pas rejouée");
         assert_eq!(f.instantane().accueil_prefere.as_deref(), Some(ACCUEIL_ZEN));
+    }
+
+    /// Remplace la box (autre numéro de série) dès que le lien décroche, ou au début de l'étape `.1`.
+    struct Echange<'a>(&'a FakeBox, Option<usize>);
+    impl Observateur for Echange<'_> {
+        fn notifier(&mut self, e: Evenement) {
+            let declenche = match (&e, self.1) {
+                (Evenement::Etape { numero, .. }, Some(n)) => *numero == n,
+                (Evenement::ConnexionPerdue { .. }, None) => true,
+                _ => false,
+            };
+            if declenche {
+                self.0.modifier(|b| b.serie = "AUTRE-BOX".into());
+            }
+        }
+    }
+
+    #[test]
+    fn serie_changee_apres_une_reconnexion_arrete_l_action() {
+        let f = connectee();
+        f.couper_apres(2, 1);
+        let mut p = params();
+        p.jeton = Some("SECRET.jeton-123".into());
+        let e = installer(&f, &Politique::default(), &mut Echange(&f, None), &p, &Reprise::default()).unwrap_err();
+        assert!(e.to_string().contains("plus la même box"), "{e}");
+        assert!(f.journal().iter().all(|l| !l.contains("tmdb_token")), "{:?}", f.journal());
+    }
+
+    #[test]
+    fn serie_changee_avant_le_jeton_ou_illisible_rien_n_est_envoye() {
+        let f = connectee();
+        let mut p = params();
+        p.jeton = Some("SECRET.jeton-123".into());
+        // la box est remplacée au début de l'étape « Configuration » : la position part encore, pas le jeton
+        let e = installer(&f, &Politique::default(), &mut Echange(&f, Some(2)), &p, &Reprise::default()).unwrap_err();
+        assert!(e.to_string().contains("plus la même box"), "{e}");
+        assert!(f.journal().iter().all(|l| !l.contains("tmdb_token")), "{:?}", f.journal());
+        // numéro de série illisible (réponses vides) : rien n'est envoyé non plus, APK compris
+        let g = connectee();
+        g.serie_illisible(true);
+        let e = installer(&g, &Politique::default(), &mut Silencieux, &p, &Reprise::default()).unwrap_err();
+        assert!(e.to_string().contains("plus la même box"), "{e}");
+        assert!(g.journal().iter().all(|l| !l.starts_with("install:") && !l.contains("tmdb_token")), "{:?}", g.journal());
     }
 
     #[test]

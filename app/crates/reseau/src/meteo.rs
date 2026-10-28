@@ -35,15 +35,21 @@ struct Brut {
     country: Option<String>,
 }
 
-/// Retire contrôles, séparateurs de ligne, caractères invisibles et marques bidirectionnelles,
+/// Caractères de format Unicode (catégorie Cf) : bidi, largeur nulle, etc. Même liste que `moteur::transport::est_format`
+/// (src-tauri) : à garder alignées.
+fn est_format(c: char) -> bool {
+    matches!(u32::from(c),
+        0xAD | 0x600..=0x605 | 0x61C | 0x6DD | 0x70F | 0x8E2 | 0x180E | 0x200B..=0x200F | 0x202A..=0x202E
+        | 0x2060..=0x2064 | 0x2066..=0x206F | 0xFEFF | 0xFFF9..=0xFFFB | 0x110BD | 0x1D173..=0x1D17A
+        | 0xE0001 | 0xE0020..=0xE007F)
+}
+
+/// Retire contrôles, séparateurs de ligne et de paragraphe, caractères invisibles et marques bidirectionnelles,
 /// puis borne la longueur (en caractères).
 fn nettoyer(s: &str, max: usize) -> String {
     let net: String = s
         .chars()
-        .filter(|c| {
-            !c.is_control()
-                && !matches!(*c, '\u{061C}' | '\u{200B}'..='\u{200F}' | '\u{2028}'..='\u{202E}' | '\u{2060}'..='\u{2069}' | '\u{FEFF}')
-        })
+        .filter(|&c| !(c.is_control() || est_format(c) || c == '\u{2028}' || c == '\u{2029}'))
         .take(max)
         .collect();
     net.trim().to_string()
@@ -95,6 +101,12 @@ pub fn chercher_villes(saisie: &str) -> Result<Vec<Ville>, Erreur> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn nettoie_les_invisibles_comme_l_inventaire() {
+        assert_eq!(nettoyer("Pa\u{AD}ri\u{180E}s\u{FFF9}\u{E0001}\u{E0041}\u{1D173}\u{600}", 30), "Paris");
+        assert_eq!(nettoyer("a\u{2028}b\u{2029}c\u{85}d\u{2066}e", 30), "abcde");
+    }
 
     #[test]
     fn reponse_normale() {

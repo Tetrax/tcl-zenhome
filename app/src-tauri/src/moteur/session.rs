@@ -10,10 +10,10 @@
 
 use std::fmt;
 
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 
-use super::connexion::{EtatConnexion, Politique, assurer_connexion};
-use super::transport::{Commande, ErreurTransport, Sortie, Transport};
+use super::connexion::{EtatConnexion, Politique, assurer_connexion, lire_serie};
+use super::transport::{Commande, ErreurTransport, Sortie, Transport, assainir};
 
 /// Essais d'une même opération face à des coupures (comme les 3 passes de `lancer_script` du kit).
 const ESSAIS_OPERATION: u32 = 3;
@@ -53,15 +53,25 @@ impl Observateur for Silencieux {
 }
 
 /// Où repartir. `etape` : première étape à rejouer ; `desactives` : paquets désactivés par le passage interrompu
-/// (la vérification en a besoin pour son retour arrière).
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+/// (la vérification en a besoin pour son retour arrière) ; `serie` : numéro de série mémorisé de la box.
+/// Jamais `Deserialize` : une reprise ne vient que du moteur, l'interface ne peut pas faire sauter d'étape.
+#[derive(Debug, Clone, Default, PartialEq, Serialize)]
 pub struct Reprise {
     pub etape: usize,
     pub desactives: Vec<String>,
+    pub serie: Option<String>,
+}
+
+impl Reprise {
+    /// Départ d'une action sur une box précise : `lire_serie` juste après `connecter_box`.
+    /// Sans numéro, il est mémorisé à la première vérification de l'action (voir `Session::verifier_identite`).
+    pub fn pour_box(serie: String) -> Self {
+        Self { serie: Some(serie), ..Self::default() }
+    }
 }
 
 /// État « en pause » : l'action s'est arrêtée proprement, rien n'est à défaire.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Pause {
     pub action: String,
     pub etape: String,
@@ -81,6 +91,8 @@ pub enum ErreurAction {
     Installation(String),
     /// Les choix n'ont pas pu être relus sur la box.
     Memorisation(String),
+    /// Numéro de série différent de celui mémorisé, ou illisible : rien n'est envoyé.
+    AutreBox,
 }
 
 impl fmt::Display for ErreurAction {
@@ -92,6 +104,7 @@ impl fmt::Display for ErreurAction {
             Self::SignatureIncompatible => write!(f, "signature différente de la version installée (INSTALL_FAILED_UPDATE_INCOMPATIBLE)"),
             Self::Installation(m) => write!(f, "échec de l'installation : {m}"),
             Self::Memorisation(m) => write!(f, "choix non mémorisés sur la box : {m}"),
+            Self::AutreBox => write!(f, "ce n'est plus la même box (numéro de série différent ou illisible) : arrêt, rien n'est envoyé"),
         }
     }
 }
@@ -100,7 +113,7 @@ impl std::error::Error for ErreurAction {}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Arret {
-    EnPause(Pause),
+    EnPause(Box<Pause>),
     Echec(ErreurAction),
 }
 
@@ -166,8 +179,9 @@ impl<'a> Session<'a> {
         self.obs.notifier(Evenement::Progression { fait, total, detail: detail.to_string() });
     }
 
+    /// Les avertissements peuvent citer du texte de la box : nettoyé et borné ici.
     pub fn avertir(&mut self, message: impl Into<String>) {
-        let message = message.into();
+        let message = assainir(&message.into());
         self.obs.notifier(Evenement::Avertissement { message: message.clone() });
         self.avertissements.push(message);
     }
@@ -186,22 +200,79 @@ impl<'a> Session<'a> {
         }
     }
 
-    /// Rétablit le lien ; si `assurer_connexion` rend la main, demande à l'observateur.
-    fn rattraper(&mut self, operation: &str) -> Result<(), Arret> {
-        loop {
-            match assurer_connexion(self.t, self.pol) {
-                EtatConnexion::Connectee => {
-                    self.obs.notifier(Evenement::Reconnectee);
-                    return Ok(());
+    /// Compare le numéro de série lu (`None` : illisible) au numéro mémorisé ; sans numéro mémorisé, le retient.
+    fn comparer_serie(&mut self, lu: Option<String>) -> Result<(), Arret> {
+        match (&self.reprise.serie, lu) {
+            (Some(m), Some(l)) if *m == l => Ok(()),
+            (None, Some(l)) => {
+                self.reprise.serie = Some(l);
+                Ok(())
+            }
+            _ => Err(ErreurAction::AutreBox.into()),
+        }
+    }
+
+    /// Contrôle du numéro de série juste après une reconnexion : lecture directe (pas de `op`, on est déjà dans une reprise).
+    /// Une coupure ou une autorisation retirée remontent telles quelles ; une lecture vide est relue.
+    fn controler_serie(&mut self) -> Result<(), Arret> {
+        let mut lu = None;
+        for _ in 0..ESSAIS_OPERATION {
+            match lire_serie(self.t) {
+                Ok(s) => {
+                    lu = Some(s);
+                    break;
                 }
-                EtatConnexion::AttenteUtilisateur { non_autorise } => {
-                    self.obs.notifier(Evenement::AttenteUtilisateur { non_autorise });
-                    if self.obs.attente_utilisateur(non_autorise) == Decision::Arreter {
-                        return Err(Arret::EnPause(self.pause(operation, non_autorise)));
-                    }
-                }
+                Err(ErreurTransport::Vide | ErreurTransport::Commande { .. }) => self.t.attendre(self.pol.pause),
+                Err(e) => return Err(e.into()),
             }
         }
+        self.comparer_serie(lu)
+    }
+
+    /// À appeler juste avant d'envoyer un secret ou un APK : est-ce toujours la même box ?
+    pub fn verifier_identite(&mut self) -> Result<(), Arret> {
+        let lu = match self.op("identité de la box", lire_serie) {
+            Ok(s) => Some(s),
+            Err(Arret::Echec(ErreurAction::Transport(ErreurTransport::Vide | ErreurTransport::Commande { .. }))) => None,
+            Err(e) => return Err(e),
+        };
+        self.comparer_serie(lu)
+    }
+
+    /// Rétablit le lien (et vérifie que c'est la même box) ; si `assurer_connexion` rend la main, demande à l'observateur.
+    fn rattraper(&mut self, operation: &str) -> Result<(), Arret> {
+        let mut vains = 0;
+        loop {
+            let non_autorise = match assurer_connexion(self.t, self.pol) {
+                EtatConnexion::Connectee => match self.controler_serie() {
+                    Ok(()) => {
+                        self.obs.notifier(Evenement::Reconnectee);
+                        return Ok(());
+                    }
+                    Err(Arret::Echec(ErreurAction::Transport(ErreurTransport::NonAutorise))) => true,
+                    Err(Arret::Echec(ErreurAction::Transport(ErreurTransport::Coupure(_)))) => {
+                        // le lien est retombé aussitôt : on le rétablit à nouveau, sans boucler indéfiniment
+                        vains += 1;
+                        if vains < ESSAIS_OPERATION {
+                            continue;
+                        }
+                        false
+                    }
+                    Err(e) => return Err(e),
+                },
+                EtatConnexion::AttenteUtilisateur { non_autorise } => non_autorise,
+            };
+            self.attente(operation, non_autorise)?;
+        }
+    }
+
+    /// Demande à l'observateur : `Ok` pour réessayer, `EnPause` pour arrêter.
+    fn attente(&mut self, operation: &str, non_autorise: bool) -> Result<(), Arret> {
+        self.obs.notifier(Evenement::AttenteUtilisateur { non_autorise });
+        if self.obs.attente_utilisateur(non_autorise) == Decision::Arreter {
+            return Err(Arret::EnPause(Box::new(self.pause(operation, non_autorise))));
+        }
+        Ok(())
     }
 
     /// Exécute une opération idempotente ; la rejoue après reconnexion si le lien a décroché.
@@ -218,8 +289,14 @@ impl<'a> Session<'a> {
                 return Err(e.into());
             }
             essai += 1;
-            if essai >= ESSAIS_OPERATION && !autorisation {
-                return Err(e.into());
+            if essai >= ESSAIS_OPERATION {
+                if !autorisation {
+                    return Err(e.into());
+                }
+                // autorisation toujours refusée alors que le lien semble bon : pas de boucle, l'utilisateur doit l'accepter
+                self.attente(nom, true)?;
+                essai = 0;
+                continue;
             }
             self.obs.notifier(Evenement::ConnexionPerdue { essai });
             self.rattraper(nom)?;
@@ -266,5 +343,45 @@ impl<'a> Session<'a> {
             }
             Err(e) => Err(e),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::moteur::fake_box::FakeBox;
+    use std::marker::PhantomData;
+
+    #[test]
+    fn autorisation_refusee_en_boucle_met_l_action_en_pause() {
+        let f = FakeBox::mibox4();
+        f.connecter().unwrap();
+        f.shell_non_autorise(true);
+        let (pol, mut obs) = (Politique::default(), Silencieux);
+        let mut s = Session::nouvelle(&f, &pol, &mut obs, "test", 1, &Reprise::default());
+        s.etape(0, "Essai");
+        let r = s.ecrire(&Commande::touche_accueil());
+        assert!(matches!(&r, Err(Arret::EnPause(p)) if p.non_autorise), "{r:?}");
+        assert!(f.journal().iter().filter(|l| l.starts_with("shell:")).count() <= ESSAIS_OPERATION as usize);
+    }
+
+    /// `Reprise` et `Pause` ne doivent jamais être construites depuis l'extérieur (l'interface ne peut pas sauter d'étape).
+    #[test]
+    fn la_reprise_ne_se_deserialise_pas() {
+        struct Sonde<T>(PhantomData<T>);
+        trait Non {
+            fn deserialisable(&self) -> bool {
+                false
+            }
+        }
+        impl<T> Non for Sonde<T> {}
+        impl<T: serde::de::DeserializeOwned> Sonde<T> {
+            fn deserialisable(&self) -> bool {
+                true
+            }
+        }
+        assert!(!Sonde::<Reprise>(PhantomData).deserialisable());
+        assert!(!Sonde::<Pause>(PhantomData).deserialisable());
+        assert!(Sonde::<Vec<u8>>(PhantomData).deserialisable(), "la sonde elle-même fonctionne");
     }
 }

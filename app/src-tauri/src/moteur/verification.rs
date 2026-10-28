@@ -220,6 +220,13 @@ fn au_premier_plan(s: &mut Session) -> Result<bool, Arret> {
     Ok(t.lines().any(|l| (l.contains("topResumedActivity") || l.contains("mResumedActivity")) && l.contains(&format!("{PKG}/"))))
 }
 
+/// Mémorise un paquet que ce passage va désactiver (`pm enable` est idempotent : le noter trop tôt est sans risque).
+fn noter_desactive(s: &mut Session, paquet: &str) {
+    if !s.reprise.desactives.iter().any(|d| d == paquet) {
+        s.reprise.desactives.push(paquet.to_string());
+    }
+}
+
 /// Réparation dans l'ordre sûr du kit. Renvoie vrai si un retour arrière a eu lieu.
 fn corriger(s: &mut Session, c: &Controle, apk: Option<&Path>) -> Result<bool, Arret> {
     let e = &c.etats;
@@ -260,16 +267,17 @@ fn corriger(s: &mut Session, c: &Controle, apk: Option<&Path>) -> Result<bool, A
     // 3. L'accueil d'origine : seulement si Zen Home est installé ET accueil préféré
     if e.lx == Statut::Ko {
         if ok_home && accueil_est_zen_home(s)? {
-            if s.essayer(&Commande::pm_disable(LAUNCHERX)?)? {
-                s.reprise.desactives.push(LAUNCHERX.to_string());
-            }
+            // Inscrit AVANT l'envoi : une coupure après l'exécution sur la box ne doit pas perdre le retour arrière.
+            noter_desactive(s, LAUNCHERX);
+            s.essayer(&Commande::pm_disable(LAUNCHERX)?)?;
         } else {
             s.avertir("l'accueil d'origine est laissé actif : Zen Home n'est pas installé ou n'est pas l'accueil préféré.");
         }
     }
     // 4. setupwraith : seulement si le Wi-Fi est VÉRIFIÉ non lié ; échec fermé sinon
-    if e.sw == Statut::Ko && e.wifi == EtatWifi::Libre && s.essayer(&Commande::pm_disable(WRAITH)?)? {
-        s.reprise.desactives.push(WRAITH.to_string());
+    if e.sw == Statut::Ko && e.wifi == EtatWifi::Libre {
+        noter_desactive(s, WRAITH);
+        s.essayer(&Commande::pm_disable(WRAITH)?)?;
     }
     // 5. Contrôle de l'accueil, retour arrière si nécessaire
     s.essayer(&Commande::touche_accueil())?;
@@ -278,7 +286,13 @@ fn corriger(s: &mut Session, c: &Controle, apk: Option<&Path>) -> Result<bool, A
         return Ok(false);
     }
     s.avertir(format!("{PKG} n'est pas au premier plan après Accueil."));
-    let a_rendre: Vec<&str> = [LAUNCHERX, WRAITH].into_iter().filter(|p| s.reprise.desactives.iter().any(|d| d == p)).collect();
+    // L'accueil d'origine est rendu s'il est désactivé, quelle qu'en soit l'origine (ce passage, une reprise, un autre outil) ;
+    // setupwraith seulement s'il a été désactivé par ce passage.
+    let eteints = noms_paquets(&s.lire(&Commande::pm_list(&[OptionPm::Desactives]))?);
+    let a_rendre: Vec<&str> = [LAUNCHERX, WRAITH]
+        .into_iter()
+        .filter(|p| s.reprise.desactives.iter().any(|d| d == p) || (*p == LAUNCHERX && eteints.iter().any(|d| d == p)))
+        .collect();
     if a_rendre.is_empty() {
         return Ok(false);
     }
@@ -322,7 +336,7 @@ pub fn verifier(
     let liste = debloat::liste_mibox4();
     // Pas de saut d'étape ici (le contrôle est en lecture seule) ; seuls les paquets déjà désactivés par un passage
     // interrompu sont conservés, pour que le retour arrière reste possible.
-    let mut s = Session::nouvelle(t, pol, obs, "verification", 3, &Reprise { etape: 0, desactives: depuis.desactives.clone() });
+    let mut s = Session::nouvelle(t, pol, obs, "verification", 3, &Reprise { etape: 0, desactives: depuis.desactives.clone(), serie: depuis.serie.clone() });
     s.etape(0, "Contrôle");
     let avant = controler(&mut s, &liste)?;
     let (mut apres, mut retour_arriere) = (None, false);
@@ -436,6 +450,65 @@ mod tests {
         assert!(r.avertissements.iter().any(|a| a.contains("premier plan")));
         // le retour arrière n'est pas un succès : l'accueil d'origine est à nouveau KO
         assert!(!r.ok);
+    }
+
+    /// Transport qui exécute `pm disable-user` sur la box puis coupe le lien pour de bon : la réponse se perd.
+    struct CoupeApresDisable<'a>(&'a FakeBox, &'a str);
+    impl Transport for CoupeApresDisable<'_> {
+        fn shell(&self, cmd: &Commande) -> Result<crate::moteur::transport::Sortie, crate::moteur::transport::ErreurTransport> {
+            let r = self.0.shell(cmd);
+            if cmd.afficher().starts_with("pm disable-user") && cmd.afficher().ends_with(self.1) {
+                self.0.perdre_lien(99);
+                return Err(crate::moteur::transport::ErreurTransport::Coupure("error: device offline".into()));
+            }
+            r
+        }
+        fn shell_stdin(&self, cmd: &Commande) -> Result<crate::moteur::transport::Sortie, crate::moteur::transport::ErreurTransport> {
+            self.0.shell_stdin(cmd)
+        }
+        fn install(&self, apk: &Path) -> Result<crate::moteur::transport::Sortie, crate::moteur::transport::ErreurTransport> {
+            self.0.install(apk)
+        }
+        fn uninstall(&self, p: &str) -> Result<crate::moteur::transport::Sortie, crate::moteur::transport::ErreurTransport> {
+            self.0.uninstall(p)
+        }
+        fn etat(&self) -> Result<crate::moteur::transport::EtatLien, crate::moteur::transport::ErreurTransport> {
+            self.0.etat()
+        }
+        fn connecter(&self) -> Result<(), crate::moteur::transport::ErreurTransport> {
+            self.0.connecter()
+        }
+        fn deconnecter(&self) {
+            self.0.deconnecter()
+        }
+        fn attendre(&self, d: Duration) {
+            self.0.attendre(d)
+        }
+    }
+
+    #[test]
+    fn coupure_juste_apres_pm_disable_puis_reprise_rend_l_accueil() {
+        let f = connectee();
+        f.zen_home_visible(false);
+        let r = verifier(&CoupeApresDisable(&f, LAUNCHERX), &Politique::default(), &mut Silencieux, true, Some(&apk()), &Reprise::default());
+        let Err(Arret::EnPause(pause)) = r else { panic!("attendu : pause, obtenu {:?}", r.map(|_| ())) };
+        assert!(f.instantane().paquets[LAUNCHERX].desactive, "la box a exécuté la désactivation, seule la réponse s'est perdue");
+        f.perdre_lien(0);
+        let r = verifier(&f, &Politique::default(), &mut Silencieux, true, Some(&apk()), &pause.reprise).unwrap();
+        assert!(r.retour_arriere);
+        assert!(!f.instantane().paquets[LAUNCHERX].desactive, "l'accueil d'origine est réactivé malgré la coupure");
+    }
+
+    #[test]
+    fn accueil_d_origine_deja_desactive_est_reactive_si_zen_home_n_est_pas_au_premier_plan() {
+        let f = connectee();
+        f.modifier(|e| e.paquets.get_mut(LAUNCHERX).unwrap().desactive = true);
+        f.zen_home_visible(false);
+        let r = lancer(&f, true);
+        assert!(r.retour_arriere);
+        let e = f.instantane();
+        assert!(!e.paquets[LAUNCHERX].desactive, "désactivé avant le passage, réactivé quand même");
+        assert!(!e.paquets[WRAITH].desactive);
     }
 
     #[test]

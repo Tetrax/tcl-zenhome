@@ -1,6 +1,5 @@
 // Moteur public : les tests d'intégration (tests/parite) le pilotent ; l'exposition en commandes Tauri viendra ensuite.
 pub mod moteur;
-mod reseau;
 
 use serde::Serialize;
 
@@ -27,7 +26,7 @@ fn ping(app: tauri::AppHandle) -> PingInfo {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![ping, reseau::test_reseau])
+        .invoke_handler(tauri::generate_handler![ping])
         .run(tauri::generate_context!())
         .expect("erreur au lancement de Zen Home");
 }

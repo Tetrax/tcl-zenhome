@@ -9,7 +9,10 @@ use std::time::{Duration, Instant};
 
 const SERVICE: &str = "_googlecast._tcp.local.";
 const DUREE_MAX: Duration = Duration::from_secs(30);
+/// Mi Box retenues au plus.
 const ANNONCES_MAX: usize = 64;
+/// Annonces examinées au plus (toutes confondues) : borne le travail et la mémoire face à un flot d'annonces.
+const VUES_MAX: usize = 1000;
 const NOM_MAX: usize = 30;
 const INSTANCE_MAX: usize = 80;
 
@@ -72,6 +75,31 @@ fn filtrer_mibox(annonces: &[Annonce]) -> Vec<BoxTrouvee> {
     trouvees
 }
 
+/// Annonces retenues pendant l'écoute.
+#[derive(Default)]
+struct Collecte {
+    /// Nombre total d'annonces reçues, retenues ou non.
+    vues: usize,
+    /// Instances Mi Box déjà retenues (dédoublonnage).
+    vus: HashSet<String>,
+    annonces: Vec<Annonce>,
+}
+
+impl Collecte {
+    /// Filtre à la réception (instance ET modèle Mi Box) : seules les annonces retenues sont conservées et comptées
+    /// dans `ANNONCES_MAX` ; le total des annonces examinées est borné à part par `VUES_MAX`.
+    fn recevoir(&mut self, a: Annonce) {
+        if self.vues >= VUES_MAX {
+            return;
+        }
+        self.vues += 1;
+        let mibox = instance_mibox(&a.fullname) && a.md.as_deref().is_some_and(|m| m.starts_with("MIBOX"));
+        if mibox && self.annonces.len() < ANNONCES_MAX && self.vus.insert(a.fullname.clone()) {
+            self.annonces.push(a);
+        }
+    }
+}
+
 /// Écoute le réseau local pendant `duree` (plafonnée à 30 s) et renvoie les Mi Box trouvées (bloquant).
 pub fn chercher_box(duree: Duration) -> Result<Vec<BoxTrouvee>, Erreur> {
     let daemon = ServiceDaemon::new().map_err(|e| Erreur::Mdns(e.to_string()))?;
@@ -83,26 +111,23 @@ pub fn chercher_box(duree: Duration) -> Result<Vec<BoxTrouvee>, Erreur> {
         }
     };
     let fin = Instant::now() + duree.min(DUREE_MAX);
-    let mut vus = HashSet::new();
-    let mut annonces = Vec::new();
+    let mut collecte = Collecte::default();
     while let Some(reste) = fin.checked_duration_since(Instant::now()) {
         match rx.recv_timeout(reste) {
             Ok(ServiceEvent::ServiceResolved(s)) => {
-                if annonces.len() < ANNONCES_MAX && vus.insert(s.fullname.clone()) {
-                    annonces.push(Annonce {
-                        fullname: s.fullname.clone(),
-                        md: s.get_property_val_str("md").map(String::from),
-                        fn_: s.get_property_val_str("fn").map(String::from),
-                        ipv4: s.get_addresses_v4().iter().map(|a| a.to_string()).collect(),
-                    });
-                }
+                collecte.recevoir(Annonce {
+                    fullname: s.fullname.clone(),
+                    md: s.get_property_val_str("md").map(String::from),
+                    fn_: s.get_property_val_str("fn").map(String::from),
+                    ipv4: s.get_addresses_v4().iter().map(|a| a.to_string()).collect(),
+                });
             }
             Ok(_) => {}
             Err(_) => break,
         }
     }
     let _ = daemon.shutdown();
-    Ok(filtrer_mibox(&annonces))
+    Ok(filtrer_mibox(&collecte.annonces))
 }
 
 #[cfg(test)]
@@ -159,6 +184,29 @@ mod tests {
             Annonce { fullname: "MIBOX4-q._autre._tcp.local.".into(), md: Some("MIBOX4".into()), fn_: None, ipv4: vec!["192.168.1.37".into()] },
         ];
         assert_eq!(filtrer_mibox(&l), vec![mibox("Salon", "192.168.1.20")]);
+    }
+
+    #[test]
+    fn les_annonces_etrangeres_ne_comptent_pas_dans_la_limite() {
+        let mut c = Collecte::default();
+        for i in 0..100 {
+            c.recevoir(annonce(&format!("Chromecast-{i}"), Some("Chromecast"), Some("TV"), &["192.168.1.30"]));
+        }
+        c.recevoir(annonce("MIBOX4-a", Some("MIBOX4"), Some("Salon"), &["192.168.1.20"]));
+        assert_eq!(filtrer_mibox(&c.annonces), vec![mibox("Salon", "192.168.1.20")]);
+        assert!(c.annonces.len() <= 1, "rien d'étranger n'est conservé : {}", c.annonces.len());
+        assert!(c.vus.len() <= 1, "ni retenu pour le dédoublonnage : {}", c.vus.len());
+    }
+
+    #[test]
+    fn le_nombre_total_d_annonces_vues_est_borne() {
+        let mut c = Collecte::default();
+        for i in 0..(VUES_MAX + 10) {
+            c.recevoir(annonce(&format!("Chromecast-{i}"), Some("Chromecast"), None, &["192.168.1.30"]));
+        }
+        c.recevoir(annonce("MIBOX4-a", Some("MIBOX4"), None, &["192.168.1.20"]));
+        assert!(c.annonces.is_empty(), "au-delà de la borne, plus rien n'est examiné");
+        assert!(c.vues <= VUES_MAX + 1);
     }
 
     #[test]

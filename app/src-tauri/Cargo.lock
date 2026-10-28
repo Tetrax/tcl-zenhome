@@ -4487,7 +4487,6 @@ dependencies = [
 name = "zen-home"
 version = "0.0.2"
 dependencies = [
- "mdns-sd",
  "serde",
  "tauri",
  "tauri-build",

@@ -47,8 +47,21 @@ pub enum EtatConnexion {
 }
 
 /// Modèle affichable : lettres, chiffres, `._ -` et 40 caractères au plus.
-fn nettoyer_modele(brut: &str) -> String {
+pub(super) fn nettoyer_modele(brut: &str) -> String {
     brut.chars().filter(|c| c.is_ascii_alphanumeric() || "._ -".contains(*c)).take(40).collect()
+}
+
+/// Numéro de série (`ro.serialno`) : 1 à 40 caractères parmi `A-Za-z0-9._-`, sinon illisible (`Vide`).
+/// Mémorisé à la connexion (`Reprise::pour_box`), relu après chaque reconnexion et avant d'envoyer un secret ou un APK.
+pub fn lire_serie(t: &dyn Transport) -> Result<String, ErreurTransport> {
+    let lecture = Commande::getprop("ro.serialno").expect("propriété constante valide");
+    let brut = t.shell(&lecture)?.stdout;
+    let serie = brut.trim();
+    if (1..=40).contains(&serie.len()) && serie.chars().all(|c| c.is_ascii_alphanumeric() || "._-".contains(c)) {
+        Ok(serie.to_string())
+    } else {
+        Err(ErreurTransport::Vide)
+    }
 }
 
 /// Connexion à partir de zéro : déconnexion préalable, `connect` (jusqu'à 5 essais), lecture du modèle (3 essais :
