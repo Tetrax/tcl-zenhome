@@ -282,7 +282,12 @@ Puis cliquez sur « Réessayer »." Réessayer Annuler Réessayer) || arreter
 • l'adresse IP $IP est la bonne ;
 • la box est allumée (pas en veille) et sur le même réseau Wi-Fi que ce Mac ;
 • vous avez accepté l'autorisation affichée sur la TV."
-    nom=$(adb_lire shell getprop ro.product.name)
+    for essai in 1 2 3; do   # nom vide = lecture ratée (lien instable), pas un autre appareil
+        nom=$(adb_lire shell getprop ro.product.name)
+        [ -n "$nom" ] && break
+        sleep "$PAUSE"; adb connect "$SERIAL" >/dev/null 2>&1
+    done
+    [ -n "$nom" ] || erreur "La box ne répond pas correctement (impossible de lire son modèle). Redémarrez-la, puis relancez le kit."
     if [ "$nom" != "$PRODUIT" ]; then
         erreur "Cet appareil n'est pas une Xiaomi Mi Box 4 (modèle détecté : « $(printf '%s' "$nom" | tr -cd 'A-Za-z0-9._ -' | cut -c1-40) »).
 
