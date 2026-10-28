@@ -244,6 +244,7 @@ Sur la box : Paramètres > Préférences de l'appareil > À propos > État > Adr
 connecter() {
     local essai co etat nom
     etape "Connexion à la box ($SERIAL)"
+    adb disconnect "$SERIAL" >/dev/null 2>&1   # repart d'un lien neuf : un ancien lien peut rester « offline »
     for essai in 1 2 3 4 5; do
         co=$(adb connect "$SERIAL" 2>&1 | tr -d '\r')
         etat=$(adb -s "$SERIAL" get-state 2>&1 | tr -d '\r')
@@ -284,10 +285,15 @@ creer_sauvegarde() {
 }
 
 lire_etat() {
-    local g e gl=()
-    TOUS=$(adb_lire shell pm list packages)
-    DESACTIVES=$(adb_lire shell pm list packages -d)
-    USERS=$(adb_lire shell pm list packages -3)
+    local g e gl=() essai
+    for essai in 1 2 3; do   # une lecture vide = lien coupé : reconnexion puis nouvel essai
+        assurer_connexion
+        TOUS=$(adb_lire shell pm list packages)
+        DESACTIVES=$(adb_lire shell pm list packages -d)
+        USERS=$(adb_lire shell pm list packages -3)
+        grep -Fq 'package:' <<<"$TOUS" && break
+        adb disconnect "$SERIAL" >/dev/null 2>&1
+    done
     grep -Fq 'package:' <<<"$TOUS" || erreur "Impossible de lire la liste des applis de la box. Redémarrez la box puis relancez le kit."
     GARDER_ACTUEL=","
     g=$(adb_lire shell settings get global zenhome_garder)
