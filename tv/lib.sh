@@ -98,7 +98,14 @@ connecter_tv() {
     fi
     [ "$(adb -s "$SERIAL" get-state 2>/dev/null || true)" = device ] \
         || die "la TV $SERIAL ne répond pas (débogage ADB activé ? autorisation acceptée à l'écran ? IP correcte ?)."
-    nom=$(adb_lire shell getprop ro.product.name)
+    # Nom vide = lecture ratée (lien adb instable), pas un autre appareil : on relit avant de conclure.
+    local essai
+    for essai in 1 2 3; do
+        nom=$(adb_lire shell getprop ro.product.name)
+        [ -n "$nom" ] && break
+        sleep 2
+    done
+    [ -n "$nom" ] || die "la TV $SERIAL ne répond pas (lecture du modèle impossible ; relancez quand la box est allumée)."
     if [ "$nom" != "$PRODUIT" ]; then
         warn "appareil inattendu : ro.product.name = « $nom » (attendu : $PRODUIT)."
         [ -t 0 ] || die "confirmation impossible hors terminal."
