@@ -3,6 +3,7 @@
 /captures/
 # Sorties de build et clé de signature
 launcher/out/
+kit/dist/
 launcher/*.jks
 launcher/local.properties
 launcher/keystore.pass
