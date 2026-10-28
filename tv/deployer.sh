@@ -20,7 +20,7 @@ touche Accueil. Idempotent : peut être relancé sans risque.
   -h, --help     cette aide
 
 Configuration : tv/tv.conf (TV_HOST, LAT, LON, CITY, PROFIL ; voir tv.conf.example), jeton TMDB dans ./tmdb.token.
-TV_HOST et PROFIL peuvent aussi venir de l'environnement.
+TV_HOST et PROFIL peuvent aussi venir de l'environnement ; TMDB_TOKEN_FILE remplace ./tmdb.token (vide = pas de jeton).
 AIDE
 }
 
@@ -78,9 +78,10 @@ if [ -n "$LAT" ] && [ -n "$LON" ]; then
 else
     warn "LAT/LON absents de tv/tv.conf : météo non configurée."
 fi
-# Jeton TMDB : lu en mémoire, jamais affiché
-if [ -f "$ROOT/tmdb.token" ]; then
-    tok=$(tr -d ' \t\r\n' < "$ROOT/tmdb.token")
+# Jeton TMDB : lu en mémoire, jamais affiché (fichier indiqué par TMDB_TOKEN_FILE, vide = aucun, sinon ./tmdb.token)
+TOKEN_FILE=${TMDB_TOKEN_FILE-$ROOT/tmdb.token}
+if [ -n "$TOKEN_FILE" ] && [ -f "$TOKEN_FILE" ]; then
+    tok=$(tr -d ' \t\r\n' < "$TOKEN_FILE")
     [[ -n $tok && $tok =~ ^[A-Za-z0-9._~+/=-]+$ ]] || die "tmdb.token vide ou au format inattendu (contenu non affiché)."
     envoyer_config "--es tmdb_token $(shq "$tok")" "--es tmdb_token ***"
     tok=""
