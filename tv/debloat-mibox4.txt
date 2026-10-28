@@ -1,35 +1,40 @@
 # Xiaomi Mi Box 4 (MIBOX4, ro.product.name=oneday), Android TV 9
 # Tout est DÉSACTIVÉ (pm disable-user), rien n'est désinstallé. Annulation : pm enable <paquet>.
 # Ne jamais y mettre com.google.android.tvlauncher ni com.google.android.tungsten.setupwraith : verifier-tv.sh --fix les gère.
+#
+# Format (lu par le kit d'installation, textes affichés aux utilisateurs) :
+#   paquet  # [balise] Libellé : explication
+# Sans balise         : désactivé d'office (pistage, pub, remplacé par Zen Home).
+# [option]            : au choix, désactivé par défaut.
+# [option:garder]     : au choix, gardé par défaut.
+# Les paquets refusés sont notés sur la box dans settings global zenhome_garder et verifier-tv.sh --fix les laisse actifs.
+# Un nouveau paquet [option] est désactivé par --fix tant que le kit n'a pas reposé la question.
+# Pas de « | » ni de saut de ligne dans les textes.
 
-# Pistage et télémétrie
-tv.alphonso.alphonso_eula              # Alphonso : reconnaissance du contenu regardé, pour la pub
-com.miui.tv.analytics                  # télémétrie Xiaomi
-com.google.android.feedback            # envoi de rapports à Google
-com.google.android.tv.bugreportsender  # envoi de rapports de bug
+# Pistage et pub : désactivés d'office
+tv.alphonso.alphonso_eula              # Alphonso : reconnaît ce que vous regardez pour cibler la publicité.
+com.miui.tv.analytics                  # Statistiques Xiaomi : envoie votre usage de la box à Xiaomi.
+com.google.android.feedback            # Rapports Google : envoie des rapports d'utilisation à Google.
+com.google.android.tv.bugreportsender  # Rapports de bug : envoie des rapports de plantage à Google.
+com.mitv.tvhome.atv                    # PatchWall : l'accueil Xiaomi et ses contenus promotionnels.
+com.mitv.tvhome.michannel              # Chaînes Mi : contenus poussés par Xiaomi.
+com.xm.webcontent                      # Contenus web Xiaomi : promotions affichées par Xiaomi.
+android.autoinstalls.config.xioami.mibox3  # Installations automatiques : installe des applis partenaires sans vous demander.
+com.xiaomi.android.tvsetup.partnercustomizer  # Rangées partenaires : ajoute des publicités de partenaires à l'accueil.
+com.google.android.tvrecommendations   # Recommandations Google : suggestions de l'ancien accueil, inutiles avec Zen Home.
+com.google.android.backdrop            # Écran de veille Google : remplacé par celui de Zen Home.
 
-# Pub, promos et contenu Xiaomi / Google
-com.mitv.tvhome.atv                    # PatchWall, accueil Xiaomi
-com.mitv.tvhome.michannel              # chaînes de contenus Xiaomi
-com.xm.webcontent                      # contenus web et promos Xiaomi
-android.autoinstalls.config.xioami.mibox3  # installe des applis partenaires en douce
-com.xiaomi.android.tvsetup.partnercustomizer  # rangées partenaires sur l'accueil Google
-com.google.android.tvrecommendations   # recommandations de l'accueil Google
-
-# Remplacés par Zen Home ou Chromecast
-com.google.android.backdrop            # écran de veille Google (remplacé par ZenDream)
-com.mitv.milinkservice                 # diffusion Mi Link (Chromecast reste actif)
-com.mitv.videoplayer                   # lecteur vidéo Xiaomi
-
-# Applis Google inutilisées
-com.google.android.play.games          # Play Jeux
-com.google.android.youtube.tvmusic     # YouTube Music
-com.google.android.videos              # Google TV / Play Films
-com.google.android.katniss             # recherche vocale (115 Mo de RAM) : le micro de la télécommande ne marche plus
-
-# Sans objet sur une box
-com.google.android.tv                  # Chaînes en direct : pas de tuner
-com.google.android.tts                 # synthèse vocale (300 Mo), ne sert qu'à TalkBack
-com.google.android.marvin.talkback     # lecteur d'écran
-com.android.camera2                    # appareil photo : pas de caméra
-com.android.printspooler               # impression
+# Au choix
+com.google.android.katniss             # [option:garder] Recherche vocale : le bouton micro de la télécommande. Si vous la désactivez, le micro ne fera plus rien, mais vous libérez environ 115 Mo de mémoire.
+com.google.android.tv                  # [option] Chaînes en direct : sert aux tuners TV. La Mi Box n'en a pas, l'appli tourne pour rien.
+com.google.android.tts                 # [option] Synthèse vocale : lit les textes à voix haute pour le lecteur d'écran. Inutile si personne n'en a besoin, libère environ 300 Mo.
+com.google.android.marvin.talkback     # [option] Lecteur d'écran (TalkBack) : aide pour les personnes malvoyantes. Inutile si personne n'en a besoin.
+com.mitv.milinkservice                 # [option] Mi Link : diffuser depuis un téléphone Xiaomi. Le Chromecast intégré reste disponible pour tous les téléphones.
+com.mitv.videoplayer                   # [option] Lecteur vidéo Xiaomi : lit les vidéos d'une clé USB. Gardez-le si vous regardez des fichiers sur clé USB.
+com.google.android.play.games          # [option] Play Jeux : l'appli de jeux Google. Gardez-la si vous jouez sur la box.
+com.google.android.youtube.tvmusic     # [option] YouTube Music : gardez-la si vous écoutez de la musique avec.
+com.google.android.videos              # [option] Google TV (films Google) : location et achat de films chez Google. Gardez-la si vous en avez acheté.
+com.android.camera2                    # [option] Appareil photo : la box n'a pas de caméra.
+com.android.printspooler               # [option] Impression : la box ne sert pas à imprimer.
+com.xiaomi.mitv.updateservice          # [option:garder] Mises à jour Xiaomi : installe les mises à jour de sécurité de la box. Recommandé de garder.
+com.mitv.download.service              # [option:garder] Téléchargements Xiaomi : utilisé par les mises à jour Xiaomi. Recommandé de garder.
