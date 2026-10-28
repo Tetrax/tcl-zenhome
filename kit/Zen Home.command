@@ -562,7 +562,7 @@ Cochez CELLES QUE VOUS VOULEZ SUPPRIMER (rien n'est coché d'avance). Pour tout 
         UN_PKG=(); UN_ITEM=(); conf=""
         while IFS= read -r l; do
             for ((i = 0; i < ${#U_ITEM[@]}; i++)); do
-                if [ "${U_ITEM[i]}" = "$l" ]; then UN_PKG+=("${U_PKG[i]}"); UN_ITEM+=("${U_ITEM[i]}"); conf="$conf• ${U_ITEM[i]}"$'\n'; fi
+                if [ "${U_ITEM[i]}" = "$l" ]; then UN_PKG+=("${U_PKG[i]}"); UN_ITEM+=("${U_ITEM[i]}"); conf="${conf}• ${U_ITEM[i]}"$'\n'; fi
             done
         done <<<"$sel"
         [ "${#UN_PKG[@]}" -gt 0 ] || return 0
@@ -577,7 +577,7 @@ C'est IRRÉVERSIBLE : leurs données (comptes, réglages, historique) seront per
 choisir() {
     local i lst="" n=0 rep
     for ((i = 0; i < ${#D_PKG[@]}; i++)); do
-        if [ -z "${D_TAG[i]}" ] && dans_liste "$TOUS" "${D_PKG[i]}"; then lst="$lst• ${D_LAB[i]}"$'\n'; n=$((n + 1)); fi
+        if [ -z "${D_TAG[i]}" ] && dans_liste "$TOUS" "${D_PKG[i]}"; then lst="${lst}• ${D_LAB[i]}"$'\n'; n=$((n + 1)); fi
     done
     G1_N=$n
     if [ "$MODE" = installer ] && [ "$n" -gt 0 ]; then
@@ -633,8 +633,8 @@ appliquer() {
         assurer_connexion
         sortie=$(adb_tv uninstall "$p" 2>&1 | tr -d '\r')
         case "$sortie" in
-            *Success*) DESINSTALLES="$DESINSTALLES• $p"$'\n'; info "Désinstallée : $p" ;;
-            *) ECHECS="$ECHECS• $p"$'\n'; warn "échec de la désinstallation de $p" ;;
+            *Success*) DESINSTALLES="${DESINSTALLES}• $p"$'\n'; info "Désinstallée : $p" ;;
+            *) ECHECS="${ECHECS}• $p"$'\n'; warn "échec de la désinstallation de $p" ;;
         esac
     done
 }
