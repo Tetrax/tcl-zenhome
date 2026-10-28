@@ -1,0 +1,26 @@
+[package]
+name = "zen-home"
+version = "0.1.0"
+description = "Installe Zen Home sur une Xiaomi Mi Box 4"
+authors = ["Tetrax"]
+edition = "2024"
+
+[lib]
+# Le suffixe _lib évite un conflit de nom avec le binaire (problème connu sous Windows,
+# voir https://github.com/rust-lang/cargo/issues/8519).
+name = "zen_home_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = 3
+panic = "abort"
+strip = true
