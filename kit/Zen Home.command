@@ -30,6 +30,7 @@ OK_VERIF=0
 # osa MODE TITRE TEXTE ARGS... ; les textes sont des ARGUMENTS d'AppleScript, jamais collés dans son code.
 #   btn  DEFAUT BOUTON... -> bouton cliqué      txt DEFAUT -> texte saisi      pwd -> texte saisi (masqué)
 #   list MULTI(0|1) ITEM... -> éléments choisis, un par ligne
+#   cases N DEFAUT1..DEFAUTN ITEM... -> cases à cocher (multi), les N premiers arguments sont précochés
 # Statut 1 si l'utilisateur ferme ou annule.
 osa() {
     if [ -n "${KIT_TEST:-}" ]; then osa_faux "$@"; return; fi
@@ -44,6 +45,14 @@ on run argv
         return text returned of (display dialog m with title t default answer (item 4 of argv) buttons {"Annuler", "OK"} default button "OK" cancel button "Annuler")
     else if mode is "pwd" then
         return text returned of (display dialog m with title t default answer "" buttons {"Annuler", "OK"} default button "OK" cancel button "Annuler" with hidden answer)
+    else if mode is "cases" then
+        set n to (item 4 of argv) as integer
+        set defs to {}
+        if n > 0 then set defs to items 5 thru (4 + n) of argv
+        set r to choose from list (items (5 + n) thru -1 of argv) with title t with prompt m default items defs multiple selections allowed true empty selection allowed true OK button name "Continuer" cancel button name "Annuler"
+        if r is false then error number -128
+        set AppleScript's text item delimiters to linefeed
+        return r as text
     else
         set multi to (item 4 of argv is "1")
         set r to choose from list (items 5 thru -1 of argv) with title t with prompt m multiple selections allowed multi empty selection allowed multi OK button name "Continuer" cancel button name "Annuler"
@@ -66,6 +75,16 @@ osa_faux() {
     case "$1" in
         btn|txt) if [ "$rep" = DEFAUT ]; then printf '%s\n' "$4"; else printf '%s\n' "$rep"; fi ;;
         pwd) printf '%s\n' "$rep" ;;
+        cases)   # DEFAUT = les éléments précochés ; sinon comme list
+            shift 3; local nd=$1; shift
+            if [ "$rep" = DEFAUT ]; then printf '%s\n' "${@:1:nd}"; return 0; fi
+            shift "$nd"
+            [ "$rep" = NONE ] && return 0
+            for item in "$@"; do
+                for p in $(printf '%s' "$rep" | tr '|' ' '); do
+                    case "$item" in *"$p"*) printf '%s\n' "$item"; break ;; esac
+                done
+            done ;;
         list)
             shift 4
             [ "$rep" = NONE ] && return 0
@@ -526,25 +545,6 @@ defaut_option() {   # paquet, balise -> Garder | Désactiver
     else echo Désactiver; fi
 }
 
-choisir_options() {   # ne pose que les questions utiles : tout en installation, seulement les nouveautés en réparation
-    local i p tag def rep
-    OPT_G=(); OPT_D=()
-    for ((i = 0; i < ${#D_PKG[@]}; i++)); do
-        p=${D_PKG[i]}; tag=${D_TAG[i]}
-        if [ -n "$tag" ] && dans_liste "$TOUS" "$p"; then :; else continue; fi
-        if [ "$MODE" = reparer ]; then
-            if dans_csv "$GARDER_ACTUEL" "$p"; then OPT_G+=("$p"); continue; fi
-            if dans_liste "$DESACTIVES" "$p"; then OPT_D+=("$p"); continue; fi
-        fi
-        def=$(defaut_option "$p" "$tag")
-        rep=$(osa btn "${D_LAB[i]}" "${D_EXP[i]}
-
-Choix proposé : $def (touche Entrée).
-(Nom technique : $p)" "$def" "Tout arrêter" Garder Désactiver) || arreter
-        case "$rep" in Garder) OPT_G+=("$p") ;; Désactiver) OPT_D+=("$p") ;; *) arreter ;; esac
-    done
-}
-
 choisir_applis() {   # applis installées par l'utilisateur ; rien de coché d'avance
     local p t d l lab sel i conf rep
     U_PKG=(); U_ITEM=(); UN_PKG=(); UN_ITEM=()
@@ -574,28 +574,58 @@ C'est IRRÉVERSIBLE : leurs données (comptes, réglages, historique) seront per
     done
 }
 
-choisir() {
-    local i lst="" n=0 rep
+# Applis système de la liste : une fenêtre (recommandé / choisir / arrêter), puis une liste à cocher avec descriptif.
+# En réparation, pas de question : on garde ce qui est noté dans zenhome_garder, on désactive le reste.
+choisir_systeme() {
+    local i p def rep sel l court tout="▶ Tout sélectionner (tout désactiver)" items=() pk=() defs=() reco_d="" reco_g=""
+    OPT_G=(); OPT_D=()
     for ((i = 0; i < ${#D_PKG[@]}; i++)); do
-        if [ -z "${D_TAG[i]}" ] && dans_liste "$TOUS" "${D_PKG[i]}"; then lst="${lst}• ${D_LAB[i]}"$'\n'; n=$((n + 1)); fi
+        p=${D_PKG[i]}
+        dans_liste "$TOUS" "$p" || continue
+        if [ "$MODE" = reparer ]; then
+            if dans_csv "$GARDER_ACTUEL" "$p"; then OPT_G+=("$p"); else OPT_D+=("$p"); fi
+            continue
+        fi
+        def=$(defaut_option "$p" "${D_TAG[i]}")
+        court=${D_EXP[i]%%. *}; court=${court%.}; court=${court:0:90}
+        pk+=("$p"); items+=("${D_LAB[i]}${court:+ — $court}")
+        if [ "$def" = Désactiver ]; then defs+=("${items[${#items[@]}-1]}"); reco_d="${reco_d}• ${D_LAB[i]}"$'\n'
+        else reco_g="${reco_g}• ${D_LAB[i]}"$'\n'; fi
     done
-    G1_N=$n
-    if [ "$MODE" = installer ] && [ "$n" -gt 0 ]; then
-        rep=$(osa btn "Applis désactivées d'office" "Ces $n applis de la box n'apportent rien d'utile : publicité, pistage, rapports envoyés à Xiaomi ou Google, ou doublons de Zen Home. Elles vont être DÉSACTIVÉES (pas supprimées) : « Tout annuler » les remet.
+    [ "$MODE" = reparer ] && return 0
+    [ "${#pk[@]}" -gt 0 ] || return 0
+    rep=$(osa btn "Désactiver les applis inutiles" "La box contient ${#pk[@]} applis qui ne servent à rien avec Zen Home (publicité, pistage, rapports envoyés à Xiaomi ou Google) ou dont vous n'avez peut-être pas besoin. Elles sont DÉSACTIVÉES, pas supprimées : « Tout annuler » les remet.
 
-$lst" Continuer "Tout arrêter" Continuer) || arreter
-        [ "$rep" = Continuer ] || arreter
-    fi
-    choisir_options
+Choix recommandés, à désactiver :
+${reco_d:-• aucune
+}
+À garder :
+${reco_g:-• aucune
+}
+« Choisir moi-même » affiche la liste complète avec un descriptif de chaque appli." "Choix recommandés" "Tout arrêter" "Choisir moi-même" "Choix recommandés") || arreter
+    case "$rep" in
+        "Choix recommandés") sel=$(printf '%s\n' ${defs[@]+"${defs[@]}"}) ;;
+        "Choisir moi-même")
+            sel=$(osa cases "Applis à désactiver" "Cochez les applis à DÉSACTIVER, décochez celles à garder. Les choix recommandés sont déjà cochés ; « Tout sélectionner » les désactive toutes.
+(Cmd + clic pour cocher ou décocher une ligne.)" "${#defs[@]}" ${defs[@]+"${defs[@]}"} "$tout" "${items[@]}") || arreter ;;
+        *) arreter ;;
+    esac
+    if grep -Fqx -- "$tout" <<<"$sel"; then OPT_D=(${pk[@]+"${pk[@]}"}); return 0; fi
+    for ((i = 0; i < ${#pk[@]}; i++)); do
+        if grep -Fqx -- "${items[i]}" <<<"$sel"; then OPT_D+=("${pk[i]}"); else OPT_G+=("${pk[i]}"); fi
+    done
+}
+
+choisir() {
+    local i rep
+    choisir_systeme
     if [ "$MODE" = installer ]; then
         choisir_applis
         rep=$(osa btn "Récapitulatif" "Voici ce qui va être fait sur votre box :
 
-Désactivées d'office : $G1_N applis
-
-Options que vous DÉSACTIVEZ :
+Applis système DÉSACTIVÉES (réversible) :
 $(puces ${OPT_D[@]+"${OPT_D[@]}"})
-Options que vous GARDEZ :
+Applis système GARDÉES :
 $(puces ${OPT_G[@]+"${OPT_G[@]}"})
 Applis DÉSINSTALLÉES (définitif) :
 $(for i in ${UN_ITEM[@]+"${!UN_ITEM[@]}"}; do printf '• %s\n' "${UN_ITEM[i]}"; done)
@@ -611,7 +641,7 @@ appliquer() {
     etape "Application de vos choix"
     MODIFIE=1
     for p in ${OPT_G[@]+"${OPT_G[@]}"}; do
-        if paquet_valide "$p" && idx_debloat "$p" && [ -n "${D_TAG[IDX]}" ]; then g="${g:+$g,}$p"; fi
+        if paquet_valide "$p" && idx_debloat "$p"; then g="${g:+$g,}$p"; fi
     done
     for essai in 1 2 3; do   # écriture puis relecture : recommencée si la box a décroché entre les deux
         assurer_connexion
@@ -652,9 +682,8 @@ terminer() {
     else etat="Vérification finale : quelques points sont à regarder (voir le Terminal et le rapport)."; fi
     resume="Zen Home est prêt.
 
-Désactivées d'office : ${G1_N:-0} applis
-Options désactivées : ${#OPT_D[@]}
-Options gardées : ${#OPT_G[@]}
+Applis système désactivées : ${#OPT_D[@]}
+Applis système gardées : ${#OPT_G[@]}
 Applis désinstallées : $(printf '%s' "${DESINSTALLES:-}" | grep -c . || true)
 $etat
 
