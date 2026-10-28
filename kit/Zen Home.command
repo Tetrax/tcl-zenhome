@@ -486,19 +486,22 @@ Ce qui a déjà été fait est conservé : le kit reprend là où il s'est arrê
 }
 
 # Lance un script du kit (rejouable sans risque) ; s'il échoue parce que la box a décroché, reconnecte et recommence.
+# LS_DISCRET=1 : sortie seulement dans le rapport (pas à l'écran) ; la dernière sortie reste dans DERNIERE_SORTIE.
 lancer_script() {
-    local n rc=1 out
+    local n rc=1 out ecran=/dev/stdout
+    [ -n "${LS_DISCRET:-}" ] && ecran=/dev/null
     out=$(mktemp "${TMPDIR:-/tmp}/zenhome-sortie.XXXXXX") || out=/dev/null
     for n in 1 2 3; do
         assurer_connexion
-        /bin/bash "$@" 2>&1 | tee -a "$RAPPORT" "$out"; rc=${PIPESTATUS[0]}
+        /bin/bash "$@" 2>&1 | tee -a "$RAPPORT" "$out" > "$ecran"; rc=${PIPESTATUS[0]}
         [ "$rc" -eq 0 ] && break
         # vraie erreur, sauf si la box a décroché (même brièvement : messages de coupure d'adb dans la sortie)
         if connexion_ok && ! grep -Eq 'device offline|device .* not found|ne répond pas|error: closed|no devices|Connection refused|No route to host' "$out" 2>/dev/null; then break; fi
         info "La box a décroché pendant l'opération : nouvelle tentative."
         [ "$out" = /dev/null ] || : > "$out"
     done
-    [ "$out" = /dev/null ] || rm -f "$out"
+    DERNIERE_SORTIE=""
+    if [ "$out" != /dev/null ]; then DERNIERE_SORTIE=$(cat "$out"); rm -f "$out"; fi
     return "$rc"
 }
 
@@ -676,7 +679,11 @@ appliquer() {
 
 verifier() {
     etape "Vérification et réglage final"
-    if lancer_script "$ROOT/tv/verifier-tv.sh" --fix; then OK_VERIF=1; else OK_VERIF=0; fi
+    info "Réglage de la box en cours, quelques instants… (le détail complet est dans le rapport)"
+    if LS_DISCRET=1 lancer_script "$ROOT/tv/verifier-tv.sh" --fix; then OK_VERIF=1; else OK_VERIF=0; fi
+    # À l'écran : seulement le dernier tableau (l'état final), pas le contrôle d'avant réglage.
+    printf '\n'
+    awk '/^ETAT / { buf = "" } { buf = buf $0 "\n" } END { printf "%s", buf }' <<<"$DERNIERE_SORTIE"
 }
 
 # ---------------------------------------------------------------- 9. fin
