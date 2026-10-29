@@ -274,7 +274,7 @@ impl Coeur {
             std::thread::sleep(self.cfg.rythme_demo * 10);
             vec![BoxTrouvee { nom: demo::NOM_BOX.into(), ip: demo::IP_BOX.into() }]
         } else {
-            zh_reseau::chercher_box(Duration::from_secs(5))?
+            zh_reseau::chercher_box(Duration::from_secs(15))?
         };
         let vue = trouvees.iter().enumerate().map(|(i, b)| BoxUi { id: i as u32, nom: b.nom.clone(), ip: b.ip.clone() }).collect();
         self.etat().boxes = trouvees;

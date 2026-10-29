@@ -753,6 +753,7 @@ checksum = "e13084392c5e4bc371903e2935a5eaeed24905a7511356b883835e18a78f6879"
 name = "zh-reseau"
 version = "0.0.1"
 dependencies = [
+ "if-addrs",
  "mdns-sd",
  "serde",
  "serde_json",
