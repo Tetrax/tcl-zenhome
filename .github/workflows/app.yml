@@ -1,0 +1,70 @@
+name: App de bureau
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: app-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  verifier:
+    name: Tests, clippy et vérifications (macOS)
+    runs-on: macos-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            app/crates/reseau
+            app/src-tauri
+
+      - name: Dépendances npm
+        working-directory: app
+        run: npm ci
+
+      - name: Vérification Svelte et TypeScript
+        working-directory: app
+        run: npm run check
+
+      - name: Tests du lot
+        working-directory: app
+        run: npm run test:lot
+
+      # Les tests marqués #[ignore] (accès réseau) ne sont volontairement pas lancés.
+      - name: Tests (crate reseau)
+        working-directory: app/crates/reseau
+        run: cargo test
+
+      - name: Clippy (crate reseau)
+        working-directory: app/crates/reseau
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Tests (src-tauri : lib et parité)
+        working-directory: app/src-tauri
+        run: cargo test
+
+      - name: Clippy (src-tauri)
+        working-directory: app/src-tauri
+        run: cargo clippy --all-targets -- -D warnings
