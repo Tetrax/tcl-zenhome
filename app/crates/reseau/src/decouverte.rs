@@ -15,6 +15,8 @@ const DUREE_MAX: Duration = Duration::from_secs(30);
 const ANNONCES_MAX: usize = 64;
 /// Annonces examinées au plus (toutes confondues) : borne le travail et la mémoire face à un flot d'annonces.
 const VUES_MAX: usize = 1000;
+/// IP d'appareils Cast qui ne sont pas des Mi Box, retenues au plus.
+const AUTRES_MAX: usize = 256;
 const NOM_MAX: usize = 30;
 const INSTANCE_MAX: usize = 80;
 /// Après la première box trouvée, on attend encore un peu pour en attraper une seconde.
@@ -95,6 +97,8 @@ struct Collecte {
     /// Instances Mi Box déjà retenues (dédoublonnage).
     vus: HashSet<String>,
     annonces: Vec<Annonce>,
+    /// IPv4 d'annonces Cast résolues qui ne sont pas des Mi Box (exclues du balayage).
+    autres: HashSet<Ipv4Addr>,
 }
 
 impl Collecte {
@@ -106,7 +110,13 @@ impl Collecte {
         }
         self.vues += 1;
         let mibox = instance_mibox(&a.fullname) && a.md.as_deref().is_some_and(|m| m.starts_with("MIBOX"));
-        if mibox && self.annonces.len() < ANNONCES_MAX && self.vus.insert(a.fullname.clone()) {
+        if !mibox {
+            for ip in a.ipv4.iter().filter_map(|s| valider_ipv4(s)) {
+                if self.autres.len() < AUTRES_MAX {
+                    self.autres.insert(ip);
+                }
+            }
+        } else if self.annonces.len() < ANNONCES_MAX && self.vus.insert(a.fullname.clone()) {
             self.annonces.push(a);
         }
     }
@@ -143,10 +153,18 @@ fn ips_locales() -> Vec<Ipv4Addr> {
 }
 
 /// Sonde le port adb de `hotes` en parallèle (borné) et note dans `trouves` ceux qui répondent.
-/// Recommence tant que rien n'est trouvé ; s'arrête dès que `stop` est levé.
+/// Repasse en continu sur les hôtes pas encore trouvés jusqu'à ce que `stop` soit levé.
 fn balayer(hotes: &[Ipv4Addr], trouves: &Mutex<Vec<Ipv4Addr>>, stop: &AtomicBool) {
-    while !stop.load(Ordering::Relaxed) && trouves.lock().unwrap().is_empty() && !hotes.is_empty() {
-        passe(hotes, trouves, stop);
+    while !stop.load(Ordering::Relaxed) && !hotes.is_empty() {
+        let restants: Vec<Ipv4Addr> = {
+            let t = trouves.lock().unwrap();
+            hotes.iter().filter(|h| !t.contains(h)).copied().collect()
+        };
+        if restants.is_empty() {
+            std::thread::sleep(Duration::from_millis(100));
+        } else {
+            passe(&restants, trouves, stop);
+        }
     }
 }
 
@@ -169,20 +187,24 @@ fn passe(hotes: &[Ipv4Addr], trouves: &Mutex<Vec<Ipv4Addr>>, stop: &AtomicBool) 
     });
 }
 
-/// Fusionne : les box mDNS (avec leur vrai nom) priment, les hôtes du balayage s'ajoutent sous le nom « Mi Box ».
-fn fusionner(mdns: Vec<BoxTrouvee>, balayage: &[Ipv4Addr]) -> Vec<BoxTrouvee> {
-    let mut tout = mdns;
-    for ip in balayage {
+/// Fusionne : si mDNS a trouvé des Mi Box, on ne rend que celles-ci. Sinon (repli pur), on rend les hôtes du balayage
+/// qui ne sont pas connus comme autres appareils Cast, sous le nom « Appareil à vérifier ».
+fn fusionner(mdns: Vec<BoxTrouvee>, balayage: &[Ipv4Addr], exclus: &HashSet<Ipv4Addr>) -> Vec<BoxTrouvee> {
+    if !mdns.is_empty() {
+        return mdns;
+    }
+    let mut tout: Vec<BoxTrouvee> = Vec::new();
+    for ip in balayage.iter().filter(|ip| !exclus.contains(ip)) {
         let ip = ip.to_string();
         if !tout.iter().any(|b| b.ip == ip) {
-            tout.push(BoxTrouvee { nom: "Mi Box".into(), ip });
+            tout.push(BoxTrouvee { nom: "Appareil à vérifier".into(), ip });
         }
     }
     tout
 }
 
 /// Cherche les Mi Box pendant `duree` au plus (plafonnée à 30 s) : écoute mDNS et balayage TCP du port adb en parallèle.
-/// Rend la main `GRACE` après la première box trouvée (bloquant).
+/// Rend la main `GRACE` après la première Mi Box reconnue par mDNS (le balayage ne l'écourte jamais) ; bloquant.
 pub fn chercher_box(duree: Duration) -> Result<Vec<BoxTrouvee>, Erreur> {
     let daemon = ServiceDaemon::new().map_err(|e| Erreur::Mdns(e.to_string()))?;
     let rx = match daemon.browse(SERVICE) {
@@ -215,7 +237,7 @@ pub fn chercher_box(duree: Duration) -> Result<Vec<BoxTrouvee>, Erreur> {
                 Err(RecvTimeoutError::Disconnected) => break,
             }
             mdns = filtrer_mibox(&collecte.annonces);
-            if !grace_lancee && (!mdns.is_empty() || !trouves.lock().unwrap().is_empty()) {
+            if !grace_lancee && !mdns.is_empty() {
                 grace_lancee = true;
                 limite = limite.min(Instant::now() + GRACE);
             }
@@ -223,7 +245,7 @@ pub fn chercher_box(duree: Duration) -> Result<Vec<BoxTrouvee>, Erreur> {
         stop.store(true, Ordering::Relaxed);
     });
     let _ = daemon.shutdown();
-    Ok(fusionner(mdns, &trouves.into_inner().unwrap()))
+    Ok(fusionner(mdns, &trouves.into_inner().unwrap(), &collecte.autres))
 }
 
 #[cfg(test)]
@@ -344,13 +366,30 @@ mod tests {
     }
 
     #[test]
-    fn fusion_mdns_prioritaire_et_dedoublonnee() {
-        let f = fusionner(
-            vec![mibox("Salon", "192.168.50.14")],
-            &[ip("192.168.50.14"), ip("192.168.50.30"), ip("192.168.50.30")],
-        );
-        assert_eq!(f, vec![mibox("Salon", "192.168.50.14"), mibox("Mi Box", "192.168.50.30")]);
-        assert_eq!(fusionner(vec![], &[ip("192.168.50.14")]), vec![mibox("Mi Box", "192.168.50.14")]);
-        assert!(fusionner(vec![], &[]).is_empty());
+    fn fusion_mdns_seul_si_present() {
+        let exclus = HashSet::new();
+        let f = fusionner(vec![mibox("Salon", "192.168.50.14")], &[ip("192.168.50.14"), ip("192.168.50.30")], &exclus);
+        assert_eq!(f, vec![mibox("Salon", "192.168.50.14")]);
+    }
+
+    #[test]
+    fn repli_pur_exclut_les_autres_appareils_cast_et_dedoublonne() {
+        let exclus = HashSet::from([ip("192.168.50.17")]);
+        let f = fusionner(vec![], &[ip("192.168.50.17"), ip("192.168.50.30"), ip("192.168.50.30")], &exclus);
+        assert_eq!(f, vec![mibox("Appareil à vérifier", "192.168.50.30")]);
+        assert!(fusionner(vec![], &[], &exclus).is_empty());
+    }
+
+    #[test]
+    fn les_annonces_non_mibox_alimentent_les_exclusions_bornees() {
+        let mut c = Collecte::default();
+        c.recevoir(annonce("Smart-TV-Pro-x", Some("Smart TV Pro"), Some("TCL VAL"), &["192.168.50.17", "8.8.8.8", "pas-ip"]));
+        c.recevoir(annonce("MIBOX4-a", Some("MIBOX4"), Some("SALON"), &["192.168.50.14"]));
+        assert_eq!(c.autres, HashSet::from([ip("192.168.50.17")]));
+        assert_eq!(c.annonces.len(), 1);
+        for i in 0..600u32 {
+            c.recevoir(annonce(&format!("T{i}"), Some("TV"), None, &[&format!("10.0.{}.{}", i / 250, i % 250)]));
+        }
+        assert!(c.autres.len() <= AUTRES_MAX);
     }
 }
