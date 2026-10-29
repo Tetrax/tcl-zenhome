@@ -27,8 +27,15 @@
       "devCsp": "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src ipc: http://ipc.localhost http://localhost:1420 ws://localhost:1420"
     }
   },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDUxOTUxNjhGQjdDNjhDODYKUldTR2pNYTNqeGFWVVlrN2phWTFaQy8waXVUaG5TU1FBTjczcStXOUloVXpRRTBLUVgxbzg1Y2MK",
+      "endpoints": ["https://github.com/Tetrax/tcl-zenhome/releases/latest/download/latest.json"]
+    }
+  },
   "bundle": {
     "active": true,
+    "createUpdaterArtifacts": true,
     "resources": { "resources/ZenHome.apk": "ZenHome.apk" },
     "targets": "all",
     "icon": [

@@ -19,7 +19,7 @@ use super::demo;
 use super::desinstallation;
 use super::erreur::ErreurCommande;
 use super::evenements::{Emetteur, EvenementUi, ObservateurUi};
-use super::{memoire, persistance};
+use super::{memoire, persistance, rapport};
 use super::surveillance::{Attente, Interruption, Occupation, Surveillance, Surveille};
 use super::types::*;
 use crate::moteur::choix::{self, Choix};
@@ -258,7 +258,18 @@ impl Coeur {
             sauvegardes_dir_existe: self.cfg.donnees.join("sauvegardes").is_dir(),
             reprise_en_attente: persistance::en_attente(&self.cfg.donnees),
             origine: self.origine_courante().map(|o| OrigineUi { date: o.date }),
+            boxes_memorisees: self.boxes_memorisees(),
         }
+    }
+
+    /// Box mémorisées, la plus récente d'abord. En démo, SALON joue celle d'une installation précédente.
+    fn boxes_memorisees(&self) -> Vec<BoxMemoriseeUi> {
+        let vue = |b: BoxTrouvee| BoxMemoriseeUi { nom: b.nom, ip: b.ip };
+        if self.cfg.demo {
+            let (nom, ip, _) = demo::BOXES[0];
+            return vec![vue(BoxTrouvee { nom: nom.into(), ip: ip.into() })];
+        }
+        memoire::lire(&self.cfg.donnees).into_iter().rev().map(vue).collect()
     }
 
     pub fn installer_adb(&self, accord: bool, emettre: Emetteur) -> Result<(), ErreurCommande> {
@@ -300,7 +311,8 @@ impl Coeur {
             std::thread::sleep(self.cfg.rythme_demo * 10);
             Ok(demo::BOXES.iter().map(|(nom, ip, _)| BoxTrouvee { nom: (*nom).into(), ip: (*ip).into() }).collect())
         } else {
-            zh_reseau::chercher_box(Duration::from_secs(15), &memoire::lire(&self.cfg.donnees))
+            // `annuler` lève le drapeau : la recherche rend alors ce qu'elle a trouvé, sans erreur
+            zh_reseau::chercher_box(Duration::from_secs(15), &memoire::lire(&self.cfg.donnees), &self.annule)
         };
         self.garder_recherche(resultat)
     }
@@ -396,6 +408,20 @@ impl Coeur {
             return Err(ErreurCommande::interne("Impossible d'ouvrir le dossier des sauvegardes."));
         }
         Ok(())
+    }
+
+    /// Rapport à copier : version, système, erreur et résumé de la dernière action (filtrés, sans secret).
+    pub fn rapport_texte(&self, erreur: &str, resume: &str) -> String {
+        rapport::complet(&self.cfg.version, &rapport::systeme(), erreur, resume)
+    }
+
+    /// Prépare un e-mail à l'adresse fixe de l'appli (corps borné) dans la messagerie du Mac. En démo : rien n'est ouvert.
+    pub fn envoyer_rapport(&self, erreur: &str, resume: &str) -> Result<(), ErreurCommande> {
+        let corps = rapport::corps_mail(&self.cfg.version, &rapport::systeme(), erreur, resume);
+        if self.cfg.demo {
+            return Ok(());
+        }
+        rapport::ouvrir(&rapport::mailto(&corps))
     }
 
     pub fn en_demo(&self) -> bool {

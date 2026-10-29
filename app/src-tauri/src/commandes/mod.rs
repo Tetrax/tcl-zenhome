@@ -8,6 +8,7 @@ mod evenements;
 mod ipc;
 mod memoire;
 mod persistance;
+mod rapport;
 mod surveillance;
 mod types;
 #[cfg(test)]

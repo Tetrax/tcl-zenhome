@@ -234,7 +234,9 @@ fn fusionner(mut mdns: Vec<BoxTrouvee>, connues: &[BoxTrouvee], balayage: &[Ipv4
 /// `connues` : box déjà rencontrées (nom, IP), sondées tout de suite en parallèle ; une qui répond compte comme trouvée.
 /// Rend la main `GRACE` après la première Mi Box reconnue par mDNS ou répondant depuis `connues` (le balayage ne
 /// l'écourte jamais) ; bloquant.
-pub fn chercher_box(duree: Duration, connues: &[BoxTrouvee]) -> Result<Vec<BoxTrouvee>, Erreur> {
+/// `arret` levé (même d'avance) : la recherche s'arrête aussitôt (au plus le délai d'une connexion TCP en cours) et rend
+/// ce qu'elle a déjà trouvé.
+pub fn chercher_box(duree: Duration, connues: &[BoxTrouvee], arret: &AtomicBool) -> Result<Vec<BoxTrouvee>, Erreur> {
     let daemon = ServiceDaemon::new().map_err(|e| Erreur::Mdns(e.to_string()))?;
     let rx = match daemon.browse(SERVICE) {
         Ok(rx) => rx,
@@ -258,7 +260,7 @@ pub fn chercher_box(duree: Duration, connues: &[BoxTrouvee]) -> Result<Vec<BoxTr
     std::thread::scope(|sc| {
         sc.spawn(|| balayer(&hotes, &trouves, &stop_balayage, DELAI_CONNEXION, PASSE_MIN));
         sc.spawn(|| balayer(&ips_connues, &connues_ok, &stop, DELAI_CONNUE, PASSE_CONNUE));
-        while let Some(reste) = limite.checked_duration_since(Instant::now()) {
+        while let Some(reste) = limite.checked_duration_since(Instant::now()).filter(|_| !arret.load(Ordering::Relaxed)) {
             match rx.recv_timeout(reste.min(Duration::from_millis(100))) {
                 Ok(ServiceEvent::ServiceResolved(s)) => {
                     collecte.recevoir(Annonce {
@@ -318,6 +320,15 @@ mod tests {
         let t = Instant::now();
         finir_passe(t, Duration::from_secs(10), &stop);
         assert!(t.elapsed() < Duration::from_secs(1));
+    }
+
+    #[test]
+    fn arret_leve_d_avance_rend_la_main_vite() {
+        let arret = AtomicBool::new(true);
+        let t = Instant::now();
+        let r = chercher_box(Duration::from_secs(15), &[mibox("SALON", "192.168.1.20")], &arret);
+        assert!(t.elapsed() < Duration::from_secs(3), "{:?}", t.elapsed());
+        assert!(r.map_or(true, |l| l.len() <= 1)); // erreur mDNS possible en bac à sable, sinon au plus la box connue
     }
 
     #[test]

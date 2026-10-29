@@ -28,6 +28,8 @@ fn ping(app: tauri::AppHandle) -> PingInfo {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .setup(commandes::preparer)
         .invoke_handler(tauri::generate_handler![
             ping,
@@ -45,6 +47,8 @@ pub fn run() {
             commandes::annuler,
             commandes::couper_debogage,
             commandes::ouvrir_sauvegardes,
+            commandes::rapport_texte,
+            commandes::envoyer_rapport,
             commandes::desinstaller_mac,
         ])
         .build(tauri::generate_context!())

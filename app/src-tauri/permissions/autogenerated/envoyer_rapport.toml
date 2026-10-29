@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-envoyer-rapport"
+description = "Enables the envoyer_rapport command without any pre-configured scope."
+commands.allow = ["envoyer_rapport"]
+
+[[permission]]
+identifier = "deny-envoyer-rapport"
+description = "Denies the envoyer_rapport command without any pre-configured scope."
+commands.deny = ["envoyer_rapport"]

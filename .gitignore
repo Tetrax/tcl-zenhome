@@ -18,3 +18,5 @@ app/dist/
 app/src-tauri/target/
 app/src-tauri/gen/
 app/src-tauri/resources/
+app/dist-release/
+app/*.dmg

@@ -3,7 +3,7 @@ import { api, normaliserErreur } from "./api";
 import { fusionner, reduire } from "./lot";
 import type { Moment } from "../scene";
 import type {
-  AppliSysteme, BoxConnectee, BoxTrouvee, Choix, Cible, ErreurZen, EtatInitial, Evenement, Inventaire,
+  AppliSysteme, BoxConnectee, BoxMemorisee, BoxTrouvee, Choix, Cible, ErreurZen, EtatInitial, Evenement, Inventaire,
   RapportApplication, RapportRestauration, Verification, Ville,
 } from "./types";
 
@@ -24,6 +24,9 @@ export interface BoxLot {
   /** Vrai si la box n'a pas pris part aux questions communes (échec du passage 1) : aucune désinstallation pour elle. */
   horsChoix?: boolean;
 }
+
+/** Une box proposée dans la recherche : trouvée (avec `id`) ou seulement mémorisée (connexion par son adresse). */
+export interface Proposition { id?: number; nom: string; ip: string; recente: boolean }
 
 /** Moment de la journée affiché derrière chaque écran. */
 export const MOMENT: Record<Ecran, Moment> = {
@@ -61,13 +64,15 @@ class Zen {
   rechercheEnCours = $state(false);
   boxes = $state<BoxTrouvee[]>([]);
   rechercheFaite = $state(false);
+  /** Box déjà configurées, affichées dès le début de la recherche. */
+  memorisees = $state<BoxMemorisee[]>([]);
   /** Après un échec de connexion : rouvre directement la saisie de l'adresse. */
   forcerManuel = $state(false);
   cible = $state<Cible | null>(null);
   box = $state<BoxConnectee | null>(null);
 
-  // Plusieurs box : les id cochés dans la recherche, puis le lot (null = parcours à une seule box)
-  coches = $state<number[]>([]);
+  // Plusieurs box : les adresses cochées dans la recherche, puis le lot (null = parcours à une seule box)
+  coches = $state<string[]>([]);
   lot = $state<BoxLot[] | null>(null);
   lotPasse = $state(0); // installer : 1 = installation, 2 = application des choix
   lotPhase = $state<"travail" | "choix">("travail");
@@ -171,8 +176,19 @@ class Zen {
   }
 
   // ---- Recherche ----
+  /** Les box trouvées, puis les mémorisées qui n'ont pas (encore) répondu : une seule ligne par adresse. */
+  get propositions(): Proposition[] {
+    const trouvees = this.boxes.map((b) => ({ ...b, recente: false }));
+    return [...trouvees, ...this.memorisees.filter((m) => !this.boxes.some((b) => b.ip === m.ip)).map((m) => ({ ...m, recente: true }))];
+  }
+  /** Une connexion ou un lot arrête la recherche en cours (le cœur ne fait qu'une chose à la fois) et attend qu'elle ait rendu la main. */
+  private async attendreRecherche() {
+    if (this.rechercheEnCours) await api.annuler().catch(() => {});
+    while (this.rechercheEnCours) await new Promise((r) => setTimeout(r, 200)); }
+
   async chercher(essai = 0): Promise<void> {
     this.rechercheEnCours = true; this.rechercheFaite = false; this.boxes = []; this.coches = []; this.erreur = null;
+    api.etatInitial().then((i) => { this.memorisees = i.boxes_memorisees ?? []; }, () => {}); // sans attendre : la recherche continue
     try {
       this.boxes = await api.chercherBox();
       this.rechercheFaite = true;
@@ -193,6 +209,8 @@ class Zen {
     this.aller("connexion");
     this.debut("Connexion à la box");
     try {
+      await this.attendreRecherche();
+      if (!this.travail.actif) return; // retour à l'accueil pendant l'attente
       this.box = await api.connecter(cible, this.sur);
       this.fin();
       this.succes++;
@@ -314,10 +332,13 @@ class Zen {
 
   // ---- Plusieurs box : une box après l'autre, avec les mêmes choix (voir CONTRAT.md, « Plusieurs box ») ----
   /** Une seule box cochée : parcours habituel ; deux ou plus : lot. */
-  choisirBoxes(ids: number[]) {
-    this.coches = ids;
-    if (ids.length < 2) return void this.connecter({ id: ids[0] });
-    this.lot = this.boxes.filter((b) => ids.includes(b.id)).map((b) => ({ cible: { id: b.id }, nom: b.nom, ip: b.ip, message: "", etat: "attente" as const }));
+  choisirBoxes(ips: string[]) {
+    this.coches = ips;
+    const choisies = this.propositions.filter((p) => ips.includes(p.ip));
+    const cible = (p: Proposition): Cible => (p.id === undefined ? { ip: p.ip } : { id: p.id });
+    if (!choisies.length) return;
+    if (choisies.length < 2) return void this.connecter(cible(choisies[0]));
+    this.lot = choisies.map((p) => ({ cible: cible(p), nom: p.nom, ip: p.ip, message: "", etat: "attente" as const }));
     this.lotPasse = 0;
     if (this.mode === "installer") this.aller("meteo"); // pas de box connectée : météo et films d'abord
     else if (this.mode === "reparer") void this.lancerTraitement(this.lot, 0);
@@ -343,6 +364,7 @@ class Zen {
     this.lotAnnule = false; this.lotPhase = "travail"; this.lotFait = 0; this.lotSur = boxes.length;
     for (const b of boxes) { b.etat = "attente"; b.message = ""; }
     this.aller("lot");
+    await this.attendreRecherche();
     for (const b of boxes) {
       if (this.lot !== lot) return false;
       if (this.lotAnnule) { b.etat = "non-traitee"; continue; }
@@ -423,6 +445,21 @@ class Zen {
     }
     this.fin();
     this.debogageCoupe = ok.every((b) => b.debogage === "oui") ? "oui" : "echec";
+  }
+  /** Résumé de la dernière action pour le rapport (textes déjà nettoyés par le cœur ; le cœur filtre et borne encore). */
+  resumeRapport(): string {
+    const l = [`Action : ${{ installer: "installation", reparer: "réparation", restaurer: "retour à l'état d'origine" }[this.mode]}`];
+    const applis = (r?: RapportApplication | null) => { if (r) l.push(`Applis : ${r.desactivees} désactivées, ${r.gardees} gardées, ${r.desinstallees.length} désinstallées, ${r.echecs.length} échecs${r.echecs.length ? ` (${r.echecs.join(", ")})` : ""}`); };
+    const verif = (v?: Verification | null) => {
+      if (!v) return;
+      l.push(`Vérification : ${v.lignes.length - v.ko} points sur ${v.lignes.length} en ordre`);
+      for (const x of v.lignes) if (x.etat !== "ok") l.push(`${x.etat === "ko" ? "À REGARDER" : "À noter"} : ${x.controle} ${x.detail}`.trim());
+    };
+    const resto = (r?: RapportRestauration | null) => { if (r) l.push(`Restauration ${r.incomplete ? "incomplète" : "terminée"}`, ...r.avertissements); };
+    if (this.lot) {
+      this.lot.forEach((b, i) => { l.push(`Box ${i + 1} : ${b.etat}${b.message ? ` : ${b.message}` : ""}`); applis(b.rapport); verif(b.verification); resto(b.restauration); });
+    } else { applis(this.rapport); verif(this.verification); resto(this.restauration); }
+    return l.join("\n");
   }
   async ouvrirSauvegardes() {
     try { await api.ouvrirSauvegardes(); } catch (e) { this.erreur = normaliserErreur(e); }

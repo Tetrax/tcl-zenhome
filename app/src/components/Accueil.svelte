@@ -1,6 +1,7 @@
 <script lang="ts">
   import Panneau from "./Panneau.svelte";
   import Icone from "./Icone.svelte";
+  import MiseAJour from "./MiseAJour.svelte";
   import DialogueDesinstallation from "./DialogueDesinstallation.svelte";
   import { zen } from "../lib/zen.svelte";
 
@@ -14,6 +15,7 @@
   {#if zen.init?.reprise_en_attente}
     <div class="note alerte"><Icone nom="alerte" /><p><b>Une opération précédente a été interrompue.</b> Branchez la box, puis choisissez « Réparer » : Zen Home vérifiera son état et corrigera ce qui reste à faire.</p></div>
   {/if}
+  <MiseAJour />
   <p class="lead">Un accueil apaisé pour votre Xiaomi Mi Box 4, sans publicité ni pistage. Il suffit d'une dizaine de minutes.</p>
   <h3 style="margin-top:22px">Avant de commencer</h3>
   <ol class="consignes">

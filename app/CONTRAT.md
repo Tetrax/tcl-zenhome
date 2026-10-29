@@ -8,7 +8,7 @@ Les commandes longues reçoivent un `Channel<Evenement>` (Tauri `ipc::Channel`) 
 
 | Commande | Arguments | Résultat |
 |---|---|---|
-| `etat_initial` | — | `{ version, adb_installe: bool, demo: bool, sauvegardes_dir_existe: bool, reprise_en_attente: bool, origine: { date: string } \| null }` |
+| `etat_initial` | — | `{ version, adb_installe: bool, demo: bool, sauvegardes_dir_existe: bool, reprise_en_attente: bool, origine: { date: string } \| null, boxes_memorisees: [{ nom: string, ip: string }] }` |
 | `installer_adb` | `accord: bool`, `canal` | `null` ; progression via `{type:"progression", fraction}` |
 | `chercher_box` | — | `[{ id: number, nom: string, ip: string }]` (les `id` désignent la dernière liste gardée côté Rust ; ils ne sont jamais réutilisés d'une recherche à l'autre : un id d'une recherche précédente donne `choix_invalide`) |
 | `connecter` | `cible: {id: number} \| {ip: string}`, `canal` | `{ nom, ip, modele }` |
@@ -22,6 +22,8 @@ Les commandes longues reçoivent un `Channel<Evenement>` (Tauri `ipc::Channel`) 
 | `annuler` | — | `null` (demande l'arrêt propre de l'action en cours) |
 | `couper_debogage` | — | `null` (coupe le débogage USB de la box, puis ferme la session adb) |
 | `ouvrir_sauvegardes` | — | `null` (ouvre le dossier des sauvegardes de l'appli dans le Finder) |
+| `rapport_texte` | `erreur: string`, `resume: string` | `string` (rapport à copier : version, système, erreur et résumé, filtrés ; voir « Rapport ») |
+| `envoyer_rapport` | `erreur: string`, `resume: string` | `null` (ouvre la messagerie avec un e-mail prêt, voir « Rapport ») |
 | `desinstaller_mac` | `garder_sauvegardes: bool` | `null` (retire Zen Home de ce Mac, voir plus bas ; l'appli se ferme ensuite) |
 
 `Inventaire` :
@@ -43,6 +45,14 @@ La sauvegarde d'origine d'une box est la plus ancienne sauvegarde de sa série (
 
 `restaurer` utilise l'origine de la box de la session si elle existe : seules les applis désactivées depuis (et non avant) Zen Home sont réactivées ; écran de veille, animations et accueil reprennent les valeurs de la sauvegarde (valeur absente ou « null » : le réglage est supprimé ; valeur invalide : valeur par défaut) ; la garde de désinstallation de Zen Home porte sur le paquet de cet accueil, qui doit être présent et actif. `depuis_sauvegarde` donne la date de l'origine utilisée, `null` pour la restauration générique (aucune origine, ou fichiers illisibles ou invalides : les sauvegardes sont des entrées non fiables, analysées strictement). Le reste (accessibilité, `zenhome_*`, Spotify, reprise) est inchangé.
 
+### Box mémorisées dans la recherche
+
+`etat_initial().boxes_memorisees` donne les box de `boxes.json` (déjà validées par le cœur, la plus récente d'abord ; vide si le fichier est absent ou invalide). L'interface les relit à chaque recherche et les affiche tout de suite (« configurée récemment »), pendant que `chercher_box` tourne. Une box mémorisée est proposée par son adresse : `connecter({ ip })` (modèle et série revérifiés, nom mémorisé gardé). Quand la recherche finit, les box trouvées (avec `id`) et les mémorisées sont fusionnées par IP (une ligne par adresse ; une mémorisée absente des résultats reste proposée, mention « n'a pas répondu »). Comme le cœur ne fait qu'une chose à la fois, un clic pendant la recherche appelle d'abord `annuler`, attend que `chercher_box` ait rendu la main, puis appelle `connecter`. En démo, `boxes_memorisees` vaut `[SALON]`.
+
+### Rapport (« Envoyer le rapport » / « Copier le rapport »)
+
+Le cœur n'écrit pas de `rapport.txt` (seul le kit en écrit un) : le dossier de sauvegarde ne contient que l'état de la box à la lecture (`resume.txt`…). Le rapport est donc composé par l'interface : `erreur` = `code : message` de l'erreur affichée (vide sinon), `resume` = résumé de la dernière action (mode, nombres d'applis, lignes de vérification à regarder ou à noter, avertissements de restauration, état de chaque box d'un lot ; ni nom de box, ni IP, ni jeton). Le cœur reste maître du résultat : il retire les caractères de contrôle, masque toute suite de 24 caractères ou plus de `[A-Za-z0-9_-]` et tout ce qui commence par `eyJ` (jeton, clé), borne l'entrée (la fin est gardée), ajoute la version de l'appli et le système (macOS + version). `envoyer_rapport` construit lui-même `mailto:hebertval34@gmail.com?subject=Zen%20Home%20%3A%20rapport&body=…` (corps encodé de 1500 caractères au plus : en-tête et erreur toujours, puis la fin du résumé précédée de « … », puis la mention du dossier des sauvegardes) et l'ouvre avec `open` (`explorer` / `xdg-open` ailleurs) ; tout lien qui ne commence pas par ce préfixe fixe est refusé. L'interface ne fournit jamais d'URL. En démo, rien n'est ouvert. « Copier » écrit dans le presse-papier le texte complet de `rapport_texte` (non tronqué à 1500).
+
 ### Désinstaller Zen Home de ce Mac
 
 `desinstaller_mac(garder_sauvegardes)` ne touche pas la box (Zen Home y reste installé : « Revenir à avant Zen Home » d'abord). Dans l'ordre : copie de `sauvegardes/` vers `~/Documents/Zen Home – sauvegardes AAAA-MM-JJ HHhMM/` si demandé (dossier neuf, jamais d'écrasement ; en cas d'échec rien n'est supprimé), fermeture de la session et arrêt du serveur adb dédié, mise à la Corbeille du bundle `.app` (NSFileManager, release seulement, et seulement si l'exécutable est bien dans un bundle `*.app` ; en cas d'échec rien n'est supprimé), suppression du dossier de données de l'appli (seulement s'il est exactement `<données utilisateur>/fr.tetrax.zenhome`, lien symbolique refusé), puis sortie de l'appli. Erreur `interne` lisible si une étape échoue. En mode démo, rien n'est copié, supprimé ni mis à la Corbeille et l'appli ne se ferme pas.
@@ -60,7 +70,8 @@ La sauvegarde d'origine d'une box est la plus ancienne sauvegarde de sa série (
 ### Déroulé et état gardé par le cœur
 
 1. `installer_adb` (si `adb_installe` est faux ; `accord: false` → `refus_licence`), 2. `chercher_box` puis `connecter` (ouvre la session ; il faut une session pour tout ce qui suit, sinon `injoignable`), 3. `inventaire` (lit la box, écrit une sauvegarde, garde l'inventaire dans la session ; **requis avant `appliquer`**, sinon `lecture`), 4. `chercher_villes` puis `installer`, 5. `appliquer`, 6. `verifier(reparer: true)` (c'est lui qui désactive les applis choisies), 7. `couper_debogage` (facultatif).
-- Une seule action à la fois pour **toutes** les commandes sauf `etat_initial`, `decider`, `annuler`, `ouvrir_sauvegardes` : sinon erreur `occupe`.
+- Une seule action à la fois pour **toutes** les commandes sauf `etat_initial`, `decider`, `annuler`, `ouvrir_sauvegardes`, `rapport_texte`, `envoyer_rapport` : sinon erreur `occupe`.
+- `annuler` pendant `chercher_box` : la recherche s'arrête aussitôt (au plus le délai d'une connexion TCP en cours, 1,5 s) et rend ce qu'elle a déjà trouvé, **sans erreur** (drapeau d'arrêt passé à `zh_reseau::chercher_box`, vérifié dans sa boucle ; le balayage et les sondes s'arrêtent avec elle).
 - `annuler` : l'action en cours s'arrête avant sa prochaine opération et échoue avec le code `annule` (rien à défaire ; elle peut être relancée). Délai global d'une action : 30 minutes (erreur `interne`).
 - Après `appliquer`/`verifier`, rappeler `inventaire` pour rafraîchir l'affichage.
 - `reprise_en_attente: true` au démarrage : une vérification précédente a été interrompue après avoir désactivé des applis, pour au moins une box ; la prochaine `verifier(reparer: true)` sur cette box en tient compte pour le retour arrière (l'interface peut le dire à l'utilisateur et proposer « Vérifier »). La reprise est mémorisée **par numéro de série** (un seul fichier, 32 box au plus, la plus ancienne saute au-delà) : `connecter` charge celle de la box connectée, `verifier`/`restaurer` n'effacent que celle de la box connectée ; traiter une box ne touche pas à la reprise d'une autre. Un fichier modifié ou invalide est ignoré en entier.
@@ -97,3 +108,7 @@ Sur `attente_utilisateur`, l'interface affiche la consigne (réveiller la box / 
 ## Mode démo
 
 En build debug, ou si la variable d'environnement `ZENHOME_DEMO=1` est définie (`ZENHOME_DEMO=0` force le mode réel même en debug), le cœur utilise une box simulée (FakeBox) : tout le parcours fonctionne sans box. Deux box simulées : « SALON » (192.168.50.14, série `ZH-DEMO-0001`) et « CHAMBRE » (192.168.50.15, série `ZH-DEMO-0002`), toutes deux renvoyées par `chercher_box`, chacune avec sa FakeBox (Netflix est commune ; VLC et Disney+ sont propres à SALON, Kodi et Prime Video à CHAMBRE) ; `installer_adb` simule une progression, `chercher_villes` renvoie 3 villes factices dont « Montpellier », `ouvrir_sauvegardes` ne lance rien, `desinstaller_mac` ne supprime rien. Le cœur dépose une sauvegarde d'origine factice (15/09/2026 21:00, série de SALON seulement) dans le dossier de démo pour que le parcours propose « Revenir à avant Zen Home » depuis cette sauvegarde ; CHAMBRE n'en a pas de semée (sa propre première lecture, avant l'installation, sert d'origine comme sur une vraie box). `adb_installe` vaut `false` au départ en démo, jusqu'à `installer_adb`. `etat_initial().demo` vaut alors `true` et l'interface affiche un discret bandeau « Mode démo ». Dans un navigateur (hors Tauri), `api.ts` simule ces mêmes réponses.
+
+## Mises à jour
+
+L'appli se met à jour seule via `tauri-plugin-updater` : au démarrage (jamais en mode démo ni hors Tauri), l'accueil vérifie en silence `https://github.com/Tetrax/tcl-zenhome/releases/latest/download/latest.json` ; l'échec réseau est ignoré. S'il existe une version plus récente, un discret « Nouvelle version x.y.z disponible » propose de la télécharger, de l'installer puis de relancer l'appli. Rien n'est proposé pendant une action sur une box. Les mises à jour sont signées avec une clé dédiée (`~/.tauri/zenhome-updater.key`, mot de passe dans le trousseau macOS) dont la clé publique est dans `tauri.conf.json` ; `empaqueter.sh` construit le dmg, le `.app.tar.gz` signé et `latest.json` dans `dist-release/` (release GitHub `app-vX.Y.Z`).
