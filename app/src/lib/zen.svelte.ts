@@ -168,7 +168,11 @@ class Zen {
       this.succes++;
       if (this.mode === "installer") await this.lireEtat();
       else if (this.mode === "reparer") await this.reparer();
-      else this.aller("confirm_restauration");
+      else {
+        // Une sauvegarde d'origine a pu être écrite depuis le démarrage : l'écran de confirmation cite la bonne.
+        try { this.init = await api.etatInitial(); } catch { /* on garde l'état connu */ }
+        this.aller("confirm_restauration");
+      }
     } catch (e) { this.echec(e, () => void this.connecter(cible)); }
   }
 
@@ -264,7 +268,7 @@ class Zen {
     } catch (e) { this.echec(e, () => void this.reparer()); }
   }
 
-  // ---- Tout annuler ----
+  // ---- Revenir à avant Zen Home ----
   async restaurer() {
     this.aller("restauration"); this.restauration = null;
     this.debut("Retour à l'état d'origine");

@@ -19,6 +19,7 @@ export interface Api {
   annuler(): Promise<void>;
   couperDebogage(): Promise<void>;
   ouvrirSauvegardes(): Promise<void>;
+  desinstallerMac(garderSauvegardes: boolean): Promise<void>;
 }
 
 export const dansTauri = (): boolean => "__TAURI_INTERNALS__" in window;
@@ -50,6 +51,7 @@ async function tauri(): Promise<Api> {
     annuler: () => invoke("annuler"),
     couperDebogage: () => invoke("couper_debogage"),
     ouvrirSauvegardes: () => invoke("ouvrir_sauvegardes"),
+    desinstallerMac: (garderSauvegardes) => invoke("desinstaller_mac", { garderSauvegardes }),
   };
 }
 
@@ -80,4 +82,5 @@ export const api: Api = {
   annuler: () => appeler("annuler"),
   couperDebogage: () => appeler("couperDebogage"),
   ouvrirSauvegardes: () => appeler("ouvrirSauvegardes"),
+  desinstallerMac: (g) => appeler("desinstallerMac", g),
 };

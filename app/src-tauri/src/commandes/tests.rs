@@ -93,7 +93,7 @@ fn choix_recommande(inv: &InventaireUi) -> ChoixUi {
 
 #[test]
 fn une_seule_action_a_la_fois() {
-    let (c, _f, _d) = pret("occupe");
+    let (c, _f, d) = pret("occupe");
     let garde = c.prendre().unwrap();
     assert_eq!(code(c.chercher_villes("Paris")), "occupe");
     assert_eq!(code(c.chercher_box()), "occupe");
@@ -103,6 +103,7 @@ fn une_seule_action_a_la_fois() {
     assert_eq!(code(c.verifier(false, &rien)), "occupe");
     assert_eq!(code(c.restaurer(&rien)), "occupe");
     assert_eq!(code(c.installer_adb(true, &rien)), "occupe");
+    assert_eq!(code(c.desinstaller_mac(true, &d, &d, None)), "occupe");
     drop(garde);
     assert_eq!(code(c.inventaire(&rien)), "injoignable", "libre de nouveau : l'erreur est celle de l'absence de box");
 }
@@ -363,6 +364,7 @@ fn parcours_demo_complet() {
     let c = Coeur::nouveau(Config::demo("0.0.0-test".into(), d.clone(), Duration::ZERO));
     let etat = c.etat_initial();
     assert!(etat.demo && !etat.adb_installe && !etat.reprise_en_attente);
+    assert_eq!(etat.origine.map(|o| o.date).as_deref(), Some("15/09/2026 21:00"));
 
     assert_eq!(code(c.installer_adb(false, &rien)), "refus_licence");
     let (recu, enregistre) = enregistreur();
@@ -405,6 +407,116 @@ fn parcours_demo_complet() {
 
     let restauration = c.restaurer(&rien).unwrap();
     assert!(!restauration.incomplete, "{:?}", restauration.avertissements);
+    assert_eq!(restauration.depuis_sauvegarde.as_deref(), Some("15/09/2026 21:00"), "la démo propose une origine");
     c.couper_debogage().unwrap();
     assert_eq!(code(c.inventaire(&rien)), "injoignable", "session fermée");
+}
+
+/// Sauvegarde « d'avant Zen Home » de la box de test, à la date donnée.
+fn sauvegarde_origine(donnees: &std::path::Path, date_serie: &str, desactives: &str) {
+    let d = donnees.join("sauvegardes").join(date_serie);
+    std::fs::create_dir_all(&d).unwrap();
+    std::fs::write(d.join("paquets-tous.txt"), "package:/system/app/A.apk=com.google.android.tvlauncher\n").unwrap();
+    std::fs::write(d.join("paquets-desactives.txt"), desactives).unwrap();
+}
+
+#[test]
+fn origine_annoncee_au_demarrage_et_utilisee_par_la_restauration() {
+    let (c, f, d) = pret("origine");
+    assert!(c.etat_initial().origine.is_none());
+    sauvegarde_origine(&d, "20261001-120000-AUTRESERIE", "");
+    assert_eq!(c.etat_initial().origine.map(|o| o.date).as_deref(), Some("01/10/2026 12:00"), "toutes séries confondues");
+
+    connecter(&c);
+    assert!(c.etat_initial().origine.is_none(), "avec une session : origine de CETTE box seulement");
+    // Zen Home a désactivé deux applis ; l'une l'était déjà avant lui
+    f.modifier(|e| {
+        for p in ["com.mitv.tvhome.atv", "com.xm.webcontent"] {
+            e.paquets.get_mut(p).unwrap().desactive = true;
+        }
+    });
+    let sans = c.restaurer(&rien).unwrap();
+    assert_eq!(sans.depuis_sauvegarde, None, "l'origine d'une autre box ne sert pas");
+    assert!(f.instantane().paquets.values().all(|p| !p.desactive));
+
+    f.modifier(|e| e.paquets.get_mut("com.xm.webcontent").unwrap().desactive = true);
+    sauvegarde_origine(&d, &format!("20261002-130000-{SERIE}"), "package:com.xm.webcontent\n");
+    sauvegarde_origine(&d, &format!("20261003-130000-{SERIE}"), "");
+    let avec = c.restaurer(&rien).unwrap();
+    assert_eq!(avec.depuis_sauvegarde.as_deref(), Some("02/10/2026 13:00"), "la plus ancienne de la série");
+    assert!(f.instantane().paquets["com.xm.webcontent"].desactive, "désactivée avant Zen Home : elle le reste");
+    assert_eq!(c.etat_initial().origine.map(|o| o.date).as_deref(), Some("02/10/2026 13:00"), "même origine que celle de la restauration");
+}
+
+fn lieux(nom: &str) -> (PathBuf, PathBuf, PathBuf) {
+    let parent = dossier(nom);
+    let documents = parent.join("Documents");
+    std::fs::create_dir_all(&documents).unwrap();
+    (parent.join("fr.tetrax.zenhome"), documents, parent)
+}
+
+#[test]
+fn desinstaller_mac_copie_puis_supprime_les_donnees_et_ferme_la_session() {
+    let (donnees, documents, parent) = lieux("desinstaller");
+    let f = Arc::new(FakeBox::mibox4());
+    let c = Coeur::nouveau(config(donnees.clone(), &f));
+    connecter(&c);
+    inventaire(&c);
+    let nb = std::fs::read_dir(donnees.join("sauvegardes")).unwrap().count();
+    assert_eq!(nb, 1);
+
+    c.desinstaller_mac(true, &documents, &parent, None).unwrap();
+    assert!(!donnees.exists());
+    let copies: Vec<_> = std::fs::read_dir(&documents).unwrap().flatten().collect();
+    assert_eq!(copies.len(), 1);
+    assert!(copies[0].file_name().to_string_lossy().starts_with("Zen Home – sauvegardes "));
+    assert_eq!(std::fs::read_dir(copies[0].path()).unwrap().count(), 1, "la sauvegarde est copiée");
+    assert_eq!(code(c.inventaire(&rien)), "injoignable", "session fermée");
+    assert!(!f.journal().is_empty());
+}
+
+#[test]
+fn desinstaller_mac_sans_garder_ne_copie_rien() {
+    let (donnees, documents, parent) = lieux("desinstaller-sans");
+    let f = Arc::new(FakeBox::mibox4());
+    sauvegarde_origine(&donnees, "20261001-120000-X", "");
+    let c = Coeur::nouveau(config(donnees.clone(), &f));
+    c.desinstaller_mac(false, &documents, &parent, None).unwrap();
+    assert!(!donnees.exists() && std::fs::read_dir(&documents).unwrap().next().is_none());
+}
+
+#[test]
+fn desinstaller_mac_copie_impossible_ne_supprime_rien() {
+    let (donnees, documents, parent) = lieux("desinstaller-echec");
+    let f = Arc::new(FakeBox::mibox4());
+    sauvegarde_origine(&donnees, "20261001-120000-X", "");
+    let c = Coeur::nouveau(config(donnees.clone(), &f));
+    let err = c.desinstaller_mac(true, &documents.join("absent"), &parent, None).err().unwrap();
+    assert_eq!(err.code, "interne");
+    assert!(donnees.join("sauvegardes").is_dir(), "rien n'est supprimé si la copie demandée échoue");
+    // Corbeille impossible (bundle inexistant) : les données restent intactes
+    let (donnees2, documents2, parent2) = lieux("desinstaller-corbeille");
+    sauvegarde_origine(&donnees2, "20261001-120000-X", "");
+    let c3 = Coeur::nouveau(config(donnees2.clone(), &f));
+    let err = c3.desinstaller_mac(false, &documents2, &parent2, Some(&parent2.join("Absente.app"))).err().unwrap();
+    assert_eq!(err.code, "interne");
+    assert!(err.message.contains("Glissez"), "{}", err.message);
+    assert!(donnees2.join("sauvegardes").is_dir(), "données intactes");
+    // dossier de données qui n'est pas celui de l'appli : refusé, sans rien supprimer
+    let c2 = Coeur::nouveau(config(parent.join("ailleurs"), &f));
+    std::fs::create_dir_all(parent.join("ailleurs")).unwrap();
+    assert_eq!(code(c2.desinstaller_mac(false, &documents, &parent, None)), "interne");
+    assert!(parent.join("ailleurs").is_dir());
+}
+
+#[test]
+fn desinstaller_mac_en_demo_ne_supprime_rien() {
+    let (donnees, documents, parent) = lieux("desinstaller-demo");
+    // en démo les données sont dans le sous-dossier `demo` de celles de l'appli
+    let c = Coeur::nouveau(Config::demo("0.0.0-test".into(), donnees.clone(), Duration::ZERO));
+    assert!(c.en_demo());
+    c.desinstaller_mac(true, &documents, &parent, Some(&parent)).unwrap();
+    assert!(donnees.join("demo/sauvegardes").is_dir());
+    assert!(std::fs::read_dir(&documents).unwrap().next().is_none(), "aucune copie en démo");
+    assert!(parent.is_dir());
 }

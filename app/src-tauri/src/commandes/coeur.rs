@@ -7,7 +7,7 @@
 use std::collections::HashMap;
 use std::io::Write;
 use std::net::Ipv4Addr;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
@@ -16,6 +16,7 @@ use sha2::{Digest, Sha256};
 use zh_reseau::{BoxTrouvee, Ville};
 
 use super::demo;
+use super::desinstallation;
 use super::erreur::ErreurCommande;
 use super::evenements::{Emetteur, EvenementUi, ObservateurUi};
 use super::persistance;
@@ -25,6 +26,7 @@ use crate::moteur::choix::{self, Choix};
 use crate::moteur::connexion::{EchecConnexion, Politique, connecter_box, lire_serie};
 use crate::moteur::installation::{self, Parametres};
 use crate::moteur::inventaire::{self, ErreurInventaire, Inventaire, libelles_broadcast};
+use crate::moteur::origine;
 use crate::moteur::restauration;
 use crate::moteur::session::{Arret, Decision, ErreurAction, Reprise, Session};
 use crate::moteur::transport::{AdbProcess, ArgConfig, Commande, Espace, ErreurTransport, Transport};
@@ -173,12 +175,20 @@ fn clore(t: &dyn Transport) {
     t.arreter_serveur();
 }
 
+/// Numéro de série réduit aux caractères d'un nom de dossier de sauvegarde.
+fn nom_serie(r: &Reprise) -> String {
+    r.serie.iter().flat_map(|s| s.chars()).filter(|ch| ch.is_ascii_alphanumeric() || *ch == '-' || *ch == '_').collect()
+}
+
 fn sha256_hex(octets: &[u8]) -> String {
     Sha256::digest(octets).iter().map(|b| format!("{b:02x}")).collect()
 }
 
 impl Coeur {
     pub fn nouveau(cfg: Config) -> Self {
+        if cfg.demo {
+            demo::semer_origine(&cfg.donnees);
+        }
         Self { cfg, etat: Mutex::default(), occupe: AtomicBool::new(false), annule: Arc::new(AtomicBool::new(false)), attente: Attente::default() }
     }
 
@@ -224,6 +234,15 @@ impl Coeur {
 
     // ------------------------------------------------------------------ commandes sans box
 
+    /// Avec une session : l'origine de la box connectée (celle que `restaurer` utilisera) ; sinon la plus récente.
+    fn origine_courante(&self) -> Option<origine::Origine> {
+        let sauvegardes = self.cfg.donnees.join("sauvegardes");
+        match self.etat().session.as_ref() {
+            Some(s) => origine::origine(&sauvegardes, &nom_serie(&s.reprise)),
+            None => origine::derniere_origine(&sauvegardes),
+        }
+    }
+
     pub fn etat_initial(&self) -> EtatInitial {
         let adb_installe = if self.cfg.demo { self.etat().adb_demo } else { zh_reseau::adb_installe(&self.cfg.donnees).is_some() };
         EtatInitial {
@@ -232,6 +251,7 @@ impl Coeur {
             demo: self.cfg.demo,
             sauvegardes_dir_existe: self.cfg.donnees.join("sauvegardes").is_dir(),
             reprise_en_attente: persistance::lire(&self.cfg.donnees).is_some(),
+            origine: self.origine_courante().map(|o| OrigineUi { date: o.date }),
         }
     }
 
@@ -356,6 +376,42 @@ impl Coeur {
         Ok(())
     }
 
+    pub fn en_demo(&self) -> bool {
+        self.cfg.demo
+    }
+
+    /// Retire Zen Home de ce Mac (la box n'est pas touchée) : copie des sauvegardes si demandée, arrêt d'adb, bundle à la
+    /// Corbeille, puis suppression des données de l'appli. L'appelant quitte ensuite. En démo : rien n'est copié ni supprimé.
+    /// `donnees_parent` : dossier des données utilisateur ; `bundle` : l'appli à mettre à la Corbeille, si elle y est.
+    pub fn desinstaller_mac(&self, garder_sauvegardes: bool, documents: &Path, donnees_parent: &Path, bundle: Option<&Path>) -> Result<(), ErreurCommande> {
+        let (_occupation, _) = self.prendre()?;
+        if self.cfg.demo {
+            std::thread::sleep(self.cfg.rythme_demo * 10);
+            return Ok(());
+        }
+        let copie_impossible = |e: &std::io::Error| ErreurCommande::interne(format!("Copie des sauvegardes dans Documents impossible ({e}). Rien n'a été supprimé."));
+        let sauvegardes = self.cfg.donnees.join("sauvegardes");
+        if garder_sauvegardes && sauvegardes.is_dir() {
+            let horodatage = chrono::Local::now().format("%Y-%m-%d %Hh%M").to_string();
+            let copie = desinstallation::creer_dossier_copie(documents, &horodatage)
+                .map_err(|e| copie_impossible(&e))?;
+            desinstallation::copier_contenu(&sauvegardes, &copie).map_err(|e| {
+                let _ = std::fs::remove_dir_all(&copie); // dossier créé à l'instant : une copie partielle ne reste pas
+                copie_impossible(&e)
+            })?;
+        }
+        self.fermer(); // adb (serveur du port 5038) tourne depuis le dossier qu'on va supprimer
+        // Corbeille avant la suppression des données : en cas d'échec, les données restent intactes.
+        if let Some(b) = bundle {
+            desinstallation::mettre_a_la_corbeille(b).map_err(|m| {
+                ErreurCommande::interne(format!("Zen Home n'a pas pu être mis à la Corbeille ({m}). Glissez l'application à la Corbeille vous-même. Vos données n'ont pas été supprimées."))
+            })?;
+        }
+        desinstallation::supprimer_donnees(&self.cfg.donnees, donnees_parent)
+            .map_err(|m| ErreurCommande::interne(format!("Suppression des données de Zen Home impossible ({m}).{}", if bundle.is_some() { " L'application est déjà dans la Corbeille." } else { "" })))?;
+        Ok(())
+    }
+
     /// Fin de session (et sortie de l'appli) : `adb disconnect` puis arrêt du serveur adb.
     pub fn fermer(&self) {
         let session = self.etat().session.take();
@@ -453,13 +509,13 @@ impl Coeur {
             (c.emettre)(EvenementUi::Etape { nom: "Lecture de l'état de la box".into() });
             let w = c.transport();
             let obs = c.observateur();
-            let serie: String = c.reprise.serie.iter().flat_map(|s| s.chars()).filter(|ch| ch.is_ascii_alphanumeric() || *ch == '-' || *ch == '_').collect();
+            let serie = nom_serie(&c.reprise);
             let maintenant = chrono::Local::now();
             let base = format!("{}-{serie}", maintenant.format("%Y%m%d-%H%M%S"));
             let sauvegardes = self.cfg.donnees.join("sauvegardes");
             // dossier toujours neuf : deux lectures dans la même seconde ne se partagent pas le même
             let dossier = (1..100)
-                .map(|n| if n == 1 { base.clone() } else { format!("{base}-{n}") })
+                .map(|n| if n == 1 { base.clone() } else { format!("{base}+{n}") })
                 .map(|nom| sauvegardes.join(nom))
                 .find(|d| !d.exists())
                 .ok_or_else(|| ErreurCommande::interne("Trop de sauvegardes créées en même temps."))?;
@@ -610,12 +666,18 @@ impl Coeur {
 
     pub fn restaurer(&self, emettre: Emetteur) -> Result<RestaurationUi, ErreurCommande> {
         self.agir(emettre, |c| {
-            let r = restauration::restaurer(&c.transport(), &self.cfg.politique, &mut c.observateur(), &c.reprise);
+            // Sauvegarde faite avant Zen Home pour cette box, s'il y en a une : sinon restauration générique.
+            let origine = origine::origine(&self.cfg.donnees.join("sauvegardes"), &nom_serie(&c.reprise));
+            let r = restauration::restaurer(&c.transport(), &self.cfg.politique, &mut c.observateur(), &c.reprise, origine.as_ref());
             let rapport = c.issue(r)?;
             if !rapport.incomplete {
                 self.oublier_reprise();
             }
-            Ok(RestaurationUi { incomplete: rapport.incomplete, avertissements: rapport.avertissements.iter().map(|a| crate::moteur::transport::assainir(a)).collect() })
+            Ok(RestaurationUi {
+                incomplete: rapport.incomplete,
+                avertissements: rapport.avertissements.iter().map(|a| crate::moteur::transport::assainir(a)).collect(),
+                depuis_sauvegarde: origine.map(|o| o.date),
+            })
         })
     }
 

@@ -21,6 +21,7 @@
     "allow-decider",
     "allow-annuler",
     "allow-couper-debogage",
-    "allow-ouvrir-sauvegardes"
+    "allow-ouvrir-sauvegardes",
+    "allow-desinstaller-mac"
   ]
 }

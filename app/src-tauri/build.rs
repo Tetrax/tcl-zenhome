@@ -51,6 +51,7 @@ fn main() {
         "annuler",
         "couper_debogage",
         "ouvrir_sauvegardes",
+        "desinstaller_mac",
     ])))
     .expect("échec de tauri-build");
 }

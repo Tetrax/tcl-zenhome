@@ -329,7 +329,7 @@ fn parite(s: Scenario) {
             installer(&f, &pol, &mut Silencieux, &p, &Reprise::default()).map(|_| true).unwrap_or(false)
         }
         Action::Reparer => verifier(&f, &pol, &mut Silencieux, true, Some(&apk), &Reprise::default()).expect("vérification").ok,
-        Action::Restaurer => restaurer(&f, &pol, &mut Silencieux, &Reprise::default()).map(|_| true).unwrap_or(false),
+        Action::Restaurer => restaurer(&f, &pol, &mut Silencieux, &Reprise::default(), None).map(|_| true).unwrap_or(false),
     };
     let mut rust = suite_rust(&f);
 

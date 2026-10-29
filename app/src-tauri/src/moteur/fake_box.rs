@@ -11,6 +11,8 @@ use super::transport::{Commande, ErreurTransport, EtatLien, Sortie, Transport, d
 
 pub const ACCUEIL_ORIGINE: &str = "com.google.android.tvlauncher/.MainActivity";
 pub const ZEN_HOME: &str = "tv.zenhome";
+/// Activités qui sont de vrais accueils : `set-home-activity` refuse toute autre.
+pub const ACCUEILS_CONNUS: [&str; 3] = [ACCUEIL_ORIGINE, "tv.zenhome/.Home", "com.mitv.tvhome/.MainActivity"];
 const SETUPWRAITH: &str = "com.google.android.tungsten.setupwraith";
 
 #[derive(Debug, Clone)]
@@ -348,6 +350,9 @@ impl Interne {
                 let p = c.split('/').next().unwrap_or_default();
                 if !e.paquets.contains_key(p) {
                     return Err(echec(1, &format!("Error: Unknown package: {p}")));
+                }
+                if !ACCUEILS_CONNUS.contains(c) {
+                    return Err(echec(1, &format!("Error: {c} is not a home activity")));
                 }
                 e.accueil_prefere = Some((*c).into());
                 sortie("Success\n")

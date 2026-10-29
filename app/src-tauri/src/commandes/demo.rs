@@ -23,6 +23,26 @@ pub fn demo_demandee() -> bool {
     }
 }
 
+/// Sauvegarde d'origine factice (une lecture « d'avant Zen Home » de la box de démo), pour que le parcours démo montre
+/// « Revenir à avant Zen Home ». Rien n'est écrit si elle existe déjà.
+pub fn semer_origine(donnees: &Path) {
+    let dossier = donnees.join("sauvegardes").join(format!("20260915-210000-{SERIE}"));
+    if dossier.exists() {
+        return;
+    }
+    let _ = std::fs::create_dir_all(&dossier).and_then(|()| {
+        [
+            ("paquets-tous.txt", "package:/system/priv-app/TvLauncher/TvLauncher.apk=com.google.android.tvlauncher\n"),
+            ("paquets-desactives.txt", "\n"),
+            ("accueil.txt", "priority=2 preferredOrder=0\ncom.google.android.tvlauncher/.MainActivity\n"),
+            ("reglages-secure.txt", "screensaver_components=com.google.android.backdrop/.Backdrop\n"),
+            ("reglages-global.txt", "window_animation_scale=1.0\ntransition_animation_scale=1.0\n"),
+        ]
+        .iter()
+        .try_for_each(|(f, c)| std::fs::write(dossier.join(f), c))
+    });
+}
+
 pub struct DemoBox {
     box_: FakeBox,
     rythme: Duration,

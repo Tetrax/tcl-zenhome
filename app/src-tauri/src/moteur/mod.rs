@@ -8,6 +8,7 @@ pub mod debloat;
 pub mod fake_box;
 pub mod installation;
 pub mod inventaire;
+pub mod origine;
 pub mod restauration;
 pub mod session;
 pub mod transport;

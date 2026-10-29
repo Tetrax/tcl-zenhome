@@ -1,6 +1,8 @@
 // Types du contrat entre l'interface et le cœur Rust (voir app/CONTRAT.md).
 
-export interface EtatInitial { version: string; adb_installe: boolean; demo: boolean; sauvegardes_dir_existe: boolean; reprise_en_attente: boolean }
+export interface EtatInitial { version: string; adb_installe: boolean; demo: boolean; sauvegardes_dir_existe: boolean; reprise_en_attente: boolean;
+  /** Sauvegarde d'origine (faite avant Zen Home) la plus récente, ou null. `date` : « JJ/MM/AAAA HH:MM ». */
+  origine: { date: string } | null }
 export interface BoxTrouvee { id: number; nom: string; ip: string }
 export type Cible = { id: number } | { ip: string };
 export interface BoxConnectee { nom: string; ip: string; modele: string }
@@ -26,7 +28,7 @@ export interface RapportApplication { desactivees: number; gardees: number; desi
 export type EtatLigne = "ok" | "ko" | "avert";
 export interface LigneVerif { etat: EtatLigne; controle: string; detail: string }
 export interface Verification { lignes: LigneVerif[]; ko: number }
-export interface RapportRestauration { incomplete: boolean; avertissements: string[] }
+export interface RapportRestauration { incomplete: boolean; avertissements: string[]; depuis_sauvegarde: string | null }
 
 export type CodeErreur =
   | "occupe" | "annule" | "adb_absent" | "refus_licence" | "injoignable" | "non_autorise"

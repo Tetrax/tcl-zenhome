@@ -45,6 +45,7 @@ pub fn run() {
             commandes::annuler,
             commandes::couper_debogage,
             commandes::ouvrir_sauvegardes,
+            commandes::desinstaller_mac,
         ])
         .build(tauri::generate_context!())
         .expect("erreur au lancement de Zen Home")

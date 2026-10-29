@@ -8,7 +8,7 @@ Les commandes longues reçoivent un `Channel<Evenement>` (Tauri `ipc::Channel`) 
 
 | Commande | Arguments | Résultat |
 |---|---|---|
-| `etat_initial` | — | `{ version, adb_installe: bool, demo: bool, sauvegardes_dir_existe: bool, reprise_en_attente: bool }` |
+| `etat_initial` | — | `{ version, adb_installe: bool, demo: bool, sauvegardes_dir_existe: bool, reprise_en_attente: bool, origine: { date: string } \| null }` |
 | `installer_adb` | `accord: bool`, `canal` | `null` ; progression via `{type:"progression", fraction}` |
 | `chercher_box` | — | `[{ id: number, nom: string, ip: string }]` (les `id` désignent une liste gardée côté Rust) |
 | `connecter` | `cible: {id: number} \| {ip: string}`, `canal` | `{ nom, ip, modele }` |
@@ -17,11 +17,12 @@ Les commandes longues reçoivent un `Channel<Evenement>` (Tauri `ipc::Channel`) 
 | `installer` | `ville_id: number \| null`, `jeton: string \| null`, `canal` | `null` |
 | `appliquer` | `choix: { garder: string[], desactiver: string[], desinstaller: string[] }`, `canal` | `RapportApplication` |
 | `verifier` | `reparer: bool`, `canal` | `{ lignes: [{ etat: "ok"\|"ko"\|"avert", controle, detail }], ko: number }` |
-| `restaurer` | `canal` | `{ incomplete: bool, avertissements: string[] }` |
+| `restaurer` | `canal` | `{ incomplete: bool, avertissements: string[], depuis_sauvegarde: string \| null }` |
 | `decider` | `demande: number`, `decision: "reessayer" \| "arreter"` | `null` |
 | `annuler` | — | `null` (demande l'arrêt propre de l'action en cours) |
 | `couper_debogage` | — | `null` (coupe le débogage USB de la box, puis ferme la session adb) |
 | `ouvrir_sauvegardes` | — | `null` (ouvre le dossier des sauvegardes de l'appli dans le Finder) |
+| `desinstaller_mac` | `garder_sauvegardes: bool` | `null` (retire Zen Home de ce Mac, voir plus bas ; l'appli se ferme ensuite) |
 
 `Inventaire` :
 ```
@@ -36,6 +37,16 @@ Précisions : `libelle` des applis de l'utilisateur = nom donné par Zen Home un
 
 `RapportApplication` : `{ desactivees: number, gardees: number, desinstallees: string[], echecs: string[] }`. `desactivees` = nombre d'applis **à désactiver** (la désactivation elle-même est faite par le `verifier(true)` qui suit) ; `desinstallees` inclut celles déjà absentes ; `echecs` = noms de paquets.
 
+### Sauvegarde d'origine et « Revenir à avant Zen Home »
+
+La sauvegarde d'origine d'une box est la plus ancienne sauvegarde de sa série (suffixe du nom du dossier) dont `paquets-tous.txt` existe, est lisible et ne contient pas `tv.zenhome` : simple recherche dans `sauvegardes/`, rien n'est copié. `etat_initial().origine` est la plus récente de ces origines toutes box confondues (pas de session au démarrage), `date` au format `JJ/MM/AAAA HH:MM`, `null` s'il n'y en a pas.
+
+`restaurer` utilise l'origine de la box de la session si elle existe : seules les applis désactivées depuis (et non avant) Zen Home sont réactivées ; écran de veille, animations et accueil reprennent les valeurs de la sauvegarde (valeur absente ou « null » : le réglage est supprimé ; valeur invalide : valeur par défaut) ; la garde de désinstallation de Zen Home porte sur le paquet de cet accueil, qui doit être présent et actif. `depuis_sauvegarde` donne la date de l'origine utilisée, `null` pour la restauration générique (aucune origine, ou fichiers illisibles ou invalides : les sauvegardes sont des entrées non fiables, analysées strictement). Le reste (accessibilité, `zenhome_*`, Spotify, reprise) est inchangé.
+
+### Désinstaller Zen Home de ce Mac
+
+`desinstaller_mac(garder_sauvegardes)` ne touche pas la box (Zen Home y reste installé : « Revenir à avant Zen Home » d'abord). Dans l'ordre : copie de `sauvegardes/` vers `~/Documents/Zen Home – sauvegardes AAAA-MM-JJ HHhMM/` si demandé (dossier neuf, jamais d'écrasement ; en cas d'échec rien n'est supprimé), fermeture de la session et arrêt du serveur adb dédié, mise à la Corbeille du bundle `.app` (NSFileManager, release seulement, et seulement si l'exécutable est bien dans un bundle `*.app` ; en cas d'échec rien n'est supprimé), suppression du dossier de données de l'appli (seulement s'il est exactement `<données utilisateur>/fr.tetrax.zenhome`, lien symbolique refusé), puis sortie de l'appli. Erreur `interne` lisible si une étape échoue. En mode démo, rien n'est copié, supprimé ni mis à la Corbeille et l'appli ne se ferme pas.
+
 ### Appel côté JS (Tauri v2)
 
 - Les **arguments** de commande passent en camelCase : `ville_id` s'envoie `villeId`. Les autres (`accord`, `canal`, `cible`, `saisie`, `jeton`, `choix`, `reparer`, `demande`, `decision`) sont des mots simples, donc inchangés. Les champs des objets (`cible`, `choix`, résultats, événements) restent en snake_case tels que dans ce document.
@@ -43,6 +54,7 @@ Précisions : `libelle` des applis de l'utilisateur = nom donné par Zen Home un
 - `cible` : `{ id: 0 }` (id issu du dernier `chercher_box`) ou `{ ip: "192.168.1.20" }` (IP privée ou link-local, sinon erreur `injoignable`).
 - `installer` : `{ villeId: number | null, jeton: string | null, canal }`. Le jeton TMDB n'est jamais renvoyé ni journalisé ; vide ou `null` = pas de jeton.
 - `decider` : `{ demande: <id reçu>, decision: "reessayer" | "arreter" }`. L'identifiant est à usage unique ; sans réponse après 5 minutes, l'action s'arrête (comme « arreter »). Une demande inconnue ou déjà répondue renvoie `choix_invalide`.
+- `desinstaller_mac` : `{ garderSauvegardes: bool }`, sans `canal`.
 - `couper_debogage` n'a pas de `canal` (pas d'événements : si la box ne répond pas, l'action s'arrête).
 
 ### Déroulé et état gardé par le cœur
@@ -72,4 +84,4 @@ Sur `attente_utilisateur`, l'interface affiche la consigne (réveiller la box / 
 
 ## Mode démo
 
-En build debug, ou si la variable d'environnement `ZENHOME_DEMO=1` est définie (`ZENHOME_DEMO=0` force le mode réel même en debug), le cœur utilise une box simulée (FakeBox) : tout le parcours fonctionne sans box. La box simulée est une Mi Box « SALON » (192.168.50.14) ; `installer_adb` simule une progression, `chercher_villes` renvoie 3 villes factices dont « Montpellier », `ouvrir_sauvegardes` ne lance rien. `adb_installe` vaut `false` au départ en démo, jusqu'à `installer_adb`. `etat_initial().demo` vaut alors `true` et l'interface affiche un discret bandeau « Mode démo ». Dans un navigateur (hors Tauri), `api.ts` simule ces mêmes réponses.
+En build debug, ou si la variable d'environnement `ZENHOME_DEMO=1` est définie (`ZENHOME_DEMO=0` force le mode réel même en debug), le cœur utilise une box simulée (FakeBox) : tout le parcours fonctionne sans box. La box simulée est une Mi Box « SALON » (192.168.50.14) ; `installer_adb` simule une progression, `chercher_villes` renvoie 3 villes factices dont « Montpellier », `ouvrir_sauvegardes` ne lance rien, `desinstaller_mac` ne supprime rien. Le cœur dépose une sauvegarde d'origine factice (15/09/2026 21:00, série de la box simulée) dans le dossier de démo pour que le parcours propose « Revenir à avant Zen Home » depuis cette sauvegarde. `adb_installe` vaut `false` au départ en démo, jusqu'à `installer_adb`. `etat_initial().demo` vaut alors `true` et l'interface affiche un discret bandeau « Mode démo ». Dans un navigateur (hors Tauri), `api.ts` simule ces mêmes réponses.

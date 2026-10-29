@@ -10,6 +10,7 @@ use tauri::{Manager, State};
 
 use super::coeur::{Coeur, Config};
 use super::demo;
+use super::desinstallation;
 use super::erreur::ErreurCommande;
 use super::evenements::EvenementUi;
 use super::types::*;
@@ -42,8 +43,9 @@ async fn bloquant<T: Send + 'static>(f: impl FnOnce() -> Result<T, ErreurCommand
 }
 
 #[tauri::command]
-pub fn etat_initial(coeur: Etat<'_>) -> EtatInitial {
-    coeur.etat_initial()
+pub async fn etat_initial(coeur: Etat<'_>) -> Result<EtatInitial, ErreurCommande> {
+    let c = coeur.inner().clone();
+    bloquant(move || Ok(c.etat_initial())).await
 }
 
 #[tauri::command]
@@ -120,4 +122,21 @@ pub async fn couper_debogage(coeur: Etat<'_>) -> Result<(), ErreurCommande> {
 pub async fn ouvrir_sauvegardes(coeur: Etat<'_>) -> Result<(), ErreurCommande> {
     let c = coeur.inner().clone();
     bloquant(move || c.ouvrir_sauvegardes()).await
+}
+
+/// Désinstalle Zen Home de ce Mac puis quitte (sauf en démo, où rien n'est supprimé).
+#[tauri::command]
+pub async fn desinstaller_mac(app: tauri::AppHandle, coeur: Etat<'_>, garder_sauvegardes: bool) -> Result<(), ErreurCommande> {
+    let c = coeur.inner().clone();
+    let (documents, parent) = {
+        let chemins = app.path();
+        let echec = |_| ErreurCommande::interne("Dossiers de l'utilisateur introuvables.");
+        (chemins.document_dir().map_err(echec)?, chemins.data_dir().map_err(echec)?)
+    };
+    let c2 = c.clone();
+    bloquant(move || c2.desinstaller_mac(garder_sauvegardes, &documents, &parent, desinstallation::bundle_courant().as_deref())).await?;
+    if !c.en_demo() {
+        app.exit(0);
+    }
+    Ok(())
 }

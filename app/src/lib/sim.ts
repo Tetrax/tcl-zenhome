@@ -8,6 +8,7 @@
 //   ?autremodele     la connexion échoue (autre_modele)
 //   ?sansadb         adb n'est pas installé (écran d'installation d'adb)
 //   ?reprise         une vérification précédente a été interrompue (reprise_en_attente)
+//   ?sansorigine     aucune sauvegarde d'origine (restauration générique)
 //   ?rapide          délais divisés par 5 (tests)
 import type {
   AppliSysteme, AppliUtilisateur, BoxConnectee, BoxTrouvee, Choix, Cible, Decision, ErreurZen,
@@ -17,6 +18,8 @@ import type { Api } from "./api";
 
 const q = new URLSearchParams(location.search);
 const FACTEUR = q.has("rapide") ? 0.2 : 1;
+// Même date que la sauvegarde d'origine semée par le mode démo du cœur.
+const DATE_ORIGINE = "15/09/2026 21:00";
 const erreur = (code: ErreurZen["code"], message: string): ErreurZen => ({ code, message });
 
 let enCours = false;
@@ -105,7 +108,7 @@ const delaiReseau = () => pause(350);
 export const simulation: Api = {
   async etatInitial() {
     await pause(250);
-    return { version: "0.0.2-sim", adb_installe: !q.has("sansadb"), demo: true, sauvegardes_dir_existe: true, reprise_en_attente: q.has("reprise") };
+    return { version: "0.0.2-sim", adb_installe: !q.has("sansadb"), demo: true, sauvegardes_dir_existe: true, reprise_en_attente: q.has("reprise"), origine: q.has("sansorigine") ? null : { date: DATE_ORIGINE } };
   },
 
   installerAdb: (accord, sur) => exclusive(async () => {
@@ -252,7 +255,7 @@ export const simulation: Api = {
     await progresser(sur, "Réactivation des applis désactivées", 2200, 0, 0.5);
     await progresser(sur, "Retour à l'accueil d'origine", 1500, 0.5, 0.8);
     await progresser(sur, "Désinstallation de Zen Home", 1300, 0.8, 1);
-    return { incomplete: false, avertissements: [] };
+    return { incomplete: false, avertissements: [], depuis_sauvegarde: q.has("sansorigine") ? null : DATE_ORIGINE };
   }),
 
   async decider(demande, decision) {
@@ -262,4 +265,5 @@ export const simulation: Api = {
   async annuler() { annule = true; },
   async couperDebogage() { await pause(900); },
   async ouvrirSauvegardes() { await pause(150); },
+  desinstallerMac: () => exclusive(async () => { await pause(1500); }),
 };

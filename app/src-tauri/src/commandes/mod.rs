@@ -2,6 +2,7 @@
 
 mod coeur;
 mod demo;
+mod desinstallation;
 mod erreur;
 mod evenements;
 mod ipc;

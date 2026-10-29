@@ -1,7 +1,10 @@
 <script lang="ts">
   import Panneau from "./Panneau.svelte";
   import Icone from "./Icone.svelte";
+  import DialogueDesinstallation from "./DialogueDesinstallation.svelte";
   import { zen } from "../lib/zen.svelte";
+
+  let desinstallation = $state(false);
 </script>
 
 <Panneau titre="Zen Home" grand large>
@@ -27,10 +30,12 @@
     <li>Gardez la télécommande à portée de main : une demande d'autorisation va s'afficher sur la TV, il faudra l'accepter.</li>
   </ol>
   <p class="petit">macOS peut demander si Zen Home peut trouver des appareils sur votre réseau local : acceptez, c'est ce qui permet de retrouver la box.</p>
+  <p class="petit"><button class="lien" type="button" onclick={() => (desinstallation = true)}>Désinstaller de ce Mac</button></p>
   {#snippet pied()}
     <button class="btn primary" type="button" onclick={() => zen.demarrer("installer")}><span>Commencer</span><Icone nom="fleche" /></button>
     <span class="espace"></span>
     <button class="lien" type="button" onclick={() => zen.demarrer("reparer")} title="Après une mise à jour de la box">Réparer</button>
-    <button class="lien" type="button" onclick={() => zen.demarrer("restaurer")}>Tout annuler</button>
+    <button class="lien" type="button" onclick={() => zen.demarrer("restaurer")}>Revenir à avant Zen Home</button>
   {/snippet}
 </Panneau>
+<DialogueDesinstallation bind:ouvert={desinstallation} />

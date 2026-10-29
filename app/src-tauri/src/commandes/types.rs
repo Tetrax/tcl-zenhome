@@ -20,6 +20,13 @@ pub struct EtatInitial {
     pub demo: bool,
     pub sauvegardes_dir_existe: bool,
     pub reprise_en_attente: bool,
+    /// Sauvegarde d'origine la plus récente trouvée (toutes box confondues), si elle existe.
+    pub origine: Option<OrigineUi>,
+}
+
+#[derive(Serialize)]
+pub struct OrigineUi {
+    pub date: String,
 }
 
 #[derive(Serialize)]
@@ -122,6 +129,8 @@ pub struct VerificationUi {
 pub struct RestaurationUi {
     pub incomplete: bool,
     pub avertissements: Vec<String>,
+    /// Date de la sauvegarde d'origine utilisée, `None` pour la restauration générique.
+    pub depuis_sauvegarde: Option<String>,
 }
 
 fn court(texte: &str) -> String {
