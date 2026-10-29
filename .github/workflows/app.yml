@@ -61,7 +61,7 @@ jobs:
         working-directory: app/crates/reseau
         run: cargo clippy --all-targets -- -D warnings
 
-      - name: Tests (src-tauri : lib et parité)
+      - name: "Tests (src-tauri : lib et parité)"
         working-directory: app/src-tauri
         run: cargo test
 
