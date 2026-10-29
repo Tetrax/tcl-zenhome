@@ -21,7 +21,8 @@ if [ -z "${SANS_BUILD:-}" ]; then
   # est donc créée et signée plus bas, par nos soins.
   npm run tauri build -- --target universal-apple-darwin --bundles app,dmg --config '{"bundle":{"createUpdaterArtifacts":false}}'
   codesign --verify --deep --strict "$APP"
-  codesign -dvv "$APP" 2>&1 | grep -q '^Authority=Zen Home Dev$' \
+  # Sortie lue en entier : avec pipefail, « grep -q » couperait codesign (SIGPIPE) et ferait échouer le contrôle.
+  grep -q '^Authority=Zen Home Dev$' <<< "$(codesign -dvv "$APP" 2>&1)" \
     || { echo "L'appli n'est pas signée par « Zen Home Dev »." >&2; exit 1; }
 fi
 
