@@ -30,7 +30,8 @@
   "plugins": {
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDUxOTUxNjhGQjdDNjhDODYKUldTR2pNYTNqeGFWVVlrN2phWTFaQy8waXVUaG5TU1FBTjczcStXOUloVXpRRTBLUVgxbzg1Y2MK",
-      "endpoints": ["https://github.com/Tetrax/tcl-zenhome/releases/latest/download/latest.json"]
+      "endpoints": ["https://github.com/Tetrax/tcl-zenhome/releases/latest/download/latest.json"],
+      "requireSignedVersion": true
     }
   },
   "bundle": {
