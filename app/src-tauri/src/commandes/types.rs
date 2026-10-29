@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 
 use crate::moteur::choix::RapportChoix;
-use crate::moteur::debloat::{self, Recommandation};
+use crate::moteur::debloat::{self, Balise, Recommandation};
 use crate::moteur::inventaire::{Inventaire, nettoyer_libelle, taille_lisible};
 use crate::moteur::transport::assainir;
 use crate::moteur::verification::{Controle, Statut};
@@ -60,6 +60,8 @@ pub struct AppliSysteme {
     pub libelle: String,
     pub explication: String,
     pub recommande: &'static str,
+    /// « pistage » (lignes sans balise de la liste) ou « option » ([option], [option:garder]).
+    pub groupe: &'static str,
     pub etat: &'static str,
 }
 
@@ -143,6 +145,7 @@ pub fn inventaire_ui(inv: &Inventaire, libelles: &HashMap<String, String>) -> In
             };
             AppliSysteme {
                 recommande: if e.recommandation() == Recommandation::Garder { "garder" } else { "desactiver" },
+                groupe: if e.balise == Balise::Aucune { "pistage" } else { "option" },
                 paquet: e.paquet,
                 libelle: e.libelle,
                 explication: e.explication,
