@@ -71,8 +71,11 @@ impl Config {
     }
 
     pub fn demo(version: String, donnees: PathBuf, rythme: Duration) -> Self {
-        let box_ = demo::DemoBox::nouvelle(rythme);
-        let fabrique: Fabrique = Box::new(move |_| Ok(box_.clone() as TransportPartage));
+        let boxes = demo::BOXES.map(|(_, ip, serie)| (ip, demo::DemoBox::nouvelle(rythme, serie)));
+        let fabrique: Fabrique = Box::new(move |ip| {
+            let (_, b) = boxes.iter().find(|(i, _)| *i == ip.to_string()).unwrap_or(&boxes[0]);
+            Ok(b.clone() as TransportPartage)
+        });
         Self::commune(version, donnees.join("demo"), PathBuf::new(), String::new(), true, fabrique, rythme)
     }
 
@@ -103,6 +106,9 @@ struct SessionBox {
 #[derive(Default)]
 struct Etat {
     boxes: Vec<BoxTrouvee>,
+    /// Id de la première box de `boxes` ; `prochain_id` : base de la prochaine recherche (un id n'est jamais réutilisé).
+    base_id: u32,
+    prochain_id: u32,
     villes: Vec<Ville>,
     adb_demo: bool,
     session: Option<SessionBox>,
@@ -250,7 +256,7 @@ impl Coeur {
             adb_installe,
             demo: self.cfg.demo,
             sauvegardes_dir_existe: self.cfg.donnees.join("sauvegardes").is_dir(),
-            reprise_en_attente: persistance::lire(&self.cfg.donnees).is_some(),
+            reprise_en_attente: persistance::en_attente(&self.cfg.donnees),
             origine: self.origine_courante().map(|o| OrigineUi { date: o.date }),
         }
     }
@@ -292,12 +298,16 @@ impl Coeur {
         let (_occupation, _) = self.prendre()?;
         let trouvees = if self.cfg.demo {
             std::thread::sleep(self.cfg.rythme_demo * 10);
-            vec![BoxTrouvee { nom: demo::NOM_BOX.into(), ip: demo::IP_BOX.into() }]
+            demo::BOXES.iter().map(|(nom, ip, _)| BoxTrouvee { nom: (*nom).into(), ip: (*ip).into() }).collect()
         } else {
             zh_reseau::chercher_box(Duration::from_secs(15))?
         };
-        let vue = trouvees.iter().enumerate().map(|(i, b)| BoxUi { id: i as u32, nom: b.nom.clone(), ip: b.ip.clone() }).collect();
-        self.etat().boxes = trouvees;
+        let mut e = self.etat();
+        let base = e.prochain_id;
+        let vue = trouvees.iter().zip(base..).map(|(b, id)| BoxUi { id, nom: b.nom.clone(), ip: b.ip.clone() }).collect();
+        e.base_id = base;
+        e.prochain_id = base.saturating_add(trouvees.len() as u32);
+        e.boxes = trouvees;
         Ok(vue)
     }
 
@@ -434,7 +444,7 @@ impl Coeur {
             Cible::Id { id } => {
                 let b = e
                     .boxes
-                    .get(*id as usize)
+                    .get(id.checked_sub(e.base_id).map_or(usize::MAX, |i| i as usize))
                     .ok_or_else(|| ErreurCommande::nouvelle("choix_invalide", "Cette box n'est plus dans la liste : relancez la recherche."))?;
                 Ok((b.nom.clone(), zh_reseau::valider_ipv4(&b.ip).ok_or_else(ip_invalide)?))
             }
@@ -449,7 +459,11 @@ impl Coeur {
     pub fn connecter(&self, cible: &Cible, emettre: Emetteur) -> Result<Connexion, ErreurCommande> {
         let (_occupation, surveillance) = self.prendre()?;
         let (nom, ip) = self.resoudre(cible)?;
-        self.fermer();
+        // Seule l'ancienne box est déconnectée : le serveur adb reste, pour enchaîner les box sans le relancer.
+        let ancienne = self.etat().session.take();
+        if let Some(s) = ancienne {
+            s.t.deconnecter();
+        }
         emettre(EvenementUi::Etape { nom: "Connexion à la box".into() });
         let t = (self.cfg.fabrique)(ip)?;
         let r = self.etablir(&t, emettre, &surveillance);
@@ -457,7 +471,7 @@ impl Coeur {
             Ok(serie) => {
                 let mut reprise = Reprise::pour_box(serie);
                 // Paquets désactivés par un passage interrompu sur CETTE box : la prochaine vérification les reprend.
-                if let Some(d) = persistance::lire(&self.cfg.donnees).filter(|d| d.serie == reprise.serie) {
+                if let Some(d) = persistance::lire(&self.cfg.donnees, reprise.serie.as_deref().unwrap_or_default()) {
                     reprise.desactives = d.desactives;
                 }
                 self.etat().session = Some(SessionBox { t, reprise, inventaire: None });
@@ -708,8 +722,8 @@ impl Coeur {
             s.reprise.desactives.clear();
             s.reprise.serie.clone()
         };
-        if persistance::lire(&self.cfg.donnees).is_some_and(|d| d.serie == serie) {
-            persistance::effacer(&self.cfg.donnees);
+        if let Some(serie) = serie {
+            persistance::effacer(&self.cfg.donnees, &serie);
         }
     }
 }

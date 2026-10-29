@@ -12,12 +12,15 @@ use super::erreur::ErreurCommande;
 use super::evenements::{EvenementUi, Raison};
 use super::persistance;
 use super::types::{Cible, ChoixUi, InventaireUi};
+use crate::moteur::transport::{Commande, ErreurTransport, EtatLien, Sortie, Transport};
 use crate::moteur::connexion::Politique;
 use crate::moteur::fake_box::FakeBox;
 use crate::moteur::session::Reprise;
 
 const SERIE: &str = "TESTSERIAL0001";
 const IP: &str = "192.168.1.20";
+const IP_B: &str = "192.168.1.21";
+const SERIE_B: &str = "TESTSERIAL0002";
 
 fn dossier(nom: &str) -> PathBuf {
     static N: AtomicU32 = AtomicU32::new(0);
@@ -72,6 +75,25 @@ fn enregistreur() -> (Recu, impl Fn(EvenementUi) + Send + Sync) {
 }
 
 fn rien(_: EvenementUi) {}
+
+/// Deux box de test (séries et IP différentes) servies selon l'IP demandée.
+fn config_deux(donnees: PathBuf, a: &Arc<FakeBox>, b: &Arc<FakeBox>) -> Config {
+    let (a, b) = (a.clone(), b.clone());
+    let mut cfg = config(donnees, &a);
+    cfg.fabrique = Box::new(move |ip| Ok(if ip.to_string() == IP_B { b.clone() } else { a.clone() } as TransportPartage));
+    avec_apk(&mut cfg, b"apk de test", &sha(b"apk de test"));
+    cfg
+}
+
+fn deux_boxes() -> (Arc<FakeBox>, Arc<FakeBox>) {
+    let (a, b) = (Arc::new(FakeBox::mibox4()), Arc::new(FakeBox::mibox4()));
+    b.modifier(|e| e.serie = SERIE_B.into());
+    (a, b)
+}
+
+fn connecter_ip(c: &Coeur, ip: &str) {
+    c.connecter(&Cible::Ip { ip: ip.into() }, &rien).unwrap();
+}
 
 fn code<T>(r: Result<T, ErreurCommande>) -> &'static str {
     r.err().expect("une erreur était attendue").code
@@ -317,7 +339,7 @@ fn reprise_persistee_pendant_la_verification_puis_effacee() {
     let rapport = c
         .verifier(true, &move |e| {
             if matches!(&e, EvenementUi::Etape { nom } if nom == "Nouveau contrôle") {
-                *v.lock().unwrap() = persistance::lire(&dd);
+                *v.lock().unwrap() = persistance::lire(&dd, SERIE);
             }
         })
         .unwrap();
@@ -326,7 +348,7 @@ fn reprise_persistee_pendant_la_verification_puis_effacee() {
     assert_eq!(en_cours.serie.as_deref(), Some(SERIE));
     assert!(!en_cours.desactives.is_empty());
     // vérification réussie : plus de retour arrière à garder
-    assert_eq!(persistance::lire(&d), None);
+    assert_eq!(persistance::lire(&d, SERIE), None);
     assert!(c.reprise_session().unwrap().desactives.is_empty());
 }
 
@@ -519,4 +541,154 @@ fn desinstaller_mac_en_demo_ne_supprime_rien() {
     assert!(donnees.join("demo/sauvegardes").is_dir());
     assert!(std::fs::read_dir(&documents).unwrap().next().is_none(), "aucune copie en démo");
     assert!(parent.is_dir());
+}
+
+#[test]
+fn reprise_gardee_par_serie_entre_deux_box() {
+    let (a, b) = deux_boxes();
+    let d = dossier("reprise-deux");
+    let c = Coeur::nouveau(config_deux(d.clone(), &a, &b));
+
+    // vérification de A interrompue après la désactivation des applis
+    connecter_ip(&c, IP);
+    let inv = inventaire(&c);
+    c.installer(None, None, &rien).unwrap();
+    c.appliquer(&choix_recommande(&inv), &rien).unwrap();
+    let r = c.verifier(true, &|e| {
+        if matches!(&e, EvenementUi::Etape { nom } if nom == "Nouveau contrôle") {
+            c.annuler();
+        }
+    });
+    assert_eq!(code(r), "annule");
+    let reprise_a = persistance::lire(&d, SERIE).expect("reprise de A sur disque");
+
+    // vérification complète de B : la reprise de A reste intacte
+    connecter_ip(&c, IP_B);
+    assert!(c.reprise_session().unwrap().desactives.is_empty(), "B ne reprend pas les paquets de A");
+    let inv = inventaire(&c);
+    c.installer(None, None, &rien).unwrap();
+    c.appliquer(&choix_recommande(&inv), &rien).unwrap();
+    assert_eq!(c.verifier(true, &rien).unwrap().ko, 0);
+    assert_eq!(persistance::lire(&d, SERIE), Some(reprise_a.clone()));
+    assert_eq!(persistance::lire(&d, SERIE_B), None);
+    assert!(c.etat_initial().reprise_en_attente);
+
+    // en reconnectant A, la reprise revient ; sa vérification l'efface sans toucher aux autres
+    connecter_ip(&c, IP);
+    assert_eq!(c.reprise_session().unwrap().desactives, reprise_a.desactives);
+    assert_eq!(c.verifier(true, &rien).unwrap().ko, 0);
+    assert!(!c.etat_initial().reprise_en_attente);
+}
+
+#[test]
+fn ids_de_box_jamais_reutilises() {
+    let c = Coeur::nouveau(Config::demo("0.0.0-test".into(), dossier("ids"), Duration::ZERO));
+    let premiere = c.chercher_box().unwrap();
+    let seconde = c.chercher_box().unwrap();
+    assert!(seconde.iter().all(|b| premiere.iter().all(|p| p.id != b.id)), "ids neufs à chaque recherche");
+    assert_eq!(code(c.connecter(&Cible::Id { id: premiere[0].id }, &rien)), "choix_invalide", "id périmé");
+    assert_eq!(code(c.connecter(&Cible::Id { id: seconde[1].id + 1 }, &rien)), "choix_invalide", "id inconnu");
+    let connexion = c.connecter(&Cible::Id { id: seconde[1].id }, &rien).unwrap();
+    assert_eq!(connexion.nom, seconde[1].nom);
+}
+
+/// Transport qui compte les arrêts du serveur adb (FakeBox derrière).
+struct Compteur(Arc<FakeBox>, Arc<AtomicU32>);
+
+impl Transport for Compteur {
+    fn shell(&self, c: &Commande) -> Result<Sortie, ErreurTransport> {
+        self.0.shell(c)
+    }
+    fn shell_stdin(&self, c: &Commande) -> Result<Sortie, ErreurTransport> {
+        self.0.shell_stdin(c)
+    }
+    fn install(&self, apk: &std::path::Path) -> Result<Sortie, ErreurTransport> {
+        self.0.install(apk)
+    }
+    fn uninstall(&self, p: &str) -> Result<Sortie, ErreurTransport> {
+        self.0.uninstall(p)
+    }
+    fn etat(&self) -> Result<EtatLien, ErreurTransport> {
+        self.0.etat()
+    }
+    fn connecter(&self) -> Result<(), ErreurTransport> {
+        self.0.connecter()
+    }
+    fn deconnecter(&self) {
+        self.0.deconnecter();
+    }
+    fn arreter_serveur(&self) {
+        self.1.fetch_add(1, Ordering::SeqCst);
+    }
+}
+
+#[test]
+fn changer_de_box_garde_le_serveur_adb() {
+    let (a, b) = deux_boxes();
+    let arrets = Arc::new(AtomicU32::new(0));
+    let mut cfg = config_deux(dossier("serveur"), &a, &b);
+    let (aa, bb, n) = (a.clone(), b.clone(), arrets.clone());
+    cfg.fabrique = Box::new(move |ip| Ok(Arc::new(Compteur(if ip.to_string() == IP_B { bb.clone() } else { aa.clone() }, n.clone())) as TransportPartage));
+    let c = Coeur::nouveau(cfg);
+
+    connecter_ip(&c, IP);
+    connecter_ip(&c, IP_B);
+    assert_eq!(arrets.load(Ordering::SeqCst), 0, "le serveur reste en passant d'une box à l'autre");
+    assert_eq!(a.journal().last().map(String::as_str), Some("disconnect"), "l'ancienne box est déconnectée");
+    assert_ne!(b.journal().last().map(String::as_str), Some("disconnect"));
+
+    c.couper_debogage().unwrap();
+    assert_eq!(arrets.load(Ordering::SeqCst), 1, "couper le débogage arrête le serveur");
+}
+
+#[test]
+fn parcours_demo_a_deux_box() {
+    let d = dossier("demo-deux");
+    let c = Coeur::nouveau(Config::demo("0.0.0-test".into(), d.clone(), Duration::ZERO));
+    c.installer_adb(true, &rien).unwrap();
+    let boxes = c.chercher_box().unwrap();
+    assert_eq!(boxes.iter().map(|b| (b.nom.as_str(), b.ip.as_str())).collect::<Vec<_>>(), [("SALON", "192.168.50.14"), ("CHAMBRE", "192.168.50.15")]);
+    let villes = c.chercher_villes("Montpel").unwrap();
+
+    // passage 1 sur chaque box, puis passage 2
+    let mut applis = vec![];
+    for b in &boxes {
+        c.connecter(&Cible::Id { id: b.id }, &rien).unwrap();
+        inventaire(&c);
+        c.installer(Some(villes[0].id), None, &rien).unwrap();
+        let inv = inventaire(&c);
+        applis.push(inv.applis_utilisateur.iter().map(|a| a.paquet.clone()).collect::<Vec<_>>());
+    }
+    assert!(applis[0].contains(&"org.videolan.vlc".to_string()) && !applis[1].contains(&"org.videolan.vlc".to_string()));
+    assert!(applis[1].contains(&"org.xbmc.kodi".to_string()) && !applis[0].contains(&"org.xbmc.kodi".to_string()));
+    assert!(applis.iter().all(|a| a.contains(&"com.netflix.ninja".to_string())), "une appli commune");
+
+    for (b, propre) in boxes.iter().zip(["org.videolan.vlc", "org.xbmc.kodi"]) {
+        c.connecter(&Cible::Id { id: b.id }, &rien).unwrap();
+        let inv = inventaire(&c);
+        let choix = ChoixUi { desinstaller: vec![propre.into()], ..choix_recommande(&inv) };
+        assert_eq!(c.appliquer(&choix, &rien).unwrap().desinstallees, [propre]);
+        assert_eq!(c.verifier(true, &rien).unwrap().ko, 0);
+    }
+
+    // l'état de chaque box est resté le sien
+    for (b, (partie, restee)) in boxes.iter().zip([("org.videolan.vlc", "com.disney.disneyplus"), ("org.xbmc.kodi", "com.amazon.amazonvideo.livingroom")]) {
+        c.connecter(&Cible::Id { id: b.id }, &rien).unwrap();
+        let inv = inventaire(&c);
+        let paquets: Vec<_> = inv.applis_utilisateur.iter().map(|a| a.paquet.as_str()).collect();
+        assert!(!paquets.contains(&partie) && paquets.contains(&restee) && paquets.contains(&"com.netflix.ninja"), "{}: {paquets:?}", b.nom);
+        assert!(inv.resume.nb_desactivees > 0);
+    }
+
+    // une sauvegarde au moins par série, l'origine semée seulement pour SALON
+    let noms: Vec<String> = std::fs::read_dir(d.join("demo/sauvegardes")).unwrap().flatten().map(|e| e.file_name().to_string_lossy().into_owned()).collect();
+    for serie in ["ZH-DEMO-0001", "ZH-DEMO-0002"] {
+        assert!(noms.iter().any(|n| n.ends_with(serie)), "{serie}: {noms:?}");
+    }
+    c.connecter(&Cible::Id { id: boxes[1].id }, &rien).unwrap();
+    // pas d'origine semée : celle de CHAMBRE est sa propre première lecture (avant l'installation), jamais celle de SALON
+    let origine = c.restaurer(&rien).unwrap().depuis_sauvegarde;
+    assert!(origine.is_some_and(|o| o != "15/09/2026 21:00"));
+    c.connecter(&Cible::Id { id: boxes[0].id }, &rien).unwrap();
+    assert_eq!(c.restaurer(&rien).unwrap().depuis_sauvegarde.as_deref(), Some("15/09/2026 21:00"));
 }

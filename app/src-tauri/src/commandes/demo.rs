@@ -7,9 +7,9 @@ use std::time::Duration;
 use crate::moteur::fake_box::{FakeBox, PaquetFake};
 use crate::moteur::transport::{Commande, ErreurTransport, EtatLien, Sortie, Transport};
 
-pub const NOM_BOX: &str = "SALON";
-pub const IP_BOX: &str = "192.168.50.14";
-const SERIE: &str = "ZH-DEMO-0001";
+/// Les deux Mi Box simulées : nom, IP et numéro de série (SALON est la première, celle qui a une sauvegarde d'origine).
+pub const BOXES: [(&str, &str, &str); 2] = [("SALON", "192.168.50.14", "ZH-DEMO-0001"), ("CHAMBRE", "192.168.50.15", "ZH-DEMO-0002")];
+const SERIE: &str = BOXES[0].2;
 
 /// Délai artificiel par commande (le moteur lui-même n'attend jamais avec une FakeBox).
 pub const RYTHME: Duration = Duration::from_millis(70);
@@ -60,16 +60,18 @@ fn tiers(p: &str, mo: u64, derniere: &str, libelle: &str) -> PaquetFake {
 }
 
 impl DemoBox {
-    pub fn nouvelle(rythme: Duration) -> Arc<Self> {
+    pub fn nouvelle(rythme: Duration, serie: &str) -> Arc<Self> {
         let box_ = FakeBox::mibox4();
         box_.modifier(|e| {
-            e.serie = SERIE.into();
-            for (p, mo, d, l) in [
-                ("com.netflix.ninja", 98, "2026-10-26 20:41:07", "Netflix"),
-                ("org.videolan.vlc", 42, "2026-09-02 18:20:00", "VLC"),
-                ("com.disney.disneyplus", 160, "2026-10-01 21:10:45", "Disney+"),
-            ] {
-                e.paquets.insert(p.into(), tiers(p, mo, d, l));
+            e.serie = serie.into();
+            // Netflix est commune aux deux box ; les autres applis sont propres à chacune.
+            let propres: &[(&str, u64, &str, &str)] = if serie == SERIE {
+                &[("org.videolan.vlc", 42, "2026-09-02 18:20:00", "VLC"), ("com.disney.disneyplus", 160, "2026-10-01 21:10:45", "Disney+")]
+            } else {
+                &[("org.xbmc.kodi", 120, "2026-08-14 22:05:30", "Kodi"), ("com.amazon.amazonvideo.livingroom", 75, "2026-10-20 19:30:12", "Prime Video")]
+            };
+            for (p, mo, d, l) in [("com.netflix.ninja", 98, "2026-10-26 20:41:07", "Netflix")].iter().chain(propres) {
+                e.paquets.insert((*p).into(), tiers(p, *mo, d, l));
             }
         });
         Arc::new(Self { box_, rythme })

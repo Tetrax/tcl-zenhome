@@ -10,7 +10,7 @@ Les commandes longues reçoivent un `Channel<Evenement>` (Tauri `ipc::Channel`) 
 |---|---|---|
 | `etat_initial` | — | `{ version, adb_installe: bool, demo: bool, sauvegardes_dir_existe: bool, reprise_en_attente: bool, origine: { date: string } \| null }` |
 | `installer_adb` | `accord: bool`, `canal` | `null` ; progression via `{type:"progression", fraction}` |
-| `chercher_box` | — | `[{ id: number, nom: string, ip: string }]` (les `id` désignent une liste gardée côté Rust) |
+| `chercher_box` | — | `[{ id: number, nom: string, ip: string }]` (les `id` désignent la dernière liste gardée côté Rust ; ils ne sont jamais réutilisés d'une recherche à l'autre : un id d'une recherche précédente donne `choix_invalide`) |
 | `connecter` | `cible: {id: number} \| {ip: string}`, `canal` | `{ nom, ip, modele }` |
 | `chercher_villes` | `saisie: string` | `[{ id: number, nom, region?: string, pays?: string }]` |
 | `inventaire` | `canal` | `Inventaire` (voir plus bas) |
@@ -51,7 +51,7 @@ La sauvegarde d'origine d'une box est la plus ancienne sauvegarde de sa série (
 
 - Les **arguments** de commande passent en camelCase : `ville_id` s'envoie `villeId`. Les autres (`accord`, `canal`, `cible`, `saisie`, `jeton`, `choix`, `reparer`, `demande`, `decision`) sont des mots simples, donc inchangés. Les champs des objets (`cible`, `choix`, résultats, événements) restent en snake_case tels que dans ce document.
 - `canal` : `const canal = new Channel<Evenement>(); canal.onmessage = (e) => ...`, puis `invoke("connecter", { cible, canal })`.
-- `cible` : `{ id: 0 }` (id issu du dernier `chercher_box`) ou `{ ip: "192.168.1.20" }` (IP privée ou link-local, sinon erreur `injoignable`).
+- `cible` : `{ id: 0 }` (id issu du dernier `chercher_box`, jamais d'une recherche plus ancienne) ou `{ ip: "192.168.1.20" }` (IP privée ou link-local, sinon erreur `injoignable`).
 - `installer` : `{ villeId: number | null, jeton: string | null, canal }`. Le jeton TMDB n'est jamais renvoyé ni journalisé ; vide ou `null` = pas de jeton.
 - `decider` : `{ demande: <id reçu>, decision: "reessayer" | "arreter" }`. L'identifiant est à usage unique ; sans réponse après 5 minutes, l'action s'arrête (comme « arreter »). Une demande inconnue ou déjà répondue renvoie `choix_invalide`.
 - `desinstaller_mac` : `{ garderSauvegardes: bool }`, sans `canal`.
@@ -63,7 +63,18 @@ La sauvegarde d'origine d'une box est la plus ancienne sauvegarde de sa série (
 - Une seule action à la fois pour **toutes** les commandes sauf `etat_initial`, `decider`, `annuler`, `ouvrir_sauvegardes` : sinon erreur `occupe`.
 - `annuler` : l'action en cours s'arrête avant sa prochaine opération et échoue avec le code `annule` (rien à défaire ; elle peut être relancée). Délai global d'une action : 30 minutes (erreur `interne`).
 - Après `appliquer`/`verifier`, rappeler `inventaire` pour rafraîchir l'affichage.
-- `reprise_en_attente: true` au démarrage : une vérification précédente a été interrompue après avoir désactivé des applis ; la prochaine `verifier(reparer: true)` sur la même box en tient compte pour le retour arrière (l'interface peut le dire à l'utilisateur et proposer « Vérifier »).
+- `reprise_en_attente: true` au démarrage : une vérification précédente a été interrompue après avoir désactivé des applis, pour au moins une box ; la prochaine `verifier(reparer: true)` sur cette box en tient compte pour le retour arrière (l'interface peut le dire à l'utilisateur et proposer « Vérifier »). La reprise est mémorisée **par numéro de série** (un seul fichier, 32 box au plus, la plus ancienne saute au-delà) : `connecter` charge celle de la box connectée, `verifier`/`restaurer` n'effacent que celle de la box connectée ; traiter une box ne touche pas à la reprise d'une autre. Un fichier modifié ou invalide est ignoré en entier.
+- Changer de box (`connecter` sur une autre cible) ferme la session précédente par un simple `adb disconnect` : le serveur adb dédié reste lancé. Il n'est arrêté que par `couper_debogage`, la fermeture de l'appli et `desinstaller_mac`.
+
+### Plusieurs box
+
+Le cœur n'a qu'**une session à la fois** ; c'est l'interface qui enchaîne les box avec les commandes ci-dessus, une box après l'autre, sans nouvelle commande ni identifiant de box dans les événements.
+
+- Passage 1 (installer), pour chaque box : `connecter` → `inventaire` → `installer` → `inventaire`. Les questions communes (ville, jeton) sont posées une fois et réutilisées pour toutes les box.
+- Passage 2 (appliquer), pour chaque box : `connecter` → `inventaire` → `appliquer` (le choix de l'utilisateur est réduit aux paquets présents sur cette box) → `verifier(true)`.
+- Réparer : `connecter` → `verifier(true)`. Revenir à avant Zen Home : `connecter` → `restaurer`.
+- Une box en échec n'arrête pas les autres (l'interface note l'erreur et passe à la suivante) ; `annuler` (code `annule`) arrête tout le lot.
+- Les ids de `chercher_box` restent valables tant qu'aucune nouvelle recherche n'a lieu : ne pas relancer `chercher_box` en cours de lot.
 
 ## Erreurs
 
@@ -84,4 +95,4 @@ Sur `attente_utilisateur`, l'interface affiche la consigne (réveiller la box / 
 
 ## Mode démo
 
-En build debug, ou si la variable d'environnement `ZENHOME_DEMO=1` est définie (`ZENHOME_DEMO=0` force le mode réel même en debug), le cœur utilise une box simulée (FakeBox) : tout le parcours fonctionne sans box. La box simulée est une Mi Box « SALON » (192.168.50.14) ; `installer_adb` simule une progression, `chercher_villes` renvoie 3 villes factices dont « Montpellier », `ouvrir_sauvegardes` ne lance rien, `desinstaller_mac` ne supprime rien. Le cœur dépose une sauvegarde d'origine factice (15/09/2026 21:00, série de la box simulée) dans le dossier de démo pour que le parcours propose « Revenir à avant Zen Home » depuis cette sauvegarde. `adb_installe` vaut `false` au départ en démo, jusqu'à `installer_adb`. `etat_initial().demo` vaut alors `true` et l'interface affiche un discret bandeau « Mode démo ». Dans un navigateur (hors Tauri), `api.ts` simule ces mêmes réponses.
+En build debug, ou si la variable d'environnement `ZENHOME_DEMO=1` est définie (`ZENHOME_DEMO=0` force le mode réel même en debug), le cœur utilise une box simulée (FakeBox) : tout le parcours fonctionne sans box. Deux box simulées : « SALON » (192.168.50.14, série `ZH-DEMO-0001`) et « CHAMBRE » (192.168.50.15, série `ZH-DEMO-0002`), toutes deux renvoyées par `chercher_box`, chacune avec sa FakeBox (Netflix est commune ; VLC et Disney+ sont propres à SALON, Kodi et Prime Video à CHAMBRE) ; `installer_adb` simule une progression, `chercher_villes` renvoie 3 villes factices dont « Montpellier », `ouvrir_sauvegardes` ne lance rien, `desinstaller_mac` ne supprime rien. Le cœur dépose une sauvegarde d'origine factice (15/09/2026 21:00, série de SALON seulement) dans le dossier de démo pour que le parcours propose « Revenir à avant Zen Home » depuis cette sauvegarde ; CHAMBRE n'en a pas de semée (sa propre première lecture, avant l'installation, sert d'origine comme sur une vraie box). `adb_installe` vaut `false` au départ en démo, jusqu'à `installer_adb`. `etat_initial().demo` vaut alors `true` et l'interface affiche un discret bandeau « Mode démo ». Dans un navigateur (hors Tauri), `api.ts` simule ces mêmes réponses.
