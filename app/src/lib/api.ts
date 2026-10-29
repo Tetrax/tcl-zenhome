@@ -19,6 +19,10 @@ export interface Api {
   annuler(): Promise<void>;
   couperDebogage(): Promise<void>;
   ouvrirSauvegardes(): Promise<void>;
+  /** Texte du rapport (version, système, erreur, résumé de l'action), filtré par le cœur, pour le copier. */
+  rapportTexte(erreur: string, resume: string): Promise<string>;
+  /** Ouvre la messagerie avec un e-mail prêt (adresse et sujet fixes, corps borné par le cœur). */
+  envoyerRapport(erreur: string, resume: string): Promise<void>;
   desinstallerMac(garderSauvegardes: boolean): Promise<void>;
 }
 
@@ -51,6 +55,8 @@ async function tauri(): Promise<Api> {
     annuler: () => invoke("annuler"),
     couperDebogage: () => invoke("couper_debogage"),
     ouvrirSauvegardes: () => invoke("ouvrir_sauvegardes"),
+    rapportTexte: (erreur, resume) => invoke("rapport_texte", { erreur, resume }),
+    envoyerRapport: (erreur, resume) => invoke("envoyer_rapport", { erreur, resume }),
     desinstallerMac: (garderSauvegardes) => invoke("desinstaller_mac", { garderSauvegardes }),
   };
 }
@@ -82,5 +88,7 @@ export const api: Api = {
   annuler: () => appeler("annuler"),
   couperDebogage: () => appeler("couperDebogage"),
   ouvrirSauvegardes: () => appeler("ouvrirSauvegardes"),
+  rapportTexte: (e, r) => appeler("rapportTexte", e, r),
+  envoyerRapport: (e, r) => appeler("envoyerRapport", e, r),
   desinstallerMac: (g) => appeler("desinstallerMac", g),
 };

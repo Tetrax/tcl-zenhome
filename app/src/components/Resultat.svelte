@@ -1,6 +1,7 @@
 <script lang="ts">
   import Panneau from "./Panneau.svelte";
   import Icone from "./Icone.svelte";
+  import Rapport from "./Rapport.svelte";
   import { zen } from "../lib/zen.svelte";
   import { humaniser, libelleEtat } from "../lib/libelles";
 
@@ -74,6 +75,7 @@
       </p>
     </div>
   </div>
+  {#if !parfait}<Rapport />{/if}
   {#if zen.erreur}<p class="msg" role="alert" style="margin-top:12px">{zen.erreur.message}</p>{/if}
   {#snippet pied()}
     <button class="btn primary" type="button" onclick={() => zen.aller("adieu")}>Terminer</button>

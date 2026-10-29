@@ -2,6 +2,7 @@
 <script lang="ts">
   import Panneau from "./Panneau.svelte";
   import Icone from "./Icone.svelte";
+  import Rapport from "./Rapport.svelte";
   import { zen, type BoxLot } from "../lib/zen.svelte";
 
   const lot = $derived(zen.lot ?? []);
@@ -72,6 +73,7 @@
       </div>
     </div>
   {/if}
+  {#if !parfait}<Rapport />{/if}
   {#snippet pied()}
     {#if peutReessayer}<button class="btn primary" type="button" onclick={() => zen.reessayerLot()}>Réessayer les box en échec</button>{/if}
     <button class="btn" class:primary={!peutReessayer} type="button" onclick={() => zen.aller("adieu")}>Terminer</button>

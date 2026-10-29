@@ -22,6 +22,14 @@ pub struct EtatInitial {
     pub reprise_en_attente: bool,
     /// Sauvegarde d'origine la plus récente trouvée (toutes box confondues), si elle existe.
     pub origine: Option<OrigineUi>,
+    /// Box déjà configurées (la plus récente d'abord), à proposer tout de suite pendant la recherche.
+    pub boxes_memorisees: Vec<BoxMemoriseeUi>,
+}
+
+#[derive(Serialize)]
+pub struct BoxMemoriseeUi {
+    pub nom: String,
+    pub ip: String,
 }
 
 #[derive(Serialize)]

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-rapport-texte"
+description = "Enables the rapport_texte command without any pre-configured scope."
+commands.allow = ["rapport_texte"]
+
+[[permission]]
+identifier = "deny-rapport-texte"
+description = "Denies the rapport_texte command without any pre-configured scope."
+commands.deny = ["rapport_texte"]

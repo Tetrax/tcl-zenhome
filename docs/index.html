@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Zen Home pour Mi Box 4</title>
+<meta name="description" content="Un accueil apaisé pour votre Xiaomi Mi Box 4, sans publicité ni pistage. Application gratuite pour Mac.">
+<link rel="icon" href="icone.png">
+<style>
+  @font-face { font-family: "Poppins"; font-weight: 300; font-style: normal; font-display: swap; src: url("fonts/Poppins-Light.ttf") format("truetype"); }
+  @font-face { font-family: "Poppins"; font-weight: 400; font-style: normal; font-display: swap; src: url("fonts/Poppins-Regular.ttf") format("truetype"); }
+  @font-face { font-family: "Poppins"; font-weight: 500; font-style: normal; font-display: swap; src: url("fonts/Poppins-Medium.ttf") format("truetype"); }
+  :root {
+    --ciel-haut: #2b2f55; --ciel-milieu: #7d6b9a; --ciel-bas: #f2b48f;
+    --accent: #ffcf8e; --texte: #fff; --texte-doux: rgba(255, 255, 255, .78);
+    --verre: rgba(12, 16, 30, .55); --bord: rgba(255, 255, 255, .22); --foret: #18202c;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    min-height: 100vh; font-family: "Poppins", system-ui, sans-serif; font-weight: 400; color: var(--texte); line-height: 1.6;
+    background: linear-gradient(180deg, var(--ciel-haut) 0%, var(--ciel-milieu) 48%, var(--ciel-bas) 82%, var(--foret) 82.1%);
+    background-attachment: fixed; -webkit-font-smoothing: antialiased; overflow-x: hidden;
+  }
+  .lueur { position: fixed; left: 50%; top: 58%; width: 70vmax; height: 70vmax; transform: translate(-50%, -50%); border-radius: 50%; pointer-events: none;
+    background: radial-gradient(circle, rgba(255, 214, 160, .55), rgba(255, 214, 160, 0) 60%); }
+  .foret { position: fixed; left: 0; right: 0; bottom: 0; height: 26vh; min-height: 140px; pointer-events: none; }
+  .foret svg { width: 100%; height: 100%; display: block; }
+  main { position: relative; z-index: 1; max-width: 880px; margin: 0 auto; padding: 56px 16px 120px; }
+  .carte { background: linear-gradient(155deg, rgba(255, 255, 255, .14), rgba(255, 255, 255, .03) 55%), var(--verre);
+    backdrop-filter: blur(22px) saturate(1.3); -webkit-backdrop-filter: blur(22px) saturate(1.3);
+    border: 1px solid var(--bord); border-radius: 28px; padding: clamp(24px, 5vw, 48px); box-shadow: 0 30px 80px -30px rgba(0, 0, 0, .6); }
+  .entete { display: flex; align-items: center; gap: 18px; }
+  .entete img { width: 72px; height: 72px; border-radius: 18px; }
+  h1 { font-weight: 300; font-size: clamp(38px, 7vw, 60px); line-height: 1.05; margin: 0; letter-spacing: -.01em; }
+  .accroche { font-size: clamp(18px, 2.6vw, 21px); color: var(--texte-doux); margin: 22px 0 30px; max-width: 34em; }
+  .bouton { display: inline-flex; align-items: center; gap: 12px; min-height: 56px; padding: 0 30px; border-radius: 999px;
+    background: #f7f3ec; color: #14202c; font: 500 17px/1 "Poppins", system-ui, sans-serif; text-decoration: none;
+    box-shadow: 0 14px 34px -10px rgba(0, 0, 0, .55); transition: transform .25s, box-shadow .3s, background .25s; }
+  .bouton:hover { transform: translateY(-2px); background: #fff; box-shadow: 0 18px 40px -8px rgba(255, 207, 142, .7), 0 0 0 4px rgba(255, 207, 142, .3); }
+  .bouton:focus-visible { outline: 3px solid var(--accent); outline-offset: 4px; }
+  .sous-bouton { margin: 14px 0 0; font-size: 14px; color: var(--texte-doux); }
+  .sous-bouton a, footer a, .etapes a { color: var(--texte); }
+  h2 { font-weight: 300; font-size: clamp(24px, 3.6vw, 30px); margin: 0 0 18px; }
+  section { margin-top: 28px; }
+  .grille { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .atout { background: rgba(255, 255, 255, .06); border: 1px solid rgba(255, 255, 255, .14); border-radius: 20px; padding: 20px; }
+  .atout h3 { margin: 0 0 6px; font-weight: 500; font-size: 17px; }
+  .atout p { margin: 0; font-size: 15px; color: var(--texte-doux); }
+  .etapes { list-style: none; counter-reset: e; margin: 0; padding: 0; display: grid; gap: 14px; }
+  .etapes li { counter-increment: e; position: relative; padding-left: 46px; color: var(--texte-doux); }
+  .etapes li b { color: var(--texte); font-weight: 500; }
+  .etapes li::before { content: counter(e); position: absolute; left: 0; top: 0; width: 30px; height: 30px; border-radius: 50%;
+    display: grid; place-items: center; background: var(--accent); color: #14202c; font-size: 14px; font-weight: 500; }
+  .note { margin-top: 18px; padding: 14px 18px; border-radius: 16px; background: rgba(255, 207, 142, .12); border: 1px solid rgba(255, 207, 142, .35); font-size: 15px; color: var(--texte-doux); }
+  footer { position: relative; z-index: 1; text-align: center; font-size: 13px; color: var(--texte-doux); padding: 0 16px 28px; }
+  @media (max-width: 720px) { .grille { grid-template-columns: 1fr; } main { padding-top: 28px; } .entete img { width: 56px; height: 56px; } }
+  @media (prefers-reduced-motion: reduce) { .bouton { transition: none; } .bouton:hover { transform: none; } }
+</style>
+</head>
+<body>
+<div class="lueur" aria-hidden="true"></div>
+<div class="foret" aria-hidden="true">
+  <svg viewBox="0 0 1200 200" preserveAspectRatio="none">
+    <path fill="#2a3242" d="M0 120 L40 70 L70 110 L110 40 L150 105 L190 60 L230 115 L270 50 L320 112 L360 72 L400 118 L450 45 L500 110 L540 66 L590 118 L640 52 L690 112 L730 70 L780 116 L830 48 L880 110 L920 64 L970 118 L1020 56 L1070 112 L1110 72 L1160 116 L1200 60 L1200 200 L0 200 Z"/>
+    <path fill="#18202c" d="M0 150 L30 110 L60 148 L100 90 L140 150 L180 104 L220 152 L265 96 L310 150 L350 112 L395 154 L440 92 L490 150 L530 110 L575 154 L620 98 L670 152 L710 114 L755 156 L800 94 L850 150 L890 108 L935 154 L985 100 L1035 152 L1075 116 L1120 156 L1165 102 L1200 140 L1200 200 L0 200 Z"/>
+  </svg>
+</div>
+
+<main>
+  <div class="carte">
+    <div class="entete">
+      <img src="icone.png" alt="" width="72" height="72">
+      <h1>Zen Home</h1>
+    </div>
+    <p class="accroche">Un accueil apaisé pour votre <strong>Xiaomi Mi Box 4</strong> : une belle photo, l'heure, la météo, les films du moment et vos applis. Sans publicité ni pistage. Il suffit d'une dizaine de minutes.</p>
+    <a class="bouton" href="https://github.com/Tetrax/tcl-zenhome/releases/latest/download/Zen-Home-Mac.dmg">
+      <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 3a1 1 0 0 1 1 1v9.6l3.3-3.3a1 1 0 1 1 1.4 1.4l-5 5a1 1 0 0 1-1.4 0l-5-5a1 1 0 1 1 1.4-1.4l3.3 3.3V4a1 1 0 0 1 1-1ZM5 19h14a1 1 0 1 1 0 2H5a1 1 0 1 1 0-2Z"/></svg>
+      Télécharger pour Mac
+    </a>
+    <p class="sous-bouton">Gratuit · macOS 12 ou plus récent · Mac Apple Silicon et Intel · <a href="mode-d-emploi.html">Mode d'emploi</a></p>
+
+    <section>
+      <h2>Ce que fait l'application</h2>
+      <div class="grille">
+        <div class="atout"><h3>Un nouvel accueil</h3><p>Zen Home remplace l'écran d'accueil chargé de publicités par un accueil simple et rapide.</p></div>
+        <div class="atout"><h3>Une box allégée</h3><p>Les programmes de publicité et de pistage sont désactivés. C'est vous qui choisissez, après un récapitulatif.</p></div>
+        <div class="atout"><h3>Réversible</h3><p>« Revenir à avant Zen Home » remet la box exactement comme elle était. Plusieurs box ? Elles se configurent d'affilée.</p></div>
+      </div>
+    </section>
+
+    <section>
+      <h2>En trois étapes</h2>
+      <ol class="etapes">
+        <li><b>Préparez la box</b> : activez le « débogage USB » avec la télécommande. Le <a href="mode-d-emploi.html">mode d'emploi</a> montre le chemin, menu par menu.</li>
+        <li><b>Installez l'application</b> : ouvrez le fichier téléchargé et glissez Zen Home dans le dossier Applications.</li>
+        <li><b>Laissez-vous guider</b> : l'application trouve la box, pose quelques questions et ne modifie rien avant votre accord.</li>
+      </ol>
+      <p class="note">Au premier lancement, macOS indique qu'il ne peut pas vérifier l'application : elle n'est pas enregistrée auprès d'Apple. Le <a href="mode-d-emploi.html">mode d'emploi</a> explique comment l'ouvrir quand même, une seule fois.</p>
+    </section>
+  </div>
+</main>
+
+<footer>
+  Projet personnel, gratuit et sans compte à créer · <a href="https://github.com/Tetrax/tcl-zenhome">Code source</a> · <a href="https://github.com/Tetrax/tcl-zenhome/releases">Toutes les versions</a>
+</footer>
+</body>
+</html>

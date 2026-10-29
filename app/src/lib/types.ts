@@ -2,7 +2,10 @@
 
 export interface EtatInitial { version: string; adb_installe: boolean; demo: boolean; sauvegardes_dir_existe: boolean; reprise_en_attente: boolean;
   /** Sauvegarde d'origine (faite avant Zen Home) la plus récente, ou null. `date` : « JJ/MM/AAAA HH:MM ». */
-  origine: { date: string } | null }
+  origine: { date: string } | null;
+  /** Box déjà configurées (la plus récente d'abord), à proposer tout de suite pendant la recherche. */
+  boxes_memorisees: BoxMemorisee[] }
+export interface BoxMemorisee { nom: string; ip: string }
 export interface BoxTrouvee { id: number; nom: string; ip: string }
 export type Cible = { id: number } | { ip: string };
 export interface BoxConnectee { nom: string; ip: string; modele: string }

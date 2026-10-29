@@ -4,6 +4,7 @@
   import Panneau from "./Panneau.svelte";
   import Icone from "./Icone.svelte";
   import IllustrationTv from "./IllustrationTv.svelte";
+  import Rapport from "./Rapport.svelte";
   import { zen } from "../lib/zen.svelte";
   import type { CodeErreur } from "../lib/types";
 
@@ -39,6 +40,7 @@
     {:else if e.code === "autre_modele"}
       <p class="petit">Par sécurité, Zen Home n'a rien modifié sur cet appareil.</p>
     {/if}
+    {#if !["annule", "occupe", "refus_licence"].includes(e.code)}<Rapport />{/if}
     {#snippet pied()}
       {#if e.code === "adb_absent"}
         <button class="btn primary" type="button" onclick={() => zen.aller("adb")}>Installer l'outil adb</button>

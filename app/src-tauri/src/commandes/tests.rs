@@ -387,6 +387,7 @@ fn parcours_demo_complet() {
     let etat = c.etat_initial();
     assert!(etat.demo && !etat.adb_installe && !etat.reprise_en_attente);
     assert_eq!(etat.origine.map(|o| o.date).as_deref(), Some("15/09/2026 21:00"));
+    assert_eq!(etat.boxes_memorisees.iter().map(|b| (b.nom.as_str(), b.ip.as_str())).collect::<Vec<_>>(), [("SALON", "192.168.50.14")]);
 
     assert_eq!(code(c.installer_adb(false, &rien)), "refus_licence");
     let (recu, enregistre) = enregistreur();
@@ -602,6 +603,10 @@ fn box_memorisee_apres_connexion_reussie_seulement() {
     connecter_ip(&c, IP);
     let l = super::memoire::lire(&d);
     assert_eq!(l.iter().map(|b| b.ip.as_str()).collect::<Vec<_>>(), [IP_B, IP], "une entrée par série, la dernière en fin");
+    // exposées à l'interface, la plus récente d'abord ; un fichier modifié n'expose rien
+    assert_eq!(c.etat_initial().boxes_memorisees.iter().map(|b| b.ip.as_str()).collect::<Vec<_>>(), [IP, IP_B]);
+    std::fs::write(d.join("boxes.json"), r#"[{"serie":"A","nom":"Salon","ip":"8.8.8.8"}]"#).unwrap();
+    assert!(c.etat_initial().boxes_memorisees.is_empty());
     // connexion manuelle par IP : le nom mémorisé est gardé
     super::memoire::memoriser(&d, SERIE, "SALON", IP).unwrap();
     assert_eq!(c.connecter(&Cible::Ip { ip: IP.into() }, &rien).unwrap().nom, "SALON");

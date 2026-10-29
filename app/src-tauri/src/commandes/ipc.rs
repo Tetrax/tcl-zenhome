@@ -124,6 +124,18 @@ pub async fn ouvrir_sauvegardes(coeur: Etat<'_>) -> Result<(), ErreurCommande> {
     bloquant(move || c.ouvrir_sauvegardes()).await
 }
 
+#[tauri::command]
+pub async fn rapport_texte(coeur: Etat<'_>, erreur: String, resume: String) -> Result<String, ErreurCommande> {
+    let c = coeur.inner().clone();
+    bloquant(move || Ok(c.rapport_texte(&erreur, &resume))).await
+}
+
+#[tauri::command]
+pub async fn envoyer_rapport(coeur: Etat<'_>, erreur: String, resume: String) -> Result<(), ErreurCommande> {
+    let c = coeur.inner().clone();
+    bloquant(move || c.envoyer_rapport(&erreur, &resume)).await
+}
+
 /// Désinstalle Zen Home de ce Mac puis quitte (sauf en démo, où rien n'est supprimé).
 #[tauri::command]
 pub async fn desinstaller_mac(app: tauri::AppHandle, coeur: Etat<'_>, garder_sauvegardes: bool) -> Result<(), ErreurCommande> {

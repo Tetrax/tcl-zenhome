@@ -10,6 +10,7 @@
 //   ?sansadb         adb n'est pas installé (écran d'installation d'adb)
 //   ?reprise         une vérification précédente a été interrompue (reprise_en_attente)
 //   ?sansorigine     aucune sauvegarde d'origine (restauration générique ; par défaut seule SALON en a une)
+//   ?sansmemoire     aucune box mémorisée (par défaut SALON l'est : elle s'affiche dès la recherche)
 //   ?rapide          délais divisés par 5 (tests)
 import type {
   AppliSysteme, AppliUtilisateur, BoxConnectee, BoxTrouvee, Choix, Cible, Decision, ErreurZen,
@@ -125,7 +126,8 @@ const delaiReseau = () => pause(350);
 export const simulation: Api = {
   async etatInitial() {
     await pause(250);
-    return { version: "0.0.2-sim", adb_installe: !q.has("sansadb"), demo: true, sauvegardes_dir_existe: true, reprise_en_attente: q.has("reprise"), origine: q.has("sansorigine") ? null : { date: DATE_ORIGINE } };
+    return { version: "0.0.2-sim", adb_installe: !q.has("sansadb"), demo: true, sauvegardes_dir_existe: true, reprise_en_attente: q.has("reprise"), origine: q.has("sansorigine") ? null : { date: DATE_ORIGINE },
+      boxes_memorisees: q.has("sansmemoire") ? [] : [{ nom: BOXES[0].nom, ip: BOXES[0].ip }] };
   },
 
   installerAdb: (accord, sur) => exclusive(async () => {
@@ -283,5 +285,7 @@ export const simulation: Api = {
   async annuler() { annule = true; },
   async couperDebogage() { await pause(900); },
   async ouvrirSauvegardes() { await pause(150); },
+  async rapportTexte(erreur, resume) { return `Zen Home 0.0.2-sim\nSystème : simulation\n${erreur ? `Erreur : ${erreur}\n` : ""}\n${resume}\n`; },
+  async envoyerRapport() { await pause(150); },
   desinstallerMac: () => exclusive(async () => { await pause(1500); }),
 };
