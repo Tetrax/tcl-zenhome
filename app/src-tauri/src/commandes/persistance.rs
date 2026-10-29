@@ -36,7 +36,7 @@ fn chemin(racine: &Path) -> PathBuf {
     racine.join(FICHIER)
 }
 
-fn serie_valide(s: &str) -> bool {
+pub(super) fn serie_valide(s: &str) -> bool {
     (1..=40).contains(&s.len()) && s.chars().all(|c| c.is_ascii_alphanumeric() || "._-".contains(c))
 }
 
@@ -74,22 +74,26 @@ pub fn en_attente(racine: &Path) -> bool {
 }
 
 /// Écriture atomique (fichier temporaire puis renommage), lisible par l'utilisateur seul.
-fn sauver(racine: &Path, entrees: &[Persistee]) -> std::io::Result<()> {
-    if entrees.is_empty() {
-        let _ = std::fs::remove_file(chemin(racine));
-        return Ok(());
-    }
+pub(super) fn ecrire_atomique(racine: &Path, fichier: &str, contenu: &[u8]) -> std::io::Result<()> {
     std::fs::create_dir_all(racine)?;
-    let contenu = serde_json::to_vec(entrees).map_err(std::io::Error::other)?;
-    let tmp = racine.join(format!(".{FICHIER}.tmp"));
+    let tmp = racine.join(format!(".{fichier}.tmp"));
     let mut options = std::fs::OpenOptions::new();
     options.write(true).create(true).truncate(true);
     #[cfg(unix)]
     std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
     let mut f = options.open(&tmp)?;
-    f.write_all(&contenu)?;
+    f.write_all(contenu)?;
     f.sync_all()?;
-    std::fs::rename(&tmp, chemin(racine))
+    std::fs::rename(&tmp, racine.join(fichier))
+}
+
+fn sauver(racine: &Path, entrees: &[Persistee]) -> std::io::Result<()> {
+    if entrees.is_empty() {
+        let _ = std::fs::remove_file(chemin(racine));
+        return Ok(());
+    }
+    let contenu = serde_json::to_vec(entrees).map_err(std::io::Error::other)?;
+    ecrire_atomique(racine, FICHIER, &contenu)
 }
 
 /// Mémorise la reprise de sa série (les autres sont gardées, la plus ancienne saute au-delà du plafond) ; vide : l'efface.

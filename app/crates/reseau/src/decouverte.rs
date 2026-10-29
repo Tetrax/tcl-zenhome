@@ -27,6 +27,9 @@ const PORT_ADB: u16 = 5555;
 /// Durée minimale d'une passe de balayage.
 const PASSE_MIN: Duration = Duration::from_secs(2);
 const DELAI_CONNEXION: Duration = Duration::from_millis(1500);
+/// Box déjà rencontrées : tentatives courtes et rapprochées (une box en Wi-Fi économe ne répond qu'à certains paquets).
+const DELAI_CONNUE: Duration = Duration::from_millis(500);
+const PASSE_CONNUE: Duration = Duration::from_millis(200);
 /// Connexions simultanées du balayage.
 const FILS_BALAYAGE: usize = 64;
 /// Réseaux /24 balayés au plus (un par interface).
@@ -46,7 +49,7 @@ struct Annonce {
     ipv4: Vec<String>,
 }
 
-fn nettoyer_nom(brut: &str) -> String {
+pub fn nettoyer_nom(brut: &str) -> String {
     brut.chars()
         .filter(|c| c.is_ascii_alphanumeric() || matches!(c, ' ' | '.' | '_' | '-'))
         .take(NOM_MAX)
@@ -156,7 +159,7 @@ fn ips_locales() -> Vec<Ipv4Addr> {
 
 /// Sonde le port adb de `hotes` en parallèle (borné) et note dans `trouves` ceux qui répondent.
 /// Repasse en continu sur les hôtes pas encore trouvés jusqu'à ce que `stop` soit levé.
-fn balayer(hotes: &[Ipv4Addr], trouves: &Mutex<Vec<Ipv4Addr>>, stop: &AtomicBool) {
+fn balayer(hotes: &[Ipv4Addr], trouves: &Mutex<Vec<Ipv4Addr>>, stop: &AtomicBool, delai: Duration, passe_min: Duration) {
     while !stop.load(Ordering::Relaxed) && !hotes.is_empty() {
         let restants: Vec<Ipv4Addr> = {
             let t = trouves.lock().unwrap();
@@ -166,8 +169,8 @@ fn balayer(hotes: &[Ipv4Addr], trouves: &Mutex<Vec<Ipv4Addr>>, stop: &AtomicBool
             std::thread::sleep(Duration::from_millis(100));
         } else {
             let debut = Instant::now();
-            passe(&restants, trouves, stop);
-            finir_passe(debut, PASSE_MIN, stop);
+            passe(&restants, trouves, stop, delai);
+            finir_passe(debut, passe_min, stop);
         }
     }
 }
@@ -181,14 +184,14 @@ fn finir_passe(debut: Instant, min: Duration, stop: &AtomicBool) {
     }
 }
 
-fn passe(hotes: &[Ipv4Addr], trouves: &Mutex<Vec<Ipv4Addr>>, stop: &AtomicBool) {
+fn passe(hotes: &[Ipv4Addr], trouves: &Mutex<Vec<Ipv4Addr>>, stop: &AtomicBool, delai: Duration) {
     let suivant = AtomicUsize::new(0);
     std::thread::scope(|sc| {
         for _ in 0..FILS_BALAYAGE.min(hotes.len()) {
             sc.spawn(|| {
                 while !stop.load(Ordering::Relaxed) {
                     let Some(h) = hotes.get(suivant.fetch_add(1, Ordering::Relaxed)) else { break };
-                    if TcpStream::connect_timeout(&SocketAddr::from((*h, PORT_ADB)), DELAI_CONNEXION).is_ok() {
+                    if TcpStream::connect_timeout(&SocketAddr::from((*h, PORT_ADB)), delai).is_ok() {
                         let mut t = trouves.lock().unwrap();
                         if t.len() < ANNONCES_MAX {
                             t.push(*h);
@@ -200,9 +203,20 @@ fn passe(hotes: &[Ipv4Addr], trouves: &Mutex<Vec<Ipv4Addr>>, stop: &AtomicBool) 
     });
 }
 
-/// Fusionne : si mDNS a trouvé des Mi Box, on ne rend que celles-ci. Sinon (repli pur), on rend les hôtes du balayage
-/// qui ne sont pas connus comme autres appareils Cast, sous le nom « Appareil à vérifier ».
-fn fusionner(mdns: Vec<BoxTrouvee>, balayage: &[Ipv4Addr], exclus: &HashSet<Ipv4Addr>) -> Vec<BoxTrouvee> {
+/// Toutes les box mémorisées ont répondu : inutile d'attendre davantage.
+fn tout_repondu(connues: usize, repondu: usize) -> bool {
+    connues > 0 && repondu >= connues
+}
+
+/// Fusionne : si mDNS ou la mémoire ont trouvé des Mi Box, on ne rend que celles-ci (mDNS d'abord, il fait foi pour le
+/// nom ; dédoublonnage par IP). Sinon (repli pur), on rend les hôtes du balayage qui ne sont pas connus comme autres
+/// appareils Cast, sous le nom « Appareil à vérifier ».
+fn fusionner(mut mdns: Vec<BoxTrouvee>, connues: &[BoxTrouvee], balayage: &[Ipv4Addr], exclus: &HashSet<Ipv4Addr>) -> Vec<BoxTrouvee> {
+    for b in connues {
+        if !mdns.iter().any(|m| m.ip == b.ip) {
+            mdns.push(b.clone());
+        }
+    }
     if !mdns.is_empty() {
         return mdns;
     }
@@ -217,8 +231,10 @@ fn fusionner(mdns: Vec<BoxTrouvee>, balayage: &[Ipv4Addr], exclus: &HashSet<Ipv4
 }
 
 /// Cherche les Mi Box pendant `duree` au plus (plafonnée à 30 s) : écoute mDNS et balayage TCP du port adb en parallèle.
-/// Rend la main `GRACE` après la première Mi Box reconnue par mDNS (le balayage ne l'écourte jamais) ; bloquant.
-pub fn chercher_box(duree: Duration) -> Result<Vec<BoxTrouvee>, Erreur> {
+/// `connues` : box déjà rencontrées (nom, IP), sondées tout de suite en parallèle ; une qui répond compte comme trouvée.
+/// Rend la main `GRACE` après la première Mi Box reconnue par mDNS ou répondant depuis `connues` (le balayage ne
+/// l'écourte jamais) ; bloquant.
+pub fn chercher_box(duree: Duration, connues: &[BoxTrouvee]) -> Result<Vec<BoxTrouvee>, Erreur> {
     let daemon = ServiceDaemon::new().map_err(|e| Erreur::Mdns(e.to_string()))?;
     let rx = match daemon.browse(SERVICE) {
         Ok(rx) => rx,
@@ -231,11 +247,17 @@ pub fn chercher_box(duree: Duration) -> Result<Vec<BoxTrouvee>, Erreur> {
     let mut collecte = Collecte::default();
     let hotes = hotes_a_balayer(&ips_locales());
     let trouves = Mutex::new(Vec::new());
+    let connues: Vec<(Ipv4Addr, &BoxTrouvee)> = connues.iter().filter_map(|b| Some((valider_ipv4(&b.ip)?, b))).take(ANNONCES_MAX).collect();
+    let ips_connues: Vec<Ipv4Addr> = connues.iter().map(|(ip, _)| *ip).collect();
+    let connues_ok = Mutex::new(Vec::new());
     let stop = AtomicBool::new(false);
+    // Le balayage ne sert qu'en repli : on l'arrête dès qu'une box est trouvée, sans attendre la fin de la grâce.
+    let stop_balayage = AtomicBool::new(false);
     let mut mdns = Vec::new();
     let mut grace_lancee = false;
     std::thread::scope(|sc| {
-        sc.spawn(|| balayer(&hotes, &trouves, &stop));
+        sc.spawn(|| balayer(&hotes, &trouves, &stop_balayage, DELAI_CONNEXION, PASSE_MIN));
+        sc.spawn(|| balayer(&ips_connues, &connues_ok, &stop, DELAI_CONNUE, PASSE_CONNUE));
         while let Some(reste) = limite.checked_duration_since(Instant::now()) {
             match rx.recv_timeout(reste.min(Duration::from_millis(100))) {
                 Ok(ServiceEvent::ServiceResolved(s)) => {
@@ -250,15 +272,23 @@ pub fn chercher_box(duree: Duration) -> Result<Vec<BoxTrouvee>, Erreur> {
                 Err(RecvTimeoutError::Disconnected) => break,
             }
             mdns = filtrer_mibox(&collecte.annonces);
-            if !grace_lancee && !mdns.is_empty() {
+            let repondu = connues_ok.lock().unwrap().len();
+            if tout_repondu(ips_connues.len(), repondu) {
+                limite = Instant::now();
+            }
+            if !grace_lancee && (!mdns.is_empty() || repondu > 0) {
                 grace_lancee = true;
+                stop_balayage.store(true, Ordering::Relaxed);
                 limite = limite.min(Instant::now() + GRACE);
             }
         }
         stop.store(true, Ordering::Relaxed);
+        stop_balayage.store(true, Ordering::Relaxed);
     });
     let _ = daemon.shutdown();
-    Ok(fusionner(mdns, &trouves.into_inner().unwrap(), &collecte.autres))
+    let ok = connues_ok.into_inner().unwrap();
+    let connues: Vec<BoxTrouvee> = connues.into_iter().filter(|(ip, _)| ok.contains(ip)).map(|(_, b)| b.clone()).collect();
+    Ok(fusionner(mdns, &connues, &trouves.into_inner().unwrap(), &collecte.autres))
 }
 
 #[cfg(test)]
@@ -393,16 +423,32 @@ mod tests {
     #[test]
     fn fusion_mdns_seul_si_present() {
         let exclus = HashSet::new();
-        let f = fusionner(vec![mibox("Salon", "192.168.50.14")], &[ip("192.168.50.14"), ip("192.168.50.30")], &exclus);
+        let f = fusionner(vec![mibox("Salon", "192.168.50.14")], &[], &[ip("192.168.50.14"), ip("192.168.50.30")], &exclus);
         assert_eq!(f, vec![mibox("Salon", "192.168.50.14")]);
+    }
+
+    #[test]
+    fn fusion_connues_apres_mdns_sans_doublon_et_sans_repli() {
+        let connues = [mibox("Ancien nom", "192.168.50.14"), mibox("Chambre", "192.168.50.15")];
+        let f = fusionner(vec![mibox("Salon", "192.168.50.14")], &connues, &[ip("192.168.50.30")], &HashSet::new());
+        assert_eq!(f, vec![mibox("Salon", "192.168.50.14"), mibox("Chambre", "192.168.50.15")]);
+        let f = fusionner(vec![], &connues[1..], &[ip("192.168.50.30")], &HashSet::new());
+        assert_eq!(f, vec![mibox("Chambre", "192.168.50.15")], "une box connue joignable évite « Appareil à vérifier »");
+    }
+
+    #[test]
+    fn arret_immediat_seulement_si_toutes_les_connues_ont_repondu() {
+        assert!(tout_repondu(2, 2) && tout_repondu(1, 1));
+        assert!(!tout_repondu(2, 1) && !tout_repondu(1, 0));
+        assert!(!tout_repondu(0, 0), "aucune box mémorisée : la grâce habituelle s'applique");
     }
 
     #[test]
     fn repli_pur_exclut_les_autres_appareils_cast_et_dedoublonne() {
         let exclus = HashSet::from([ip("192.168.50.17")]);
-        let f = fusionner(vec![], &[ip("192.168.50.17"), ip("192.168.50.30"), ip("192.168.50.30")], &exclus);
+        let f = fusionner(vec![], &[], &[ip("192.168.50.17"), ip("192.168.50.30"), ip("192.168.50.30")], &exclus);
         assert_eq!(f, vec![mibox("Appareil à vérifier", "192.168.50.30")]);
-        assert!(fusionner(vec![], &[], &exclus).is_empty());
+        assert!(fusionner(vec![], &[], &[], &exclus).is_empty());
     }
 
     #[test]
