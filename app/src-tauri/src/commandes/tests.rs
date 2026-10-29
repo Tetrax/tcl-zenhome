@@ -593,6 +593,38 @@ fn ids_de_box_jamais_reutilises() {
 }
 
 #[test]
+fn box_memorisee_apres_connexion_reussie_seulement() {
+    let (a, b) = deux_boxes();
+    let d = dossier("memoire");
+    let c = Coeur::nouveau(config_deux(d.clone(), &a, &b));
+    connecter_ip(&c, IP);
+    connecter_ip(&c, IP_B);
+    connecter_ip(&c, IP);
+    let l = super::memoire::lire(&d);
+    assert_eq!(l.iter().map(|b| b.ip.as_str()).collect::<Vec<_>>(), [IP_B, IP], "une entrée par série, la dernière en fin");
+    // connexion manuelle par IP : le nom mémorisé est gardé
+    super::memoire::memoriser(&d, SERIE, "SALON", IP).unwrap();
+    assert_eq!(c.connecter(&Cible::Ip { ip: IP.into() }, &rien).unwrap().nom, "SALON");
+    assert_eq!(super::memoire::lire(&d).last().unwrap().nom, "SALON");
+    // une autre box sur l'IP mémorisée de A ne reprend pas son nom ; l'entrée de A ne bouge pas
+    let d3 = dossier("memoire-autre");
+    super::memoire::memoriser(&d3, SERIE, "SALON", IP).unwrap();
+    let c3 = Coeur::nouveau(config_deux(d3.clone(), &b, &b));
+    c3.chercher_box().ok();
+    let nom_b = c3.connecter(&Cible::Ip { ip: IP.into() }, &rien).unwrap().nom;
+    assert_eq!(nom_b, "Mi Box");
+    let l = super::memoire::lire(&d3);
+    assert_eq!(l.len(), 1, "l'IP est maintenant à B");
+    assert_eq!(l[0].nom, "Mi Box");
+    // connexion qui échoue : rien de mémorisé
+    let d2 = dossier("memoire-echec");
+    let c2 = Coeur::nouveau(config_deux(d2.clone(), &a, &b));
+    assert!(c2.connecter(&Cible::Ip { ip: "8.8.8.8".into() }, &rien).is_err());
+    assert!(super::memoire::lire(&d2).is_empty());
+    let _ = std::fs::remove_dir_all(&d);
+}
+
+#[test]
 fn recherche_en_echec_invalide_les_anciens_ids() {
     let c = Coeur::nouveau(Config::demo("0.0.0-test".into(), dossier("ids-echec"), Duration::ZERO));
     let boxes = c.chercher_box().unwrap();

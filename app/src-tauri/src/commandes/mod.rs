@@ -6,6 +6,7 @@ mod desinstallation;
 mod erreur;
 mod evenements;
 mod ipc;
+mod memoire;
 mod persistance;
 mod surveillance;
 mod types;

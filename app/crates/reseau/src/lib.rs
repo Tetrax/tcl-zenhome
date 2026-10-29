@@ -7,7 +7,7 @@ mod http;
 mod meteo;
 mod platform_tools;
 
-pub use decouverte::{BoxTrouvee, chercher_box, valider_ipv4};
+pub use decouverte::{BoxTrouvee, chercher_box, nettoyer_nom, valider_ipv4};
 pub use erreur::Erreur;
 pub use meteo::{Ville, chercher_villes};
 pub use platform_tools::{adb_installe, installer_adb};

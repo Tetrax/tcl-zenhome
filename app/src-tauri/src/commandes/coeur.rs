@@ -19,7 +19,7 @@ use super::demo;
 use super::desinstallation;
 use super::erreur::ErreurCommande;
 use super::evenements::{Emetteur, EvenementUi, ObservateurUi};
-use super::persistance;
+use super::{memoire, persistance};
 use super::surveillance::{Attente, Interruption, Occupation, Surveillance, Surveille};
 use super::types::*;
 use crate::moteur::choix::{self, Choix};
@@ -300,7 +300,7 @@ impl Coeur {
             std::thread::sleep(self.cfg.rythme_demo * 10);
             Ok(demo::BOXES.iter().map(|(nom, ip, _)| BoxTrouvee { nom: (*nom).into(), ip: (*ip).into() }).collect())
         } else {
-            zh_reseau::chercher_box(Duration::from_secs(15))
+            zh_reseau::chercher_box(Duration::from_secs(15), &memoire::lire(&self.cfg.donnees))
         };
         self.garder_recherche(resultat)
     }
@@ -485,6 +485,11 @@ impl Coeur {
                 // Paquets désactivés par un passage interrompu sur CETTE box : la prochaine vérification les reprend.
                 if let Some(d) = persistance::lire(&self.cfg.donnees, reprise.serie.as_deref().unwrap_or_default()) {
                     reprise.desactives = d.desactives;
+                }
+                let mut nom = nom;
+                if let (false, Some(serie)) = (self.cfg.demo, reprise.serie.as_deref()) {
+                    nom = memoire::nom_pour(&self.cfg.donnees, serie, &ip.to_string(), &nom);
+                    let _ = memoire::memoriser(&self.cfg.donnees, serie, &nom, &ip.to_string());
                 }
                 self.etat().session = Some(SessionBox { t, reprise, inventaire: None });
                 Ok(Connexion { nom, ip: ip.to_string(), modele: MODELE_AFFICHE.into() })
