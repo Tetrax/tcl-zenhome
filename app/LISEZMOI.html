@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Zen Home pour Xiaomi Mi Box 4 : mode d'emploi de l'appli Mac</title>
+<style>
+  body { font-family: -apple-system, "Helvetica Neue", Arial, sans-serif; font-size: 18px; line-height: 1.55; color: #222; max-width: 760px; margin: 0 auto; padding: 24px 20px 60px; }
+  h1 { font-size: 30px; margin-bottom: 4px; }
+  h2 { font-size: 23px; margin-top: 40px; padding-bottom: 4px; border-bottom: 2px solid #ccc; }
+  h3 { font-size: 19px; margin-top: 26px; }
+  .intro { color: #555; margin-top: 0; }
+  .etape { background: #eef4fb; border-left: 6px solid #2a6ebb; padding: 4px 18px 10px; margin: 28px 0; border-radius: 4px; }
+  .etape h2 { border: 0; margin-top: 12px; }
+  .note { background: #fff7e0; border-left: 6px solid #e0a800; padding: 8px 16px; margin: 18px 0; border-radius: 4px; }
+  code { font-family: Menlo, Consolas, monospace; background: #f0f0f0; padding: 1px 6px; border-radius: 4px; font-size: 0.92em; }
+  dt { font-weight: bold; margin-top: 14px; }
+  dd { margin-left: 0; }
+  li { margin-bottom: 6px; }
+  @media print {
+    body { font-size: 12pt; max-width: none; padding: 0; }
+    .etape, .note { break-inside: avoid; }
+    h2, h3 { break-after: avoid; }
+  }
+</style>
+</head>
+<body>
+
+<h1>Zen Home pour Xiaomi Mi Box 4</h1>
+<p class="intro">Mode d'emploi de l'application pour Mac.</p>
+
+<h2>Ce que fait l'application</h2>
+<ul>
+  <li><strong>Elle installe Zen Home</strong> sur votre box : un écran d'accueil simple et rapide, avec une belle photo, l'heure, la météo, les films du moment et vos applis.</li>
+  <li><strong>Elle allège la box</strong> : elle désactive les programmes qui servent à la publicité, au pistage ou qui tournent pour rien.</li>
+  <li><strong>C'est vous qui choisissez</strong> : rien n'est modifié avant votre clic sur « Appliquer », après un récapitulatif.</li>
+  <li><strong>C'est réversible</strong> : les programmes sont désactivés, pas supprimés, et « Revenir à avant Zen Home » remet la box comme elle était. Seule exception : les applis que vous cocheriez vous-même pour les désinstaller ne reviennent pas (et leurs données non plus).</li>
+  <li><strong>Plusieurs box ?</strong> L'application peut les configurer d'affilée, avec les mêmes choix pour toutes.</li>
+</ul>
+
+<h2>Ce qu'il vous faut</h2>
+<ul>
+  <li>Un <strong>Mac</strong> (macOS 12 ou plus récent) avec une connexion Internet.</li>
+  <li>Une <strong>Xiaomi Mi Box 4</strong>, allumée et branchée sur <strong>le même Wi-Fi</strong> que le Mac.</li>
+  <li>La <strong>télécommande</strong> de la box.</li>
+</ul>
+
+<div class="etape">
+<h2>Étape 1 : préparer la box</h2>
+<p>Tout se fait avec la télécommande de la box.</p>
+<h3>A. Débloquer les options cachées</h3>
+<ol>
+  <li>Ouvrez <strong>Paramètres</strong> (la roue dentée).</li>
+  <li>Allez dans <strong>Préférences de l'appareil</strong>, puis <strong>À propos</strong>.</li>
+  <li>Descendez jusqu'à <strong>Build</strong> et appuyez <strong>7 fois</strong> sur OK, jusqu'au message « Vous êtes maintenant développeur ».</li>
+</ol>
+<h3>B. Activer le débogage USB</h3>
+<ol>
+  <li>Revenez en arrière, dans <strong>Préférences de l'appareil</strong>.</li>
+  <li>Ouvrez <strong>Options pour les concepteurs</strong> (parfois appelé « Options pour les développeurs »).</li>
+  <li>Activez <strong>Débogage USB</strong>.</li>
+</ol>
+<h3>C. Noter l'adresse IP de la box (au cas où)</h3>
+<p>L'application cherche elle-même la box. Son adresse ne sert que si la recherche échoue : <strong>Préférences de l'appareil</strong>, <strong>À propos</strong>, <strong>État</strong>, puis <strong>Adresse IP</strong> (par exemple <code>192.168.1.23</code>).</p>
+</div>
+
+<div class="etape">
+<h2>Étape 2 : installer l'application sur le Mac</h2>
+<ol>
+  <li>Double-cliquez sur le fichier <code>Zen Home_…_universal.dmg</code> téléchargé.</li>
+  <li>Dans la fenêtre qui s'ouvre, <strong>glissez « Zen Home » dans le dossier Applications</strong>.</li>
+  <li>Ouvrez <strong>Zen Home</strong> depuis le dossier Applications.</li>
+</ol>
+
+<h3>Si macOS bloque l'application</h3>
+<p>Au premier lancement, un message du type « <em>Apple ne peut pas vérifier que Zen Home ne contient pas de logiciel malveillant</em> » est normal : l'application ne vient pas de l'App Store et n'est pas enregistrée auprès d'Apple.</p>
+<ul>
+  <li><strong>macOS 15 et plus récent</strong> : fermez le message, ouvrez <strong>Réglages Système</strong>, <strong>Confidentialité et sécurité</strong>, descendez tout en bas jusqu'au message sur « Zen Home » et cliquez sur <strong>Ouvrir quand même</strong>. Confirmez avec votre mot de passe si on vous le demande.</li>
+  <li><strong>Versions plus anciennes</strong> : faites un <strong>clic droit</strong> (ou Contrôle + clic) sur « Zen Home » dans Applications, choisissez <strong>Ouvrir</strong>, puis <strong>Ouvrir</strong> dans la fenêtre qui s'affiche.</li>
+</ul>
+<p>Il ne faut le faire qu'une fois. macOS peut ensuite demander si Zen Home peut <strong>trouver des appareils sur votre réseau local</strong> : acceptez, c'est ce qui permet de retrouver la box.</p>
+</div>
+
+<div class="etape">
+<h2>Étape 3 : suivre l'application</h2>
+<p>Cliquez sur <strong>Commencer</strong> et laissez-vous guider. Comptez une dizaine de minutes ; gardez la TV et la box allumées tout du long.</p>
+<ol>
+  <li>La première fois, l'application propose de télécharger l'outil officiel de Google « adb » (environ 18 Mo, vérifié automatiquement). Il reste rangé dans les fichiers de l'application.</li>
+  <li>Elle <strong>cherche la box</strong> sur le réseau (jusqu'à une quinzaine de secondes) et vous la montre par son nom, par exemple « SALON ». S'il y en a plusieurs, cochez celles à configurer, ou « Tout sélectionner ». Si aucune n'est trouvée, saisissez l'adresse IP notée à l'étape 1.</li>
+  <li><strong>Sur la TV</strong>, un message demande d'autoriser le Mac : cochez <strong>« Toujours autoriser cet ordinateur »</strong> puis validez.</li>
+  <li>L'application enregistre une <strong>sauvegarde de l'état de la box</strong>, sans rien modifier, puis vous pose quelques questions.</li>
+</ol>
+<dl>
+  <dt>Votre ville (facultatif)</dt>
+  <dd>Pour afficher la météo. Le nom de la ville est envoyé au service gratuit Open-Meteo pour trouver sa position.</dd>
+  <dt>Un jeton TMDB (facultatif)</dt>
+  <dd>Pour afficher les films et les bandes-annonces. Sans lui, tout fonctionne sauf les films. Pour l'obtenir gratuitement : créez un compte sur <code>www.themoviedb.org</code>, ouvrez <strong>Paramètres</strong> puis <strong>API</strong>, copiez le <strong>« API Read Access Token »</strong> (un très long texte) et collez-le dans l'application. Il n'est jamais enregistré sur le Mac.</dd>
+  <dt>Alléger votre box</dt>
+  <dd>La liste des programmes à désactiver, rangés par groupes, avec une explication pour chacun. Le choix recommandé est coché d'avance ; décochez ce que vous voulez garder.</dd>
+  <dt>Vos applis</dt>
+  <dd>Les applis que vous avez installées. <strong>Rien n'est coché d'avance.</strong> Ne cochez que celles que vous voulez vraiment <strong>désinstaller</strong> : c'est définitif.</dd>
+  <dt>Le récapitulatif</dt>
+  <dd>Rien n'est modifié avant votre clic sur <strong>Appliquer</strong>.</dd>
+</dl>
+<p>À la fin, l'écran « Zen Home est prêt » résume ce qui a été fait, et la TV affiche Zen Home.</p>
+</div>
+
+<h2>Après coup</h2>
+<h3>Après une mise à jour de la box</h3>
+<p>Une mise à jour peut réactiver certains programmes ou remettre l'ancien accueil. Réactivez le débogage USB si vous l'aviez coupé, ouvrez Zen Home et choisissez <strong>Réparer</strong> sur l'écran d'accueil. Vos choix précédents sont conservés. L'application se souvient de vos box : elle les retrouve en quelques secondes.</p>
+
+<h3>Revenir en arrière</h3>
+<p>Choisissez <strong>Revenir à avant Zen Home</strong> sur l'écran d'accueil. L'application remet la box comme dans la sauvegarde prise avant la première installation : les programmes désactivés par Zen Home reviennent, l'accueil d'origine aussi, et Zen Home est retiré de la TV. Les applis que vous aviez désinstallées ne reviennent pas.</p>
+
+<h3>Les sauvegardes</h3>
+<p>Les sauvegardes et rapports sont rangés dans les fichiers de l'application. Le bouton <strong>Ouvrir les sauvegardes</strong>, à la fin d'une installation, vous y emmène. Gardez-les si vous demandez de l'aide.</p>
+
+<h3>Retirer l'application du Mac</h3>
+<p>Utilisez <strong>Désinstaller de ce Mac</strong>, en bas de l'écran d'accueil : l'application vous propose de <strong>garder les sauvegardes dans Documents</strong> (recommandé), puis se met à la Corbeille. Votre box n'est pas modifiée : pour retirer Zen Home de la TV, choisissez d'abord « Revenir à avant Zen Home ».</p>
+
+<div class="note">
+<h3 style="margin-top:6px">Sécurité : coupez le débogage USB</h3>
+<p>Tant que le débogage USB est activé, un appareil de votre réseau Wi-Fi qui a été autorisé peut piloter la box. À la fin, l'application vous propose de le couper : acceptez. Vous pourrez le réactiver (même chemin qu'à l'étape 1) pour utiliser « Réparer » ou « Revenir à avant Zen Home ».</p>
+</div>
+
+</body>
+</html>
