@@ -38,7 +38,7 @@
 </script>
 
 <Panneau titre="Alléger votre box" large>
-  <p class="lead">La box contient {total} applis qui ne servent à rien avec Zen Home (publicité, pistage, rapports envoyés à Xiaomi ou Google) ou dont vous n'avez peut-être pas besoin. Elles sont <b>désactivées, pas supprimées</b> : « Revenir à avant Zen Home » les remet.</p>
+  <p class="lead">{zen.lot ? "Ces box contiennent" : "La box contient"} {total} applis qui ne servent à rien avec Zen Home (publicité, pistage, rapports envoyés à Xiaomi ou Google) ou dont vous n'avez peut-être pas besoin. Elles sont <b>désactivées, pas supprimées</b> : « Revenir à avant Zen Home » les remet.</p>
   <div class="barre-liste">
     <span>
       <button class="lien" type="button" onclick={() => zen.recommande()}>Recommandé</button>

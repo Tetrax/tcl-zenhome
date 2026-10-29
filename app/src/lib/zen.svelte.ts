@@ -1,5 +1,6 @@
 // État global et déroulé du parcours. L'interface n'envoie que des intentions au cœur (voir api.ts).
 import { api, normaliserErreur } from "./api";
+import { fusionner, reduire } from "./lot";
 import type { Moment } from "../scene";
 import type {
   AppliSysteme, BoxConnectee, BoxTrouvee, Choix, Cible, ErreurZen, EtatInitial, Evenement, Inventaire,
@@ -10,23 +11,33 @@ export type Mode = "installer" | "reparer" | "restaurer";
 export type Ecran =
   | "accueil" | "adb" | "recherche" | "connexion" | "etat" | "resume" | "meteo" | "films"
   | "installation" | "systeme" | "utilisateur" | "recap" | "application" | "reparation"
-  | "confirm_restauration" | "restauration" | "fin_restauration" | "resultat" | "adieu";
+  | "confirm_restauration" | "restauration" | "fin_restauration" | "resultat" | "adieu" | "lot" | "recap_lot";
+
+/** Une box d'un lot (plusieurs box configurées d'affilée avec les mêmes choix). */
+export interface BoxLot {
+  cible: Cible; nom: string; ip: string; message: string;
+  etat: "attente" | "en-cours" | "ok" | "echec" | "non-traitee";
+  /** Inventaire relevé une fois Zen Home installé (passage 1) ; vrai si le passage 1 est terminé pour cette box. */
+  inv?: Inventaire; passe1?: boolean;
+  rapport?: RapportApplication; verification?: Verification; restauration?: RapportRestauration;
+  debogage?: "oui" | "echec";
+}
 
 /** Moment de la journée affiché derrière chaque écran. */
 export const MOMENT: Record<Ecran, Moment> = {
   accueil: "aube", adb: "matin", recherche: "matin", connexion: "jour", etat: "jour", resume: "jour",
   meteo: "doree", films: "doree", installation: "doree", systeme: "doree", utilisateur: "doree", recap: "doree",
   application: "doree", reparation: "doree", confirm_restauration: "doree", restauration: "doree",
-  fin_restauration: "aube", resultat: "nuit", adieu: "nuit",
+  fin_restauration: "aube", resultat: "nuit", adieu: "nuit", lot: "doree", recap_lot: "nuit",
 };
 /** Écrans où une action longue pilote la lumière (jusqu'au crépuscule). */
-export const ECRANS_TRAVAIL: Ecran[] = ["application", "reparation", "restauration"];
+export const ECRANS_TRAVAIL: Ecran[] = ["application", "reparation", "restauration", "lot"];
 
 export const ETAPES = ["Accueil", "Box", "Préparation", "Vos choix", "Installation", "Terminé"] as const;
 export const ETAPE_DE: Record<Ecran, number> = {
   accueil: 0, adb: 0, recherche: 1, connexion: 1, etat: 2, resume: 2, meteo: 2, films: 2, installation: 2,
   systeme: 3, utilisateur: 3, recap: 3, application: 4, reparation: 4, confirm_restauration: 4, restauration: 4,
-  fin_restauration: 5, resultat: 5, adieu: 5,
+  fin_restauration: 5, resultat: 5, adieu: 5, lot: 4, recap_lot: 5,
 };
 
 const TOKEN_OK = /^[A-Za-z0-9._~+/=-]+$/;
@@ -52,6 +63,17 @@ class Zen {
   forcerManuel = $state(false);
   cible = $state<Cible | null>(null);
   box = $state<BoxConnectee | null>(null);
+
+  // Plusieurs box : les id cochés dans la recherche, puis le lot (null = parcours à une seule box)
+  coches = $state<number[]>([]);
+  lot = $state<BoxLot[] | null>(null);
+  lotPasse = $state(0); // installer : 1 = installation, 2 = application des choix
+  lotPhase = $state<"travail" | "choix">("travail");
+  lotFait = $state(0);
+  lotSur = $state(1);
+  lotAnnule = false;
+  /** Nom de la box en cours de traitement (pour dire devant quelle TV aller). */
+  boxActive = $state("");
 
   // Préparation
   inventaire = $state<Inventaire | null>(null);
@@ -80,7 +102,8 @@ class Zen {
     try { this.init = await api.etatInitial(); } catch (e) { this.erreur = normaliserErreur(e); }
   }
 
-  aller(e: Ecran) { this.erreur = null; this.reprise = null; this.attente = null; this.ecran = e; }
+  aller(e: Ecran) { if (e === "accueil" || e === "adieu") this.jeton = ""; // le jeton ne survit pas à la sortie du lot
+    this.erreur = null; this.reprise = null; this.attente = null; this.ecran = e; }
 
   private sur = (e: Evenement) => {
     const t = this.travail;
@@ -98,7 +121,7 @@ class Zen {
     this.erreur = null; this.reprise = null; this.reco = null; this.attente = null;
     this.travail = { actif: true, etape, fraction: null, avertissements: [], annulation: false };
   }
-  private fin() { this.travail.actif = false; this.travail.annulation = false; this.attente = null; }
+  private fin() { this.travail.actif = false; this.travail.annulation = false; this.attente = null; this.boxActive = ""; }
   private echec(e: unknown, reprise: (() => void) | null) {
     this.fin();
     this.erreur = normaliserErreur(e);
@@ -109,16 +132,19 @@ class Zen {
   demarrer(mode: Mode) {
     this.mode = mode;
     this.box = null; this.cible = null; this.boxes = []; this.rechercheFaite = false; this.forcerManuel = false;
+    this.lot = null; this.coches = [];
     this.aller(this.init && !this.init.adb_installe ? "adb" : "recherche");
   }
   retourAccueil() {
     if (this.travail.actif) void api.annuler().catch(() => {});
+    this.lot = null; // la boucle du lot en cours s'arrête d'elle-même
     this.fin(); this.aller("accueil");
   }
 
   async annuler() {
     if (!this.travail.actif || this.travail.annulation) return;
     this.travail.annulation = true;
+    if (this.lot) this.lotAnnule = true; // arrête tout le lot, pas seulement la box en cours
     try { await api.annuler(); } catch { /* l'action en cours rendra son verdict */ }
   }
   async decider(decision: "reessayer" | "arreter") {
@@ -142,7 +168,7 @@ class Zen {
 
   // ---- Recherche ----
   async chercher(essai = 0): Promise<void> {
-    this.rechercheEnCours = true; this.rechercheFaite = false; this.boxes = []; this.erreur = null;
+    this.rechercheEnCours = true; this.rechercheFaite = false; this.boxes = []; this.coches = []; this.erreur = null;
     try {
       this.boxes = await api.chercherBox();
       this.rechercheFaite = true;
@@ -159,7 +185,7 @@ class Zen {
 
   // ---- Connexion ----
   async connecter(cible: Cible) {
-    this.cible = cible; this.box = null;
+    this.lot = null; this.cible = cible; this.box = null;
     this.aller("connexion");
     this.debut("Connexion à la box");
     try {
@@ -192,6 +218,7 @@ class Zen {
 
   // ---- Installation de Zen Home, avant les choix (comme le kit) : Zen Home fournit ensuite le vrai nom des applis ----
   async installerZenHome() {
+    if (this.lot) return void this.lancerPassage1();
     this.aller("installation");
     this.debut("Installation de Zen Home");
     try {
@@ -236,7 +263,9 @@ class Zen {
     return a + (b - a) * (f ?? 0);
   }
 
-  async appliquer(depuis = 1) { // Zen Home est déjà installé (installerZenHome) : on part de l'application des choix
+  async appliquer(depuis = 1) {
+    if (this.lot) return void this.lancerTraitement(this.lot.filter((b) => b.etat === "ok"), 2);
+    // Zen Home est déjà installé (installerZenHome) : on part de l'application des choix
     if (this.ecran !== "application") { this.aller("application"); this.rapport = null; this.verification = null; this.debogageCoupe = "non"; }
     const choix = this.choix();
     try {
@@ -279,15 +308,116 @@ class Zen {
     } catch (e) { this.echec(e, () => void this.restaurer()); }
   }
 
+  // ---- Plusieurs box : une box après l'autre, avec les mêmes choix (voir CONTRAT.md, « Plusieurs box ») ----
+  /** Une seule box cochée : parcours habituel ; deux ou plus : lot. */
+  choisirBoxes(ids: number[]) {
+    this.coches = ids;
+    if (ids.length < 2) return void this.connecter({ id: ids[0] });
+    this.lot = this.boxes.filter((b) => ids.includes(b.id)).map((b) => ({ cible: { id: b.id }, nom: b.nom, ip: b.ip, message: "", etat: "attente" as const }));
+    this.lotPasse = 0;
+    if (this.mode === "installer") this.aller("meteo"); // pas de box connectée : météo et films d'abord
+    else if (this.mode === "reparer") void this.lancerTraitement(this.lot, 0);
+    else this.aller("confirm_restauration");
+  }
+  restaurerLot() { if (this.lot) void this.lancerTraitement(this.lot, 0); }
+
+  fractionLot(): number { return (this.lotFait + (this.travail.fraction ?? 0)) / this.lotSur; }
+
+  private pas(nom: string) {
+    if (this.lotAnnule) throw { code: "annule", message: "Opération annulée. Ce qui a déjà été fait est conservé." };
+    this.debut(nom);
+  }
+  /** Traite les box d'affilée : une box en échec n'arrête pas les autres, « Annuler » arrête tout. Faux si on a quitté le lot. */
+  private async chacune(boxes: BoxLot[], f: (b: BoxLot) => Promise<void>): Promise<boolean> {
+    const lot = this.lot;
+    this.lotAnnule = false; this.lotPhase = "travail"; this.lotFait = 0; this.lotSur = boxes.length;
+    for (const b of boxes) { b.etat = "attente"; b.message = ""; }
+    this.aller("lot");
+    for (const b of boxes) {
+      if (this.lot !== lot) return false;
+      if (this.lotAnnule) { b.etat = "non-traitee"; continue; }
+      b.etat = "en-cours"; this.boxActive = b.nom;
+      try {
+        this.pas("Connexion à la box"); this.box = null;
+        this.box = await api.connecter(b.cible, this.sur);
+        await f(b);
+        b.etat = "ok";
+      } catch (e) {
+        b.etat = "echec"; b.message = normaliserErreur(e).message;
+      }
+      this.lotFait++;
+    }
+    this.fin();
+    return this.lot === lot;
+  }
+
+  private async passage1(b: BoxLot) {
+    this.pas("Lecture de la box"); await api.inventaire(this.sur); // sauvegarde de l'état d'origine
+    this.pas("Installation de Zen Home"); await api.installer(this.ville ? this.ville.id : null, this.jeton ? this.jeton : null, this.sur);
+    this.pas("Lecture des noms des applis"); b.inv = await api.inventaire(this.sur);
+    b.passe1 = true;
+  }
+  /** Ce qui reste à faire sur une box déjà connectée, selon le mode. */
+  private async traiter(b: BoxLot) {
+    if (this.mode === "reparer") { this.pas("Contrôle de la box"); b.verification = await api.verifier(true, this.sur); return; }
+    if (this.mode === "restaurer") { this.pas("Retour à l'état d'origine"); b.restauration = await api.restaurer(this.sur); return; }
+    if (!b.passe1) await this.passage1(b); // reprise d'une box en échec au passage 1
+    this.pas("Lecture de la box"); const inv = await api.inventaire(this.sur); // inventaire propre à cette box
+    this.pas("Application de vos choix"); b.rapport = await api.appliquer(reduire(this.choix(), inv), this.sur);
+    this.pas("Vérification et réglage final"); b.verification = await api.verifier(true, this.sur);
+  }
+  async lancerTraitement(boxes: BoxLot[], passe: number) {
+    this.lotPasse = passe;
+    if (await this.chacune(boxes, (b) => this.traiter(b))) this.finLot();
+  }
+  private finLot() {
+    this.fin();
+    if (this.lot?.some((b) => b.etat === "ok")) this.succes++;
+    this.aller("recap_lot");
+  }
+  reessayerLot() { if (this.lot) void this.lancerTraitement(this.lot.filter((b) => b.etat === "echec" || b.etat === "non-traitee"), this.lotPasse); }
+
+  async lancerPassage1(boxes = this.lot ?? []) {
+    this.lotPasse = 1;
+    if (await this.chacune(boxes, (b) => this.passage1(b))) this.apresPassage1();
+  }
+  private apresPassage1() {
+    if (this.lotAnnule) return this.finLot();
+    if (this.lot?.every((b) => b.etat === "ok")) return this.questions();
+    this.lotPhase = "choix";
+  }
+  reessayerPassage1() { void this.lancerPassage1(this.lot?.filter((b) => b.etat !== "ok")); }
+  /** Les box qui ont réussi le passage 1 posent les questions, une seule fois pour toutes. */
+  questions() {
+    const inv = fusionner((this.lot ?? []).filter((b) => b.etat === "ok").map((b) => ({ nom: b.nom, inv: b.inv! })));
+    this.inventaire = inv;
+    this.desactiver = Object.fromEntries(inv.applis_systeme.map((a) => [a.paquet, desactiverParDefaut(a)]));
+    this.desinstaller = Object.fromEntries(inv.applis_utilisateur.map((a) => [a.paquet, false]));
+    this.aller("systeme");
+  }
+
   // ---- Fin ----
   async couperDebogage() {
     this.debogageCoupe = "en_cours";
     try { await api.couperDebogage(); this.debogageCoupe = "oui"; } catch (e) { this.debogageCoupe = "echec"; this.erreur = normaliserErreur(e); }
   }
+  /** Lot : se reconnecte à chaque box réussie pour couper son débogage. */
+  async couperTout() {
+    this.debogageCoupe = "en_cours";
+    const ok = (this.lot ?? []).filter((b) => b.etat === "ok");
+    for (const b of ok) {
+      this.boxActive = b.nom;
+      try { this.debut("Connexion à la box"); this.box = await api.connecter(b.cible, this.sur); await api.couperDebogage(); b.debogage = "oui"; }
+      catch { b.debogage = "echec"; }
+    }
+    this.fin();
+    this.debogageCoupe = ok.every((b) => b.debogage === "oui") ? "oui" : "echec";
+  }
   async ouvrirSauvegardes() {
     try { await api.ouvrirSauvegardes(); } catch (e) { this.erreur = normaliserErreur(e); }
   }
   recommencer() {
+    this.lot = null; this.coches = [];
     this.box = null; this.cible = null; this.inventaire = null; this.ville = null; this.jeton = ""; this.rapport = null;
     this.verification = null; this.restauration = null; this.boxes = []; this.rechercheFaite = false; this.debogageCoupe = "non";
     this.erreur = null;

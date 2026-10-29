@@ -35,3 +35,6 @@ export function humaniser(l: LigneVerif, noms: Map<string, string>): LigneHumain
   else if (detail.startsWith("version ")) detail = "Version " + detail.slice(8);
   return { etat: l.etat, libelle: libelle ?? l.controle, detail, brut, appli };
 }
+
+/** État d'une box dans un lot de plusieurs box. */
+export const libelleBox = { attente: "En attente", "en-cours": "En cours", ok: "OK", echec: "Échec", "non-traitee": "Non traitée" } as const;

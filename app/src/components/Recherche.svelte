@@ -10,14 +10,11 @@
   let manuel = $state(zen.forcerManuel);
   let ip = $state("");
   let erreurIp = $state("");
-  let choisie = $state<number | null>(null);
   let champ = $state<HTMLInputElement>();
 
   onMount(() => {
     if (!zen.rechercheFaite && !zen.rechercheEnCours) void zen.chercher();
   });
-  // Une seule box : présélectionnée.
-  $effect(() => { if (choisie === null && zen.boxes.length) choisie = zen.boxes[0].id; });
   const cherche = $derived(zen.rechercheEnCours || !zen.rechercheFaite);
   const aucune = $derived(zen.rechercheFaite && zen.boxes.length === 0);
   const formulaire = $derived(manuel || aucune);
@@ -41,9 +38,12 @@
     erreurIp = "";
     void zen.connecter({ ip: v });
   }
+  // Plusieurs box : on coche celles à configurer ; une seule cochée = parcours habituel.
+  const nbCoches = $derived(zen.coches.length);
+  const toutes = $derived(nbCoches === zen.boxes.length);
   function valider() {
-    const b = zen.boxes.find((x) => x.id === choisie);
-    if (b) void zen.connecter({ id: b.id });
+    if (unique) void zen.choisirBoxes([unique.id]);
+    else if (nbCoches) void zen.choisirBoxes(zen.boxes.filter((b) => zen.coches.includes(b.id)).map((b) => b.id));
   }
 </script>
 
@@ -75,12 +75,13 @@
       </div>
       <p class="lead" style="margin-top:14px">Est-ce bien la vôtre ?</p>
     {:else if zen.boxes.length > 1}
-      <p class="lead">J'ai trouvé plusieurs Mi Box sur ce réseau. Laquelle voulez-vous configurer ?</p>
-      <ul class="liste" role="radiogroup" aria-label="Mi Box trouvées">
+      <p class="lead">J'ai trouvé plusieurs Mi Box sur ce réseau. Cochez celles que vous voulez configurer : elles auront les mêmes choix.</p>
+      <p style="margin:6px 0 0"><button class="lien" type="button" onclick={() => (zen.coches = toutes ? [] : zen.boxes.map((b) => b.id))}>{toutes ? "Tout désélectionner" : "Tout sélectionner"}</button></p>
+      <ul class="liste" aria-label="Mi Box trouvées">
         {#each zen.boxes as b (b.id)}
           <li>
             <label class="ligne">
-              <input type="radio" name="box" value={b.id} bind:group={choisie} />
+              <input type="checkbox" value={b.id} bind:group={zen.coches} />
               <span class="case"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m3.5 8.5 3 3 6-7" /></svg></span>
               <span class="texte"><span class="nom">« {b.nom} »</span><span class="expl ip">{b.ip}</span></span>
             </label>
@@ -108,7 +109,7 @@
       {#if unique && !formulaire}
         <button class="btn primary" type="button" onclick={valider}>C'est elle</button>
       {:else if zen.boxes.length > 1 && !formulaire}
-        <button class="btn primary" type="button" onclick={valider} disabled={choisie === null}>Choisir cette box</button>
+        <button class="btn primary" type="button" onclick={valider} disabled={nbCoches === 0}>{nbCoches > 1 ? `Configurer ces ${nbCoches} box` : "Choisir cette box"}</button>
       {/if}
       {#if !formulaire}<button class="btn" type="button" onclick={ouvrirManuel}>Autre adresse</button>{/if}
       <button class="lien" type="button" onclick={() => { manuel = false; void zen.chercher(); }}>Relancer la recherche</button>

@@ -71,6 +71,6 @@
     <button class="btn primary" type="button" onclick={() => zen.aller("films")}>
       <span>{zen.ville ? `Choisir ${zen.ville.nom}` : "Passer"}</span><Icone nom="fleche" />
     </button>
-    <button class="lien" type="button" onclick={() => zen.aller("resume")}>Retour</button>
+    <button class="lien" type="button" onclick={() => zen.aller(zen.lot ? "recherche" : "resume")}>Retour</button>
   {/snippet}
 </Panneau>

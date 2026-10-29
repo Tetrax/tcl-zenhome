@@ -208,6 +208,9 @@ code, .url { font: 500 13px ui-monospace, "SF Mono", monospace; padding: 2px 8px
 .jalons li.fait { color: rgba(255, 255, 255, .95); }
 .jalons li.fait i { background: #f7f3ec; border-color: #f7f3ec; }
 .jalons li.fait i::after { content: ""; width: 4px; height: 8px; margin-top: -2px; border: solid #14202c; border-width: 0 2px 2px 0; transform: rotate(45deg); }
+.jalons li.echec { color: #ffd0c4; }
+.jalons li.echec i { background: #ffd0c4; border-color: #ffd0c4; }
+.jalons li.echec i::after { content: "×"; font-size: 14px; line-height: 1; color: #14202c; }
 .avertissements { margin: 14px 0 0; padding: 0; list-style: none; font-size: 13px; color: #ffe9c9; text-align: left; }
 
 /* ---- Tableau du résultat ---- */

@@ -9,7 +9,7 @@
 </script>
 
 <Panneau titre="Récapitulatif" large>
-  <p class="lead">Voici ce qui va être fait sur votre box. Rien ne change avant votre clic sur « Appliquer ».</p>
+  <p class="lead">Voici ce qui va être fait sur {zen.lot ? "vos box" : "votre box"}. Rien ne change avant votre clic sur « Appliquer ».</p>
   <dl class="grille">
     <div><dt>Applis système désactivées (réversible)</dt><dd class="grand">{choix.desactiver.length}</dd></div>
     <div><dt>Applis système gardées</dt><dd class="grand">{choix.garder.length}</dd></div>
@@ -24,7 +24,7 @@
     Météo : <b>{zen.ville ? [zen.ville.nom, zen.ville.pays].filter(Boolean).join(", ") : "aucune"}</b> ·
     Films : <b>{zen.jeton ? "avec votre jeton TMDB" : "sans"}</b>
   </p>
-  <p class="petit" style="margin-top:6px">Une sauvegarde de l'état actuel est déjà enregistrée sur ce Mac.</p>
+  <p class="petit" style="margin-top:6px">Une sauvegarde de l'état actuel {zen.lot ? "de chaque box est déjà enregistrée" : "est déjà enregistrée"} sur ce Mac.</p>
   {#snippet pied()}
     <button class="btn primary" type="button" onclick={() => zen.appliquer()}><span>Appliquer</span><Icone nom="fleche" /></button>
     <button class="lien" type="button" onclick={() => zen.aller((inv?.applis_utilisateur.length ?? 0) > 0 ? "utilisateur" : "systeme")}>Retour</button>

@@ -70,7 +70,7 @@ La sauvegarde d'origine d'une box est la plus ancienne sauvegarde de sa série (
 
 Le cœur n'a qu'**une session à la fois** ; c'est l'interface qui enchaîne les box avec les commandes ci-dessus, une box après l'autre, sans nouvelle commande ni identifiant de box dans les événements.
 
-- Passage 1 (installer), pour chaque box : `connecter` → `inventaire` → `installer` → `inventaire`. Les questions communes (ville, jeton) sont posées une fois et réutilisées pour toutes les box.
+- Passage 1 (installer), pour chaque box : `connecter` → `inventaire` → `installer` → `inventaire`. Les questions communes (ville, jeton) sont posées une fois et réutilisées pour toutes les box. Le jeton TMDB reste en mémoire dans l'interface jusqu'à la sortie du lot (« Terminer » ou retour à l'accueil), pour qu'une box réessayée depuis le récap final soit installée avec lui ; il n'est jamais écrit ni journalisé.
 - Passage 2 (appliquer), pour chaque box : `connecter` → `inventaire` → `appliquer` (le choix de l'utilisateur est réduit aux paquets présents sur cette box) → `verifier(true)`.
 - Réparer : `connecter` → `verifier(true)`. Revenir à avant Zen Home : `connecter` → `restaurer`.
 - Une box en échec n'arrête pas les autres (l'interface note l'erreur et passe à la suivante) ; `annuler` (code `annule`) arrête tout le lot.

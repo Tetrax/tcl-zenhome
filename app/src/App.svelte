@@ -21,6 +21,8 @@
   import Resultat from "./components/Resultat.svelte";
   import Restauration from "./components/Restauration.svelte";
   import Adieu from "./components/Adieu.svelte";
+  import Lot from "./components/Lot.svelte";
+  import RecapLot from "./components/RecapLot.svelte";
   import { zen, MOMENT, ECRANS_TRAVAIL } from "./lib/zen.svelte";
   import { moment as fondu } from "./lib/transitions";
   import type { Clairiere, Moment, Signal } from "./scene";
@@ -42,7 +44,7 @@
     if (!posee) { posee = true; s.poser(force ?? MOMENT[e]); return; }
     if (force) return;
     if (ECRANS_TRAVAIL.includes(e)) return; // pendant une action longue, la lumière suit la progression réelle
-    s.allerA(MOMENT[e], e === "resultat" || e === "fin_restauration" ? { duree: 5.5, delai: 1.2 } : {});
+    s.allerA(MOMENT[e], e === "resultat" || e === "fin_restauration" || e === "recap_lot" ? { duree: 5.5, delai: 1.2 } : {});
   });
 
   let suivi = false;
@@ -50,7 +52,7 @@
     const s = scene;
     if (!s) return;
     if (!travail || force) { suivi = false; return; }
-    const f = zen.ecran === "application" ? zen.fractionGlobale() : zen.travail.fraction;
+    const f = zen.ecran === "application" ? zen.fractionGlobale() : zen.ecran === "lot" ? zen.fractionLot() : zen.travail.fraction;
     s.setProgression(f ?? 0, undefined, suivi ? undefined : "crepuscule");
     suivi = true;
   });
@@ -96,6 +98,8 @@
       {:else if zen.ecran === "application"}<Application />
       {:else if zen.ecran === "reparation"}<Reparation />
       {:else if zen.ecran === "resultat"}<Resultat />
+      {:else if zen.ecran === "lot"}<Lot />
+      {:else if zen.ecran === "recap_lot"}<RecapLot />
       {:else if zen.ecran === "adieu"}<Adieu />
       {:else}<Restauration />{/if}
     </div>

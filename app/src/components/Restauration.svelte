@@ -11,9 +11,12 @@
 {:else if zen.ecran === "confirm_restauration"}
   <!-- Le bouton par défaut (focus) est « Annuler ». -->
   <Panneau titre="Revenir à avant Zen Home ?">
-    <p class="lead">Votre Mi Box va revenir comme elle était avant Zen Home{#if zen.init?.origine}, à partir de la sauvegarde du {zen.init.origine.date}{/if}. Cela va :</p>
+    <p class="lead">{#if zen.lot}Ces box vont revenir comme avant Zen Home{:else}Votre Mi Box va revenir comme elle était avant Zen Home{#if zen.init?.origine}, à partir de la sauvegarde du {zen.init.origine.date}{/if}{/if}. Cela va :</p>
     <ul class="lead" style="margin:6px 0 0;padding-left:22px;display:grid;gap:4px">
-      {#if zen.init?.origine}
+      {#if zen.lot}
+        <li>réactiver les applis que Zen Home a désactivées ;</li>
+        <li>remettre l'accueil, l'écran de veille et les animations d'origine ;</li>
+      {:else if zen.init?.origine}
         <li>réactiver les applis que Zen Home a désactivées (celles qui l'étaient déjà avant restent désactivées) ;</li>
         <li>remettre l'accueil, l'écran de veille et les animations d'origine ;</li>
       {:else}
@@ -25,7 +28,7 @@
     <div class="note alerte"><Icone nom="alerte" /><p>Les applis que vous avez désinstallées ne reviennent pas.</p></div>
     {#snippet pied()}
       <button class="btn primary" type="button" data-defaut onclick={() => zen.retourAccueil()}>Annuler</button>
-      <button class="btn danger" type="button" onclick={() => zen.restaurer()}>Revenir à avant</button>
+      <button class="btn danger" type="button" onclick={() => (zen.lot ? zen.restaurerLot() : zen.restaurer())}>Revenir à avant</button>
     {/snippet}
   </Panneau>
 {:else if zen.ecran === "restauration"}
