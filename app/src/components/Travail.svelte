@@ -15,7 +15,7 @@
   <div class="travail">
     {#if sous}<p class="lead" style="margin-top:0">{sous}</p>{/if}
     <div class="anneau" class:indet={pc === null} style="margin-top:18px" role="progressbar" aria-label="Progression" aria-valuemin="0" aria-valuemax="100" aria-valuenow={pc ?? undefined}>
-      <svg viewBox="0 0 120 120" width="140" height="140"><circle cx="60" cy="60" r="52" class="piste" /><circle cx="60" cy="60" r="52" class="arc" style:stroke-dashoffset={pc === null ? null : 326.7 * (1 - (fraction ?? 0))} /></svg>
+      <div class="rotor"><svg viewBox="0 0 120 120" width="140" height="140"><circle cx="60" cy="60" r="52" class="piste" /><circle cx="60" cy="60" r="52" class="arc" style:stroke-dashoffset={pc === null ? null : 326.7 * (1 - (fraction ?? 0))} /></svg></div>
       <span class="pourcent" aria-hidden="true">{pc === null ? "" : `${pc} %`}</span>
     </div>
     <p class="etape-courante" aria-live="polite" aria-atomic="true">{zen.travail.etape}</p>
