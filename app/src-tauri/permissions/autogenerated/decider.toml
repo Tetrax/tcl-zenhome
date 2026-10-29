@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-decider"
+description = "Enables the decider command without any pre-configured scope."
+commands.allow = ["decider"]
+
+[[permission]]
+identifier = "deny-decider"
+description = "Denies the decider command without any pre-configured scope."
+commands.deny = ["decider"]

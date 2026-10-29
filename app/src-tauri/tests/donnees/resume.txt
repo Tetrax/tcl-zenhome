@@ -1,0 +1,10 @@
+État des lieux de la box, le 28/10/2026 22:06
+Modèle : MIBOX4 (oneday), Android 9
+Applis installées : 90, dont désactivées : 0
+Accueil actuel : com.google.android.tvlauncher/.MainActivity
+
+Applis installées par vous (paquet : taille, dernière utilisation) :
+  com.spotify.tv.android : 19 Mo, 27/10/2026
+  com.exemple.lecteur : 200 Mo, 28/10/2026
+  com.exemple.musique : 595 Mo, 28/10/2026
+  fr.tf1.mytf1 : 143 Mo, 14/10/2026

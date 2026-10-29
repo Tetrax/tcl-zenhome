@@ -1,0 +1,10 @@
+[package]
+name = "adb-natif"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Essai : piloter la box via un client adb natif (crate adb_client), sans le binaire adb"
+
+[dependencies]
+adb_client = "3.2.3"
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }

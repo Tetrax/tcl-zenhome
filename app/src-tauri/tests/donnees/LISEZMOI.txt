@@ -1,0 +1,6 @@
+Synthétiques (écrits à la main, format Android 9 de dumpsys) : usagestats.txt, wifi-libre.txt,
+wifi-setupwraith.txt, wifi-vide.txt, preferred-xml-*.txt, activity-*.txt, labels.txt.
+Les autres fichiers viennent d une vraie Mi Box 4, anonymisés : numéro de série, android_id, adresses
+MAC et Bluetooth, nom d appareil, identifiants Xiaomi remplacés par des valeurs factices ; noms de
+quelques applis personnelles remplacés par com.exemple.* ; lignes de plus de 300 caractères supprimées.
+Aucune donnée personnelle ne doit entrer ici (dépôt public) : les noms de réseaux Wi-Fi restent fictifs (RESEAU-TEST).

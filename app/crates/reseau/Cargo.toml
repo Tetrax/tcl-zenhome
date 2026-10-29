@@ -1,0 +1,19 @@
+[package]
+name = "zh-reseau"
+version = "0.0.1"
+description = "Réseau de Zen Home : téléchargement d'adb, géocodage météo, découverte mDNS"
+edition = "2024"
+publish = false
+
+[dependencies]
+ureq = { version = "3", default-features = false, features = ["rustls"] }
+sha2 = "0.10"
+zip = { version = "2", default-features = false, features = ["deflate"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+mdns-sd = "0.21.6"
+if-addrs = "0.15"
+
+[dev-dependencies]
+tempfile = "3"

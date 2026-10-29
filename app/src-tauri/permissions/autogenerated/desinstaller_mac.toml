@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-desinstaller-mac"
+description = "Enables the desinstaller_mac command without any pre-configured scope."
+commands.allow = ["desinstaller_mac"]
+
+[[permission]]
+identifier = "deny-desinstaller-mac"
+description = "Denies the desinstaller_mac command without any pre-configured scope."
+commands.deny = ["desinstaller_mac"]

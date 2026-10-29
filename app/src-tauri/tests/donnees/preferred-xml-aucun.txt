@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes" ?>
+<preferred-activities>
+<item name="com.android.tv.settings/.MainSettings" match="100000" always="true" set="1">
+<set name="com.android.tv.settings/.MainSettings" />
+<filter>
+<action name="android.settings.SETTINGS" />
+<cat name="android.intent.category.DEFAULT" />
+</filter>
+</item>
+</preferred-activities>

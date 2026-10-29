@@ -1,0 +1,4 @@
+package:com.spotify.tv.android
+package:com.exemple.lecteur
+package:com.exemple.musique
+package:fr.tf1.mytf1

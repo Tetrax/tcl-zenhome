@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-appliquer"
+description = "Enables the appliquer command without any pre-configured scope."
+commands.allow = ["appliquer"]
+
+[[permission]]
+identifier = "deny-appliquer"
+description = "Denies the appliquer command without any pre-configured scope."
+commands.deny = ["appliquer"]
