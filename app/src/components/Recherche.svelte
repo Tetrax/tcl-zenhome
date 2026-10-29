@@ -100,7 +100,7 @@
         <p class="msg" id="erreur-ip" role="alert">{erreurIp}</p>
         <p class="petit" id="aide-ip" style="margin-top:0">
           Sur la box : <span class="chemin">Paramètres &gt; Préférences de l'appareil &gt; À propos &gt; État &gt; Adresse IP</span>. Elle ressemble à 192.168.1.23.
-          Le « débogage USB » doit être activé (Options pour les développeurs).
+          Le « débogage USB » doit être activé (Options pour les concepteurs).
         </p>
       </form>
     {/if}

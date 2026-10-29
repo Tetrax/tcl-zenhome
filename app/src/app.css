@@ -71,6 +71,7 @@ body[data-moment="doree"] #fond [data-m="doree"], body[data-moment="crepuscule"]
 }
 @keyframes reflet { 0%, 100% { transform: translateX(-18%); } 50% { transform: translateX(18%); } }
 .corps { min-height: 0; overflow-y: auto; margin: 0 -14px; padding: 4px 14px; scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, .4) transparent; }
+.corps.suite { -webkit-mask-image: linear-gradient(#000 calc(100% - 48px), transparent); mask-image: linear-gradient(#000 calc(100% - 48px), transparent); }
 .pied { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 22px; padding-top: 2px; }
 .pied .espace { flex: 1; }
 

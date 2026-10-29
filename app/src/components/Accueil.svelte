@@ -17,22 +17,15 @@
     <li>Allumez la TV et la Mi Box, et laissez-les allumées pendant toute l'installation (environ 10 minutes).</li>
     <li>La Mi Box et ce Mac doivent être sur le même réseau Wi-Fi.</li>
     <li>
-      Le « débogage USB » doit être activé sur la box :
-      <span class="chemin">Paramètres &gt; Préférences de l'appareil &gt; Options pour les développeurs</span>.
-      Si ce menu n'existe pas : <span class="chemin">Préférences de l'appareil &gt; À propos</span>, puis cliquez 7 fois sur « Build ».
+      Sur la box, débloquez les options cachées : <span class="chemin">Paramètres &gt; Préférences de l'appareil &gt; À propos</span>,
+      descendez jusqu'à « Build » et appuyez 7 fois sur OK, jusqu'au message « Vous êtes maintenant développeur ».
+    </li>
+    <li>
+      Revenez en arrière, puis activez le débogage :
+      <span class="chemin">Préférences de l'appareil &gt; Options pour les concepteurs &gt; Débogage USB</span>.
     </li>
     <li>Gardez la télécommande à portée de main : une demande d'autorisation va s'afficher sur la TV, il faudra l'accepter.</li>
   </ol>
-  <details>
-    <summary>Comment activer le débogage USB, pas à pas</summary>
-    <ol class="petit" style="margin:6px 0 0;padding-left:20px;display:grid;gap:5px">
-      <li>Avec la télécommande, ouvrez <b>Paramètres</b> (la roue dentée), puis <b>Préférences de l'appareil</b>, puis <b>À propos</b>.</li>
-      <li>Descendez jusqu'à <b>Build</b> et appuyez 7 fois sur OK : un message indique que vous êtes maintenant développeur.</li>
-      <li>Revenez en arrière, dans <b>Préférences de l'appareil</b>, et ouvrez <b>Options pour les développeurs</b>.</li>
-      <li>Activez <b>Débogage USB</b>.</li>
-      <li>Au cas où la recherche échouerait, notez l'adresse IP de la box : <b>À propos</b>, puis <b>État</b>, puis <b>Adresse IP</b> (exemple : 192.168.1.23).</li>
-    </ol>
-  </details>
   <p class="petit">macOS peut demander si Zen Home peut trouver des appareils sur votre réseau local : acceptez, c'est ce qui permet de retrouver la box.</p>
   {#snippet pied()}
     <button class="btn primary" type="button" onclick={() => zen.demarrer("installer")}><span>Commencer</span><Icone nom="fleche" /></button>

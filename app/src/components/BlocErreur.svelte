@@ -26,7 +26,7 @@
     <p class="lead" role="alert">{e.message}</p>
     {#if e.code === "injoignable"}
       <ul class="petit" style="margin:14px 0 0;padding-left:20px;display:grid;gap:6px">
-        <li>Le débogage USB est activé (Paramètres &gt; Préférences de l'appareil &gt; Options pour les développeurs).</li>
+        <li>Le débogage USB est activé (Paramètres &gt; Préférences de l'appareil &gt; Options pour les concepteurs).</li>
         <li>L'adresse IP est la bonne.</li>
         <li>La box est allumée (pas en veille) et sur le même Wi-Fi que ce Mac.</li>
         <li>Vous avez accepté l'autorisation affichée sur la TV.</li>

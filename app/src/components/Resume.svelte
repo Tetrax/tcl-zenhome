@@ -7,7 +7,7 @@
 
 {#if r && zen.box}
   <Panneau titre="Voici votre box">
-    <p class="lead">Une sauvegarde de l'état actuel est enregistrée dans Documents/Zen Home. Rien n'a été modifié.</p>
+    <p class="lead">Une sauvegarde de l'état actuel est enregistrée sur ce Mac. Rien n'a été modifié.</p>
     <dl class="grille">
       <div><dt>Modèle</dt><dd>{r.modele}</dd></div>
       <div><dt>Système</dt><dd>{r.android}</dd></div>

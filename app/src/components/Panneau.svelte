@@ -6,6 +6,17 @@
   } = $props();
   let entete = $state<HTMLElement>();
   let panneau: HTMLElement;
+  let corps: HTMLElement;
+  // Vrai tant qu'il reste du contenu caché sous le bas du corps : un fondu signale qu'on peut faire défiler.
+  let suite = $state(false);
+  const mesurer = () => (suite = corps.scrollHeight - corps.scrollTop - corps.clientHeight > 4);
+
+  onMount(() => {
+    const ro = new ResizeObserver(mesurer);
+    ro.observe(corps);
+    for (const e of corps.children) ro.observe(e);
+    return () => ro.disconnect();
+  });
 
   // Le titre prend le focus à l'arrivée : le lecteur d'écran annonce l'écran, le clavier repart d'ici.
   onMount(() => {
@@ -21,7 +32,7 @@
       {#if marque}{@render marque()}{/if}
       {#if grand}<h1 bind:this={entete} tabindex="-1">{titre}</h1>{:else}<h2 bind:this={entete} tabindex="-1">{titre}</h2>{/if}
     </div>
-    <div class="corps">{@render children()}</div>
+    <div class="corps" class:suite bind:this={corps} onscroll={mesurer}>{@render children()}</div>
     {#if pied}<div class="pied">{@render pied()}</div>{/if}
   </div>
 </section>
