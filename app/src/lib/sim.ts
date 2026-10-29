@@ -1,14 +1,15 @@
 // Simulation du cœur Rust pour un navigateur (hors Tauri) : mêmes réponses, mêmes événements, avec des délais.
 // Réglages par l'URL :
 //   ?aucune          aucune box trouvée (saisie manuelle de l'adresse)
-//   ?plusieurs       deux box trouvées
+//   ?plusieurs       (par défaut il y a déjà deux box : SALON 192.168.50.14 et CHAMBRE 192.168.50.15)
 //   ?coupure         coupure simulée : reconnexion pendant l'application, puis box injoignable pendant la vérification
 //   ?autorisation    la connexion attend l'autorisation sur la TV (Réessayer)
 //   ?refus           la première connexion échoue (non_autorise)
+//   ?refus2          la première connexion à la 2e box (CHAMBRE) seulement échoue (non_autorise)
 //   ?autremodele     la connexion échoue (autre_modele)
 //   ?sansadb         adb n'est pas installé (écran d'installation d'adb)
 //   ?reprise         une vérification précédente a été interrompue (reprise_en_attente)
-//   ?sansorigine     aucune sauvegarde d'origine (restauration générique)
+//   ?sansorigine     aucune sauvegarde d'origine (restauration générique ; par défaut seule SALON en a une)
 //   ?rapide          délais divisés par 5 (tests)
 import type {
   AppliSysteme, AppliUtilisateur, BoxConnectee, BoxTrouvee, Choix, Cible, Decision, ErreurZen,
@@ -27,6 +28,7 @@ let annule = false;
 let coupureFaite = false;
 let coupureVerifFaite = false;
 let refusFait = false;
+let refus2Fait = false;
 let demandeSuiv = 1;
 const attentes = new Map<number, (d: Decision) => void>();
 
@@ -96,11 +98,26 @@ const UTIL: AppliUtilisateur[] = [
   { paquet: "tv.twitch.android.app", libelle: "Twitch", taille: "63 Mo", derniere_utilisation: "il y a 7 mois" },
   { paquet: "com.king.candycrushsaga", libelle: "Candy Crush Saga", taille: "148 Mo", derniere_utilisation: "jamais" },
   { paquet: "com.example.vieille.appli", libelle: "Appli à nom très très long pour voir comment la ligne se comporte quand le texte déborde", taille: "12 Mo", derniere_utilisation: "il y a 2 ans" },
+  { paquet: "com.disney.disneyplus", libelle: "Disney+", taille: "120 Mo", derniere_utilisation: "il y a 3 semaines" },
 ];
-const etatsActuels = new Map<string, AppliSysteme["etat"]>([["com.google.android.tv", "desactive"], ["com.google.android.katniss", "garde"]]);
 
-let boxApplis = 61;
-let boxDesactivees = 2;
+/** Une box simulée : son propre état, ses applis et sa sauvegarde d'origine (SALON seulement). */
+interface BoxSim {
+  id: number; nom: string; ip: string; origine: boolean;
+  sansSys: string[]; util: string[]; etats: Map<string, AppliSysteme["etat"]>; applis: number; desactivees: number;
+}
+const BOXES: BoxSim[] = [
+  { id: 1, nom: "SALON", ip: "192.168.50.14", origine: true, sansSys: ["com.android.camera2"],
+    util: ["com.netflix.ninja", "com.google.android.youtube.tv", "com.spotify.tv.android", "tv.twitch.android.app", "com.example.vieille.appli"],
+    etats: new Map([["com.google.android.tv", "desactive"], ["com.google.android.katniss", "garde"]]), applis: 61, desactivees: 2 },
+  { id: 2, nom: "CHAMBRE", ip: "192.168.50.15", origine: false, sansSys: ["com.mitv.videoplayer", "com.google.android.play.games"],
+    util: ["com.netflix.ninja", "com.google.android.youtube.tv", "com.spotify.tv.android", "com.king.candycrushsaga", "com.disney.disneyplus"],
+    etats: new Map([["com.google.android.katniss", "desactive"], ["com.google.android.backdrop", "desactive"]]), applis: 58, desactivees: 2 },
+];
+// La box simulée suit la box connectée.
+let box = BOXES[0];
+const sysBox = () => SYS.filter((a) => !box.sansSys.includes(a.paquet));
+const utilBox = () => UTIL.filter((u) => box.util.includes(u.paquet));
 let choixFait: Choix | null = null;
 
 const delaiReseau = () => pause(350);
@@ -122,24 +139,25 @@ export const simulation: Api = {
     return exclusive(async () => {
       await pause(3400);
       if (q.has("aucune")) return [];
-      const l: BoxTrouvee[] = [{ id: 1, nom: "SALON", ip: "192.168.50.14" }];
-      if (q.has("plusieurs")) l.push({ id: 2, nom: "CHAMBRE", ip: "192.168.50.22" });
-      return l;
+      return BOXES.map(({ id, nom, ip }) => ({ id, nom, ip }));
     });
   },
 
   connecter: (cible: Cible, sur) => exclusive(async (): Promise<BoxConnectee> => {
-    const ip = "ip" in cible ? cible.ip : cible.id === 2 ? "192.168.50.22" : "192.168.50.14";
+    const choisie = BOXES.find((b) => ("ip" in cible ? b.ip === cible.ip : b.id === cible.id));
+    const ip = "ip" in cible ? cible.ip : choisie?.ip ?? BOXES[0].ip;
     await progresser(sur, `Connexion à la box (${ip})`, 1200, 0, 0.4);
     if (ip === "192.168.50.99") throw erreur("injoignable", "La box ne répond pas. Vérifiez qu'elle est allumée (pas en veille) et sur le même Wi-Fi que ce Mac.");
     if (q.has("refus") && !refusFait) { refusFait = true; throw erreur("non_autorise", "La box n'a pas accepté la connexion. Acceptez l'autorisation affichée sur la TV (cochez « Toujours autoriser »), puis réessayez."); }
+    if (q.has("refus2") && choisie === BOXES[1] && !refus2Fait) { refus2Fait = true; throw erreur("non_autorise", "La box n'a pas accepté la connexion. Acceptez l'autorisation affichée sur la TV (cochez « Toujours autoriser »), puis réessayez."); }
     if (q.has("autorisation")) {
       if ((await demander(sur, "autorisation")) === "arreter") throw erreur("annule", "Opération arrêtée. Rien n'a été modifié.");
       sur({ type: "reconnectee" });
     }
     if (q.has("autremodele")) throw erreur("autre_modele", "Cet appareil n'est pas une Xiaomi Mi Box 4 (modèle détecté : « SHIELD »). Par sécurité, Zen Home s'arrête ici, sans rien modifier.");
     await progresser(sur, "Lecture du modèle de la box", 700, 0.4, 1);
-    return { nom: ip.endsWith(".22") ? "CHAMBRE" : "SALON", ip, modele: "Xiaomi Mi Box 4 (MIBOX4)" };
+    box = choisie ?? BOXES[0];
+    return { nom: box.nom, ip, modele: "Xiaomi Mi Box 4 (MIBOX4)" };
   }),
 
   async chercherVilles(saisie): Promise<Ville[]> {
@@ -171,9 +189,9 @@ export const simulation: Api = {
     await progresser(sur, "Lecture des applis installées", 1500, 0.35, 0.8);
     await progresser(sur, "Recherche des noms lisibles", 900, 0.8, 1);
     return {
-      applis_systeme: SYS.map((a) => ({ ...a, etat: etatsActuels.get(a.paquet) ?? "actif" })),
-      applis_utilisateur: UTIL,
-      resume: { modele: "Xiaomi Mi Box 4", android: "Android TV 9", nb_applis: boxApplis, nb_desactivees: boxDesactivees },
+      applis_systeme: sysBox().map((a) => ({ ...a, etat: box.etats.get(a.paquet) ?? "actif" })),
+      applis_utilisateur: utilBox(),
+      resume: { modele: "Xiaomi Mi Box 4", android: "Android TV 9", nb_applis: box.applis, nb_desactivees: box.desactivees },
     };
   }),
 
@@ -186,7 +204,7 @@ export const simulation: Api = {
   }),
 
   appliquer: (choix, sur) => exclusive(async (): Promise<RapportApplication> => {
-    const connus = new Set(SYS.map((s) => s.paquet)), users = new Set(UTIL.map((u) => u.paquet));
+    const connus = new Set(sysBox().map((s) => s.paquet)), users = new Set(utilBox().map((u) => u.paquet));
     if (choix.garder.concat(choix.desactiver).some((p) => !connus.has(p)) || choix.desinstaller.some((p) => !users.has(p)))
       throw erreur("choix_invalide", "Un des choix ne correspond à aucune appli de la box. Recommencez depuis le début.");
     choixFait = choix;
@@ -213,8 +231,8 @@ export const simulation: Api = {
       await pause(700);
       fait++; sur({ type: "progression", fraction: 0.1 + 0.9 * (fait / total) });
     }
-    boxDesactivees += choix.desactiver.length;
-    boxApplis -= choix.desinstaller.length - echecs.length;
+    box.desactivees += choix.desactiver.length;
+    box.applis -= choix.desinstaller.length - echecs.length;
     return { desactivees: choix.desactiver.length, gardees: choix.garder.length, desinstallees: choix.desinstaller.filter((p) => !echecs.includes(p)), echecs };
   }),
 
@@ -237,7 +255,7 @@ export const simulation: Api = {
       { etat: "ok", controle: "Désactivé : com.google.android.tungsten.setupwraith", detail: "" },
     ];
     const gardes = new Set(choixFait?.garder ?? ["com.google.android.katniss", "com.xiaomi.mitv.updateservice", "com.mitv.download.service"]);
-    for (const a of SYS) {
+    for (const a of sysBox()) {
       if (gardes.has(a.paquet)) lignes.push({ etat: "avert", controle: `Désactivé : ${a.paquet}`, detail: "gardé actif (votre choix)" });
       else lignes.push({ etat: "ok", controle: `Désactivé : ${a.paquet}`, detail: "" });
     }
@@ -255,7 +273,7 @@ export const simulation: Api = {
     await progresser(sur, "Réactivation des applis désactivées", 2200, 0, 0.5);
     await progresser(sur, "Retour à l'accueil d'origine", 1500, 0.5, 0.8);
     await progresser(sur, "Désinstallation de Zen Home", 1300, 0.8, 1);
-    return { incomplete: false, avertissements: [], depuis_sauvegarde: q.has("sansorigine") ? null : DATE_ORIGINE };
+    return { incomplete: false, avertissements: [], depuis_sauvegarde: q.has("sansorigine") || !box.origine ? null : DATE_ORIGINE };
   }),
 
   async decider(demande, decision) {

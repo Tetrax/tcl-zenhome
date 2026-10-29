@@ -17,7 +17,9 @@ export interface AppliSysteme {
   /** Facultatif (extension demandée au cœur) : sépare « pistage et publicité » des applis « au choix ». */
   groupe?: "pistage" | "option";
 }
-export interface AppliUtilisateur { paquet: string; libelle: string; taille: string; derniere_utilisation: string }
+export interface AppliUtilisateur { paquet: string; libelle: string; taille: string; derniere_utilisation: string;
+  /** Facultatif, ajout de plusieurs box : noms des box où l'appli est installée. */
+  sur?: string[] }
 export interface Inventaire {
   applis_systeme: AppliSysteme[];
   applis_utilisateur: AppliUtilisateur[];
