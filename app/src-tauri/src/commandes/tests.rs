@@ -606,6 +606,16 @@ fn box_memorisee_apres_connexion_reussie_seulement() {
     super::memoire::memoriser(&d, SERIE, "SALON", IP).unwrap();
     assert_eq!(c.connecter(&Cible::Ip { ip: IP.into() }, &rien).unwrap().nom, "SALON");
     assert_eq!(super::memoire::lire(&d).last().unwrap().nom, "SALON");
+    // une autre box sur l'IP mémorisée de A ne reprend pas son nom ; l'entrée de A ne bouge pas
+    let d3 = dossier("memoire-autre");
+    super::memoire::memoriser(&d3, SERIE, "SALON", IP).unwrap();
+    let c3 = Coeur::nouveau(config_deux(d3.clone(), &b, &b));
+    c3.chercher_box().ok();
+    let nom_b = c3.connecter(&Cible::Ip { ip: IP.into() }, &rien).unwrap().nom;
+    assert_eq!(nom_b, "Mi Box");
+    let l = super::memoire::lire(&d3);
+    assert_eq!(l.len(), 1, "l'IP est maintenant à B");
+    assert_eq!(l[0].nom, "Mi Box");
     // connexion qui échoue : rien de mémorisé
     let d2 = dossier("memoire-echec");
     let c2 = Coeur::nouveau(config_deux(d2.clone(), &a, &b));

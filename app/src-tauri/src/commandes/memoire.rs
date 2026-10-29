@@ -34,7 +34,7 @@ fn charger(racine: &Path) -> Vec<Memorisee> {
                 && zh_reseau::valider_ipv4(&m.ip).is_some_and(|ip| ip.to_string() == m.ip)
                 && !m.nom.is_empty()
                 && zh_reseau::nettoyer_nom(&m.nom) == m.nom
-                && entrees[..i].iter().all(|q| q.serie != m.serie)
+                && entrees[..i].iter().all(|q| q.serie != m.serie && q.ip != m.ip)
         });
     if valide { entrees } else { vec![] }
 }
@@ -44,16 +44,27 @@ pub fn lire(racine: &Path) -> Vec<BoxTrouvee> {
     charger(racine).into_iter().map(|m| BoxTrouvee { nom: m.nom, ip: m.ip }).collect()
 }
 
-/// Nom mémorisé de cette série, s'il est autre chose que le nom par défaut.
-pub fn nom(racine: &Path, serie: &str) -> Option<String> {
-    charger(racine).into_iter().find(|m| m.serie == serie && m.nom != "Mi Box").map(|m| m.nom)
+const PAR_DEFAUT: &str = "Mi Box";
+
+/// Nom de la box une fois sa série lue : celui mémorisé pour CETTE série, sinon `propose` (nom mDNS) s'il ne vient pas
+/// de la mémoire, sinon « Mi Box ». Le nom mémorisé d'une IP dont la série diffère (box remplacée) n'est jamais repris.
+pub fn nom_pour(racine: &Path, serie: &str, ip: &str, propose: &str) -> String {
+    let connues = charger(racine);
+    let reel = |n: &str| !n.is_empty() && n != PAR_DEFAUT && n != "Appareil à vérifier";
+    if let Some(m) = connues.iter().find(|m| m.serie == serie && reel(&m.nom)) {
+        return m.nom.clone();
+    }
+    let de_memoire = connues.iter().any(|m| m.ip == ip && m.nom == propose);
+    if reel(propose) && !de_memoire { propose.into() } else { PAR_DEFAUT.into() }
 }
 
 /// Mémorise la box (remplace l'entrée de même série ou de même IP ; la plus ancienne saute au-delà du plafond).
 pub fn memoriser(racine: &Path, serie: &str, nom: &str, ip: &str) -> std::io::Result<()> {
     let mut entrees = charger(racine);
     entrees.retain(|m| m.serie != serie && m.ip != ip);
-    entrees.push(Memorisee { serie: serie.into(), nom: nom.into(), ip: ip.into() });
+    let nom = if nom == "Appareil à vérifier" { String::new() } else { zh_reseau::nettoyer_nom(nom) };
+    let nom = if nom.is_empty() { PAR_DEFAUT.into() } else { nom };
+    entrees.push(Memorisee { serie: serie.into(), nom, ip: ip.into() });
     let trop = entrees.len().saturating_sub(BOXES_MAX);
     entrees.drain(..trop);
     ecrire_atomique(racine, FICHIER, &serde_json::to_vec(&entrees).map_err(std::io::Error::other)?)
@@ -84,6 +95,19 @@ mod tests {
     }
 
     #[test]
+    fn nom_par_defaut_memorise_lisible_et_nom_de_cette_serie_prioritaire() {
+        let d = dossier("defaut");
+        memoriser(&d, "A", "Appareil à vérifier", "10.0.0.1").unwrap();
+        assert_eq!(lire(&d).len(), 1, "le fichier reste valide");
+        assert_eq!(nom_pour(&d, "A", "10.0.0.1", "Appareil à vérifier"), "Mi Box");
+        memoriser(&d, "B", "SALON", "10.0.0.2").unwrap();
+        assert_eq!(nom_pour(&d, "B", "10.0.0.2", "Mi Box"), "SALON");
+        assert_eq!(nom_pour(&d, "C", "10.0.0.2", "SALON"), "Mi Box", "autre série : nom mémorisé non repris");
+        assert_eq!(nom_pour(&d, "C", "10.0.0.2", "Chambre"), "Chambre", "nom mDNS conservé");
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
     fn plafond() {
         let d = dossier("plafond");
         for n in 0..BOXES_MAX + 3 {
@@ -109,6 +133,7 @@ mod tests {
             r#"[{"serie":"A B","nom":"Salon","ip":"192.168.1.20"}]"#,
             &format!("[{bon},{bon}]"),
             &format!("[{bon},{{\"serie\":\"B\",\"nom\":\"X\",\"ip\":\"1.1.1.1\"}}]"),
+            &format!("[{bon},{{\"serie\":\"B\",\"nom\":\"X\",\"ip\":\"192.168.1.20\"}}]"),
             &trop,
             "pas du json",
         ] {

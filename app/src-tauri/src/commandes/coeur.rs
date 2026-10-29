@@ -488,10 +488,7 @@ impl Coeur {
                 }
                 let mut nom = nom;
                 if let (false, Some(serie)) = (self.cfg.demo, reprise.serie.as_deref()) {
-                    // Connexion par IP : une box déjà connue garde son vrai nom.
-                    if nom == "Mi Box" {
-                        nom = memoire::nom(&self.cfg.donnees, serie).unwrap_or(nom);
-                    }
+                    nom = memoire::nom_pour(&self.cfg.donnees, serie, &ip.to_string(), &nom);
                     let _ = memoire::memoriser(&self.cfg.donnees, serie, &nom, &ip.to_string());
                 }
                 self.etat().session = Some(SessionBox { t, reprise, inventaire: None });
