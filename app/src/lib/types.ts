@@ -18,7 +18,7 @@ export interface AppliSysteme {
   groupe?: "pistage" | "option";
 }
 export interface AppliUtilisateur { paquet: string; libelle: string; taille: string; derniere_utilisation: string;
-  /** Facultatif, ajout de plusieurs box : noms des box où l'appli est installée. */
+  /** Facultatif, ajout de plusieurs box : identifiants (IP) des box où l'appli est installée. */
   sur?: string[] }
 export interface Inventaire {
   applis_systeme: AppliSysteme[];

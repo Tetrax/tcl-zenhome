@@ -24,6 +24,8 @@ const GRACE: Duration = Duration::from_millis(1500);
 /// Port adb sondé par le balayage de repli.
 const PORT_ADB: u16 = 5555;
 /// Large : une box en Wi-Fi économe met plusieurs centaines de ms à se réveiller au premier paquet.
+/// Durée minimale d'une passe de balayage.
+const PASSE_MIN: Duration = Duration::from_secs(2);
 const DELAI_CONNEXION: Duration = Duration::from_millis(1500);
 /// Connexions simultanées du balayage.
 const FILS_BALAYAGE: usize = 64;
@@ -163,8 +165,19 @@ fn balayer(hotes: &[Ipv4Addr], trouves: &Mutex<Vec<Ipv4Addr>>, stop: &AtomicBool
         if restants.is_empty() {
             std::thread::sleep(Duration::from_millis(100));
         } else {
+            let debut = Instant::now();
             passe(&restants, trouves, stop);
+            finir_passe(debut, PASSE_MIN, stop);
         }
+    }
+}
+
+/// Attend que `min` se soit écoulé depuis `debut` (une passe qui échoue vite ne doit pas tourner en boucle serrée),
+/// en restant réactif à `stop`.
+fn finir_passe(debut: Instant, min: Duration, stop: &AtomicBool) {
+    while !stop.load(Ordering::Relaxed) {
+        let Some(reste) = (debut + min).checked_duration_since(Instant::now()) else { break };
+        std::thread::sleep(reste.min(Duration::from_millis(50)));
     }
 }
 
@@ -263,6 +276,18 @@ mod tests {
 
     fn mibox(nom: &str, ip: &str) -> BoxTrouvee {
         BoxTrouvee { nom: nom.into(), ip: ip.into() }
+    }
+
+    #[test]
+    fn une_passe_dure_au_moins_le_minimum_et_reste_reactive_a_stop() {
+        let stop = AtomicBool::new(false);
+        let t = Instant::now();
+        finir_passe(t, Duration::from_millis(300), &stop);
+        assert!(t.elapsed() >= Duration::from_millis(300));
+        stop.store(true, Ordering::Relaxed);
+        let t = Instant::now();
+        finir_passe(t, Duration::from_secs(10), &stop);
+        assert!(t.elapsed() < Duration::from_secs(1));
     }
 
     #[test]

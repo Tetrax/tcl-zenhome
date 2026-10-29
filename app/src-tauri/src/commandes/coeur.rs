@@ -296,16 +296,28 @@ impl Coeur {
 
     pub fn chercher_box(&self) -> Result<Vec<BoxUi>, ErreurCommande> {
         let (_occupation, _) = self.prendre()?;
-        let trouvees = if self.cfg.demo {
+        let resultat = if self.cfg.demo {
             std::thread::sleep(self.cfg.rythme_demo * 10);
-            demo::BOXES.iter().map(|(nom, ip, _)| BoxTrouvee { nom: (*nom).into(), ip: (*ip).into() }).collect()
+            Ok(demo::BOXES.iter().map(|(nom, ip, _)| BoxTrouvee { nom: (*nom).into(), ip: (*ip).into() }).collect())
         } else {
-            zh_reseau::chercher_box(Duration::from_secs(15))?
+            zh_reseau::chercher_box(Duration::from_secs(15))
         };
+        self.garder_recherche(resultat)
+    }
+
+    /// Garde le résultat d'une recherche. Même en cas d'échec, les ids de la recherche précédente ne sont plus valables.
+    pub(crate) fn garder_recherche(&self, resultat: Result<Vec<BoxTrouvee>, zh_reseau::Erreur>) -> Result<Vec<BoxUi>, ErreurCommande> {
         let mut e = self.etat();
         let base = e.prochain_id;
-        let vue = trouvees.iter().zip(base..).map(|(b, id)| BoxUi { id, nom: b.nom.clone(), ip: b.ip.clone() }).collect();
         e.base_id = base;
+        let trouvees: Vec<BoxTrouvee> = match resultat {
+            Ok(t) => t,
+            Err(err) => {
+                e.boxes.clear();
+                return Err(err.into());
+            }
+        };
+        let vue = trouvees.iter().zip(base..).map(|(b, id)| BoxUi { id, nom: b.nom.clone(), ip: b.ip.clone() }).collect();
         e.prochain_id = base.saturating_add(trouvees.len() as u32);
         e.boxes = trouvees;
         Ok(vue)

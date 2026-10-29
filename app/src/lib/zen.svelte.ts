@@ -21,6 +21,8 @@ export interface BoxLot {
   inv?: Inventaire; passe1?: boolean;
   rapport?: RapportApplication; verification?: Verification; restauration?: RapportRestauration;
   debogage?: "oui" | "echec";
+  /** Vrai si la box n'a pas pris part aux questions communes (échec du passage 1) : aucune désinstallation pour elle. */
+  horsChoix?: boolean;
 }
 
 /** Moment de la journée affiché derrière chaque écran. */
@@ -102,7 +104,9 @@ class Zen {
     try { this.init = await api.etatInitial(); } catch (e) { this.erreur = normaliserErreur(e); }
   }
 
-  aller(e: Ecran) { if (e === "accueil" || e === "adieu") this.jeton = ""; // le jeton ne survit pas à la sortie du lot
+  aller(e: Ecran) {
+    if (e === "accueil" || e === "adieu" || e === "recherche") this.jeton = ""; // le jeton ne survit pas à la sortie du lot
+    if (e === "recherche") this.lot = null;
     this.erreur = null; this.reprise = null; this.attente = null; this.ecran = e; }
 
   private sur = (e: Evenement) => {
@@ -321,6 +325,12 @@ class Zen {
   }
   restaurerLot() { if (this.lot) void this.lancerTraitement(this.lot, 0); }
 
+  /** Noms des box pour un `sur` (IP) ; l'IP est ajoutée si plusieurs box portent le même nom. */
+  nomsBox(ips: string[]): string {
+    const lot = this.lot ?? [];
+    return ips.map((ip) => { const b = lot.find((x) => x.ip === ip); return !b ? ip : lot.filter((x) => x.nom === b.nom).length > 1 ? `${b.nom} (${ip})` : b.nom; }).join(", ");
+  }
+
   fractionLot(): number { return (this.lotFait + (this.travail.fraction ?? 0)) / this.lotSur; }
 
   private pas(nom: string) {
@@ -363,7 +373,7 @@ class Zen {
     if (this.mode === "restaurer") { this.pas("Retour à l'état d'origine"); b.restauration = await api.restaurer(this.sur); return; }
     if (!b.passe1) await this.passage1(b); // reprise d'une box en échec au passage 1
     this.pas("Lecture de la box"); const inv = await api.inventaire(this.sur); // inventaire propre à cette box
-    this.pas("Application de vos choix"); b.rapport = await api.appliquer(reduire(this.choix(), inv), this.sur);
+    this.pas("Application de vos choix"); b.rapport = await api.appliquer(reduire(this.choix(), inv, b.ip, this.inventaire!), this.sur);
     this.pas("Vérification et réglage final"); b.verification = await api.verifier(true, this.sur);
   }
   async lancerTraitement(boxes: BoxLot[], passe: number) {
@@ -389,7 +399,8 @@ class Zen {
   reessayerPassage1() { void this.lancerPassage1(this.lot?.filter((b) => b.etat !== "ok")); }
   /** Les box qui ont réussi le passage 1 posent les questions, une seule fois pour toutes. */
   questions() {
-    const inv = fusionner((this.lot ?? []).filter((b) => b.etat === "ok").map((b) => ({ nom: b.nom, inv: b.inv! })));
+    for (const b of this.lot ?? []) b.horsChoix = b.etat !== "ok";
+    const inv = fusionner((this.lot ?? []).filter((b) => b.etat === "ok").map((b) => ({ id: b.ip, inv: b.inv! })));
     this.inventaire = inv;
     this.desactiver = Object.fromEntries(inv.applis_systeme.map((a) => [a.paquet, desactiverParDefaut(a)]));
     this.desinstaller = Object.fromEntries(inv.applis_utilisateur.map((a) => [a.paquet, false]));

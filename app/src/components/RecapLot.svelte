@@ -24,7 +24,7 @@
       const d = r.depuis_sauvegarde ? `Remise comme dans la sauvegarde du ${r.depuis_sauvegarde}` : "Restauration générale";
       return r.incomplete ? `${d} ; Zen Home a été conservé par sécurité, relancez le retour une fois la box reconnectée` : d;
     }
-    if (b.rapport) return `Applis : ${b.rapport.desactivees} désactivées, ${b.rapport.gardees} gardées, ${b.rapport.desinstallees.length} désinstallées ; ${verif}`;
+    if (b.rapport) return `Applis : ${b.rapport.desactivees} désactivées, ${b.rapport.gardees} gardées, ${b.rapport.desinstallees.length} désinstallées ; ${verif}${b.horsChoix ? ". Cette box n'a pas pris part à vos choix : aucune appli n'y a été désinstallée." : ""}`;
     return maj(verif);
   }
 </script>

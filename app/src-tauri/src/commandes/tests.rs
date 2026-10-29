@@ -592,6 +592,17 @@ fn ids_de_box_jamais_reutilises() {
     assert_eq!(connexion.nom, seconde[1].nom);
 }
 
+#[test]
+fn recherche_en_echec_invalide_les_anciens_ids() {
+    let c = Coeur::nouveau(Config::demo("0.0.0-test".into(), dossier("ids-echec"), Duration::ZERO));
+    let boxes = c.chercher_box().unwrap();
+    let err = c.garder_recherche(Err(zh_reseau::Erreur::Mdns("réseau coupé".into()))).err().unwrap();
+    assert!(!err.message.is_empty());
+    assert_eq!(code(c.connecter(&Cible::Id { id: boxes[0].id }, &rien)), "choix_invalide", "ancien id après échec");
+    let neuves = c.chercher_box().unwrap();
+    assert!(neuves.iter().all(|b| boxes.iter().all(|p| p.id != b.id)));
+}
+
 /// Transport qui compte les arrêts du serveur adb (FakeBox derrière).
 struct Compteur(Arc<FakeBox>, Arc<AtomicU32>);
 

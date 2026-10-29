@@ -20,7 +20,7 @@
     <p class="lead">Vous allez désinstaller :</p>
     <ul class="liste" style="margin-top:6px">
       {#each choisies as a (a.paquet)}
-        <li class="ligne" style="cursor:default"><span class="texte"><span class="nom">• {a.libelle}</span><span class="expl">{a.taille} · dernière utilisation : {a.derniere_utilisation}{a.sur ? ` · présente sur : ${a.sur.join(", ")}` : ""}</span></span></li>
+        <li class="ligne" style="cursor:default"><span class="texte"><span class="nom">• {a.libelle}</span><span class="expl">{a.taille} · dernière utilisation : {a.derniere_utilisation}{a.sur ? ` · présente sur : ${zen.nomsBox(a.sur)}` : ""}</span></span></li>
       {/each}
     </ul>
     {#snippet pied()}
@@ -42,7 +42,7 @@
           <label class="ligne danger">
             <input type="checkbox" bind:checked={zen.desinstaller[a.paquet]} />
             <span class="case"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m3.5 8.5 3 3 6-7" /></svg></span>
-            <span class="texte"><span class="nom">{a.libelle}</span><span class="expl">{a.taille} · dernière utilisation : {a.derniere_utilisation}{a.sur ? ` · présente sur : ${a.sur.join(", ")}` : ""}</span></span>
+            <span class="texte"><span class="nom">{a.libelle}</span><span class="expl">{a.taille} · dernière utilisation : {a.derniere_utilisation}{a.sur ? ` · présente sur : ${zen.nomsBox(a.sur)}` : ""}</span></span>
           </label>
         </li>
       {/each}
