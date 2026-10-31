@@ -1,6 +1,6 @@
 [package]
 name = "zen-home"
-version = "0.4.0"
+version = "0.5.0"
 description = "Installe Zen Home sur une Xiaomi Mi Box 4"
 authors = ["Tetrax"]
 edition = "2024"

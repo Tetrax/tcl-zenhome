@@ -4,7 +4,9 @@ export interface EtatInitial { version: string; adb_installe: boolean; demo: boo
   /** Sauvegarde d'origine (faite avant Zen Home) la plus récente, ou null. `date` : « JJ/MM/AAAA HH:MM ». */
   origine: { date: string } | null;
   /** Box déjà configurées (la plus récente d'abord), à proposer tout de suite pendant la recherche. */
-  boxes_memorisees: BoxMemorisee[] }
+  boxes_memorisees: BoxMemorisee[];
+  /** Vrai si l'appli embarque un jeton TMDB : les films marchent sans jeton personnel. */
+  films_inclus: boolean }
 export interface BoxMemorisee { nom: string; ip: string }
 export interface BoxTrouvee { id: number; nom: string; ip: string }
 export type Cible = { id: number } | { ip: string };

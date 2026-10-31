@@ -28,13 +28,13 @@ com.google.android.backdrop            # Écran de veille Google : remplacé par
 # Au choix
 com.google.android.katniss             # [option:garder] Recherche vocale : le bouton micro de la télécommande. Si vous la désactivez, le micro ne fera plus rien, mais vous libérez environ 115 Mo de mémoire.
 com.google.android.tv                  # [option] Chaînes en direct : sert aux tuners TV. La Mi Box n'en a pas, l'appli tourne pour rien.
-com.google.android.tts                 # [option] Synthèse vocale : lit les textes à voix haute pour le lecteur d'écran. Inutile si personne n'en a besoin, libère environ 300 Mo.
-com.google.android.marvin.talkback     # [option] Lecteur d'écran (TalkBack) : aide pour les personnes malvoyantes. Inutile si personne n'en a besoin.
+com.google.android.tts                 # [option:garder] Synthèse vocale : lit les textes à voix haute pour le lecteur d'écran. Désactivez-la si personne n'en a besoin, vous libérez environ 300 Mo.
+com.google.android.marvin.talkback     # [option:garder] Lecteur d'écran (TalkBack) : aide pour les personnes malvoyantes. Désactivez-le si personne n'en a besoin.
 com.mitv.milinkservice                 # [option] Mi Link : diffuser depuis un téléphone Xiaomi. Le Chromecast intégré reste disponible pour tous les téléphones.
-com.mitv.videoplayer                   # [option] Lecteur vidéo Xiaomi : lit les vidéos d'une clé USB. Gardez-le si vous regardez des fichiers sur clé USB.
-com.google.android.play.games          # [option] Play Jeux : l'appli de jeux Google. Gardez-la si vous jouez sur la box.
-com.google.android.youtube.tvmusic     # [option] YouTube Music : gardez-la si vous écoutez de la musique avec.
-com.google.android.videos              # [option] Google TV (films Google) : location et achat de films chez Google. Gardez-la si vous en avez acheté.
+com.mitv.videoplayer                   # [option:garder] Lecteur vidéo Xiaomi : lit les vidéos d'une clé USB. Désactivez-le si vous ne regardez jamais de fichiers sur clé USB.
+com.google.android.play.games          # [option:garder] Play Jeux : l'appli de jeux Google. Désactivez-la si vous ne jouez pas sur la box.
+com.google.android.youtube.tvmusic     # [option:garder] YouTube Music : désactivez-la si vous n'écoutez pas de musique avec.
+com.google.android.videos              # [option:garder] Google TV (films Google) : location et achat de films chez Google. Désactivez-la si vous n'en avez pas acheté.
 com.android.camera2                    # [option] Appareil photo : la box n'a pas de caméra.
 com.android.printspooler               # [option] Impression : la box ne sert pas à imprimer.
 com.xiaomi.mitv.updateservice          # [option:garder] Mises à jour Xiaomi : installe les mises à jour de sécurité de la box. Recommandé de garder.

@@ -24,6 +24,8 @@ pub struct EtatInitial {
     pub origine: Option<OrigineUi>,
     /// Box déjà configurées (la plus récente d'abord), à proposer tout de suite pendant la recherche.
     pub boxes_memorisees: Vec<BoxMemoriseeUi>,
+    /// Vrai si l'appli embarque un jeton TMDB (le jeton lui-même n'est jamais exposé).
+    pub films_inclus: bool,
 }
 
 #[derive(Serialize)]

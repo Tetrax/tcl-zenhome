@@ -80,13 +80,13 @@ const SYS: Omit<AppliSysteme, "etat">[] = [
   { paquet: "com.google.android.backdrop", libelle: "Écran de veille Google", explication: "Remplacé par celui de Zen Home.", recommande: "desactiver", groupe: "pistage" },
   { paquet: "com.google.android.katniss", libelle: "Recherche vocale", explication: "Le bouton micro de la télécommande. Si vous la désactivez, le micro ne fera plus rien, mais vous libérez environ 115 Mo de mémoire.", recommande: "garder", groupe: "option" },
   { paquet: "com.google.android.tv", libelle: "Chaînes en direct", explication: "Sert aux tuners TV. La Mi Box n'en a pas, l'appli tourne pour rien.", recommande: "desactiver", groupe: "option" },
-  { paquet: "com.google.android.tts", libelle: "Synthèse vocale", explication: "Lit les textes à voix haute pour le lecteur d'écran. Inutile si personne n'en a besoin, libère environ 300 Mo.", recommande: "desactiver", groupe: "option" },
-  { paquet: "com.google.android.marvin.talkback", libelle: "Lecteur d'écran (TalkBack)", explication: "Aide pour les personnes malvoyantes. Inutile si personne n'en a besoin.", recommande: "desactiver", groupe: "option" },
+  { paquet: "com.google.android.tts", libelle: "Synthèse vocale", explication: "Lit les textes à voix haute pour le lecteur d'écran. Inutile si personne n'en a besoin, libère environ 300 Mo.", recommande: "garder", groupe: "option" },
+  { paquet: "com.google.android.marvin.talkback", libelle: "Lecteur d'écran (TalkBack)", explication: "Aide pour les personnes malvoyantes. Inutile si personne n'en a besoin.", recommande: "garder", groupe: "option" },
   { paquet: "com.mitv.milinkservice", libelle: "Mi Link", explication: "Diffuser depuis un téléphone Xiaomi. Le Chromecast intégré reste disponible pour tous les téléphones.", recommande: "desactiver", groupe: "option" },
-  { paquet: "com.mitv.videoplayer", libelle: "Lecteur vidéo Xiaomi", explication: "Lit les vidéos d'une clé USB. Gardez-le si vous regardez des fichiers sur clé USB.", recommande: "desactiver", groupe: "option" },
-  { paquet: "com.google.android.play.games", libelle: "Play Jeux", explication: "L'appli de jeux Google. Gardez-la si vous jouez sur la box.", recommande: "desactiver", groupe: "option" },
-  { paquet: "com.google.android.youtube.tvmusic", libelle: "YouTube Music", explication: "Gardez-la si vous écoutez de la musique avec.", recommande: "desactiver", groupe: "option" },
-  { paquet: "com.google.android.videos", libelle: "Google TV (films Google)", explication: "Location et achat de films chez Google. Gardez-la si vous en avez acheté.", recommande: "desactiver", groupe: "option" },
+  { paquet: "com.mitv.videoplayer", libelle: "Lecteur vidéo Xiaomi", explication: "Lit les vidéos d'une clé USB. Gardez-le si vous regardez des fichiers sur clé USB.", recommande: "garder", groupe: "option" },
+  { paquet: "com.google.android.play.games", libelle: "Play Jeux", explication: "L'appli de jeux Google. Gardez-la si vous jouez sur la box.", recommande: "garder", groupe: "option" },
+  { paquet: "com.google.android.youtube.tvmusic", libelle: "YouTube Music", explication: "Gardez-la si vous écoutez de la musique avec.", recommande: "garder", groupe: "option" },
+  { paquet: "com.google.android.videos", libelle: "Google TV (films Google)", explication: "Location et achat de films chez Google. Gardez-la si vous en avez acheté.", recommande: "garder", groupe: "option" },
   { paquet: "com.android.camera2", libelle: "Appareil photo", explication: "La box n'a pas de caméra.", recommande: "desactiver", groupe: "option" },
   { paquet: "com.android.printspooler", libelle: "Impression", explication: "La box ne sert pas à imprimer.", recommande: "desactiver", groupe: "option" },
   { paquet: "com.xiaomi.mitv.updateservice", libelle: "Mises à jour Xiaomi", explication: "Installe les mises à jour de sécurité de la box. Recommandé de garder.", recommande: "garder", groupe: "option" },
@@ -127,7 +127,8 @@ export const simulation: Api = {
   async etatInitial() {
     await pause(250);
     return { version: "0.0.2-sim", adb_installe: !q.has("sansadb"), demo: true, sauvegardes_dir_existe: true, reprise_en_attente: q.has("reprise"), origine: q.has("sansorigine") ? null : { date: DATE_ORIGINE },
-      boxes_memorisees: q.has("sansmemoire") ? [] : [{ nom: BOXES[0].nom, ip: BOXES[0].ip }] };
+      boxes_memorisees: q.has("sansmemoire") ? [] : [{ nom: BOXES[0].nom, ip: BOXES[0].ip }],
+      films_inclus: !q.has("sansfilms") };
   },
 
   installerAdb: (accord, sur) => exclusive(async () => {

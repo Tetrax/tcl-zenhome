@@ -57,6 +57,8 @@ pub struct Config {
     pub delai_decision: Duration,
     /// Durée des pauses artificielles de la démo (nulle dans les tests).
     pub rythme_demo: Duration,
+    /// Jeton TMDB du projet, injecté à la compilation (`ZENHOME_TMDB_JETON`). Jamais renvoyé à l'interface ni journalisé.
+    pub jeton_projet: Option<String>,
 }
 
 impl Config {
@@ -67,7 +69,9 @@ impl Config {
                 .ok_or_else(|| ErreurCommande::nouvelle("adb_absent", "adb n'est pas installé : installez-le depuis l'écran de démarrage."))?;
             Ok(Arc::new(AdbProcess::nouveau(adb, ip)) as TransportPartage)
         });
-        Self::commune(version, donnees, apk_ressource, APK_SHA256.to_string(), false, fabrique, Duration::ZERO)
+        let mut cfg = Self::commune(version, donnees, apk_ressource, APK_SHA256.to_string(), false, fabrique, Duration::ZERO);
+        cfg.jeton_projet = option_env!("ZENHOME_TMDB_JETON").map(|j| j.trim().to_string()).filter(|j| !j.is_empty());
+        cfg
     }
 
     pub fn demo(version: String, donnees: PathBuf, rythme: Duration) -> Self {
@@ -91,6 +95,7 @@ impl Config {
             delai_action: Duration::from_secs(30 * 60),
             delai_decision: Duration::from_secs(5 * 60),
             rythme_demo,
+            jeton_projet: None,
         }
     }
 }
@@ -259,6 +264,7 @@ impl Coeur {
             reprise_en_attente: persistance::en_attente(&self.cfg.donnees),
             origine: self.origine_courante().map(|o| OrigineUi { date: o.date }),
             boxes_memorisees: self.boxes_memorisees(),
+            films_inclus: self.cfg.jeton_projet.is_some(),
         }
     }
 
@@ -677,7 +683,7 @@ impl Coeur {
                 lat: ville.as_ref().map(|v| v.latitude.to_string()),
                 lon: ville.as_ref().map(|v| v.longitude.to_string()),
                 ville: ville.map(|v| v.nom),
-                jeton: jeton.map(|j| j.trim().to_string()).filter(|j| !j.is_empty()),
+                jeton: jeton.map(|j| j.trim().to_string()).filter(|j| !j.is_empty()).or_else(|| self.cfg.jeton_projet.clone()),
             };
             let r = installation::installer(&c.transport(), &self.cfg.politique, &mut c.observateur(), &p, &c.reprise);
             c.issue(r).map(|_| ())

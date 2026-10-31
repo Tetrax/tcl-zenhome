@@ -43,6 +43,7 @@ fn config(donnees: PathBuf, f: &Arc<FakeBox>) -> Config {
         delai_action: Duration::from_secs(60),
         delai_decision: Duration::from_secs(5),
         rythme_demo: Duration::ZERO,
+        jeton_projet: None,
     }
 }
 
@@ -282,6 +283,42 @@ fn le_jeton_n_apparait_ni_dans_les_evenements_ni_dans_les_erreurs_ni_sur_la_box(
     // jeton vide : traité comme absent
     f.signature_incompatible(false);
     assert!(c.installer(None, Some("   ".into()), &enregistre).is_ok());
+}
+
+#[test]
+fn jeton_du_projet_pour_les_films_et_jeton_perso_prioritaire() {
+    const PROJET: &str = "PROJET.jeton-XYZ789";
+    const PERSO: &str = "PERSO.jeton-ABC123";
+    let avec = |nom: &str, projet: Option<&str>| {
+        let (f, d) = (Arc::new(FakeBox::mibox4()), dossier(nom));
+        let mut cfg = config(d, &f);
+        avec_apk(&mut cfg, b"apk de test", &sha(b"apk de test"));
+        cfg.jeton_projet = projet.map(Into::into);
+        let c = Coeur::nouveau(cfg);
+        connecter(&c);
+        (c, f)
+    };
+    // sans jeton projet : comportement actuel (aucun jeton envoyé, films_inclus faux)
+    let (c, f) = avec("jp-sans", None);
+    assert!(!c.etat_initial().films_inclus);
+    c.installer(None, None, &rien).unwrap();
+    assert!(!f.journal().join("\n").contains("tmdb_token"));
+    // jeton vide : celui du projet est envoyé à la box, sans jamais apparaître dans les événements ni le journal
+    let (c, f2) = avec("jp-vide", Some(PROJET));
+    assert!(c.etat_initial().films_inclus);
+    let (recu, enregistre) = enregistreur();
+    c.installer(None, Some("  ".into()), &enregistre).unwrap();
+    assert!(f2.journal().join("\n").contains("tmdb_token ***"), "le jeton du projet est envoyé");
+    let tout = format!("{:?}{}", recu.lock().unwrap(), f2.journal().join("\n"));
+    assert!(!tout.contains("PROJET") && !tout.contains("jeton TMDB absent"), "{tout}");
+    // jeton perso : prioritaire, et un jeton refusé ne retombe pas sur celui du projet
+    let (c, f3) = avec("jp-perso", Some(PROJET));
+    c.installer(None, Some(PERSO.into()), &enregistre).unwrap();
+    assert!(f3.journal().join("\n").contains("tmdb_token ***"));
+    assert!(!format!("{:?}{}", recu.lock().unwrap(), f3.journal().join("\n")).contains("PERSO"));
+    let err = c.installer(None, Some("mauvais;jeton".into()), &enregistre).err().unwrap();
+    assert_eq!(err.code, "choix_invalide");
+    assert!(!err.message.contains(PROJET));
 }
 
 #[test]

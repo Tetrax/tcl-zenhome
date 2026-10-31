@@ -3,6 +3,7 @@
   import Icone from "./Icone.svelte";
   import { zen, jetonValide } from "../lib/zen.svelte";
 
+  const inclus = $derived(zen.init?.films_inclus ?? false);
   let montre = $state(false);
   let erreur = $state("");
   function suite(e: Event) {
@@ -17,26 +18,39 @@
   }
 </script>
 
-<Panneau titre="Films (facultatif)" large>
-  <p class="lead">Pour afficher des films et des bandes-annonces, Zen Home utilise le service gratuit TMDB. Il faut un « jeton » personnel :</p>
-  <ol class="consignes">
-    <li>Créez un compte gratuit sur <span class="url">https://www.themoviedb.org</span></li>
-    <li>Ouvrez <span class="chemin">Paramètres &gt; API</span></li>
-    <li>Copiez le « API Read Access Token » (un très long texte)</li>
-    <li>Collez-le ci-dessous (il reste masqué)</li>
-  </ol>
-  <form class="champ" onsubmit={suite} id="form-films" novalidate>
-    <label for="jeton">Jeton TMDB</label>
-    <div class="rang">
-      <input id="jeton" type={montre ? "text" : "password"} bind:value={zen.jeton} autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Collez le jeton ici"
-        aria-invalid={erreur ? "true" : undefined} aria-describedby="erreur-jeton" />
-      <button class="btn small" type="button" aria-pressed={montre} onclick={() => (montre = !montre)}><Icone nom="oeil" taille={16} />{montre ? "Masquer" : "Afficher"}</button>
-    </div>
-    <p class="msg" id="erreur-jeton" role="alert">{erreur}</p>
-  </form>
-  <p class="petit">Vous pouvez laisser vide : tout fonctionnera, sauf les films.</p>
+  {#snippet saisie()}
+    <ol class="consignes">
+      <li>Créez un compte gratuit sur <span class="url">https://www.themoviedb.org</span></li>
+      <li>Ouvrez <span class="chemin">Paramètres &gt; API</span></li>
+      <li>Copiez le « API Read Access Token » (un très long texte)</li>
+      <li>Collez-le ci-dessous (il reste masqué)</li>
+    </ol>
+    <form class="champ" onsubmit={suite} id="form-films" novalidate>
+      <label for="jeton">Jeton TMDB</label>
+      <div class="rang">
+        <input id="jeton" type={montre ? "text" : "password"} bind:value={zen.jeton} autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Collez le jeton ici"
+          aria-invalid={erreur ? "true" : undefined} aria-describedby="erreur-jeton" />
+        <button class="btn small" type="button" aria-pressed={montre} onclick={() => (montre = !montre)}><Icone nom="oeil" taille={16} />{montre ? "Masquer" : "Afficher"}</button>
+      </div>
+      <p class="msg" id="erreur-jeton" role="alert">{erreur}</p>
+    </form>
+  {/snippet}
+
+<Panneau titre={inclus ? "Films" : "Films (facultatif)"} large>
+  {#if inclus}
+    <p class="lead">Les films du moment sont inclus : il n'y a rien à faire.</p>
+    <details>
+      <summary>Utiliser mon propre jeton TMDB (facultatif)</summary>
+      {@render saisie()}
+    </details>
+  {:else}
+    <p class="lead">Pour afficher des films et des bandes-annonces, Zen Home utilise le service gratuit TMDB. Il faut un « jeton » personnel :</p>
+    {@render saisie()}
+    <p class="petit">Vous pouvez laisser vide : tout fonctionnera, sauf les films.</p>
+  {/if}
+  <p class="petit">Films fournis par TMDB. Ce produit utilise l'API TMDB mais n'est ni approuvé ni certifié par TMDB.</p>
   {#snippet pied()}
-    <button class="btn primary" type="submit" form="form-films"><span>{zen.jeton.trim() ? "Continuer" : "Passer"}</span><Icone nom="fleche" /></button>
+    <button class="btn primary" type="submit" form="form-films"><span>{zen.jeton.trim() || inclus ? "Continuer" : "Passer"}</span><Icone nom="fleche" /></button>
     <button class="lien" type="button" onclick={() => zen.aller("meteo")}>Retour</button>
   {/snippet}
 </Panneau>

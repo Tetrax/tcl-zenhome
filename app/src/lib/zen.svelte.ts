@@ -1,16 +1,17 @@
 // État global et déroulé du parcours. L'interface n'envoie que des intentions au cœur (voir api.ts).
 import { api, normaliserErreur } from "./api";
 import { fusionner, reduire } from "./lot";
+import { choixDuProfil, desactiverParDefaut, type Profil } from "./profils";
 import type { Moment } from "../scene";
 import type {
-  AppliSysteme, BoxConnectee, BoxMemorisee, BoxTrouvee, Choix, Cible, ErreurZen, EtatInitial, Evenement, Inventaire,
+  BoxConnectee, BoxMemorisee, BoxTrouvee, Choix, Cible, ErreurZen, EtatInitial, Evenement, Inventaire,
   RapportApplication, RapportRestauration, Verification, Ville,
 } from "./types";
 
 export type Mode = "installer" | "reparer" | "restaurer";
 export type Ecran =
   | "accueil" | "adb" | "recherche" | "connexion" | "etat" | "resume" | "meteo" | "films"
-  | "installation" | "systeme" | "utilisateur" | "recap" | "application" | "reparation"
+  | "installation" | "profil" | "systeme" | "utilisateur" | "recap" | "application" | "reparation"
   | "confirm_restauration" | "restauration" | "fin_restauration" | "resultat" | "adieu" | "lot" | "recap_lot";
 
 /** Une box d'un lot (plusieurs box configurées d'affilée avec les mêmes choix). */
@@ -31,7 +32,7 @@ export interface Proposition { id?: number; nom: string; ip: string; recente: bo
 /** Moment de la journée affiché derrière chaque écran. */
 export const MOMENT: Record<Ecran, Moment> = {
   accueil: "aube", adb: "matin", recherche: "matin", connexion: "jour", etat: "jour", resume: "jour",
-  meteo: "doree", films: "doree", installation: "doree", systeme: "doree", utilisateur: "doree", recap: "doree",
+  meteo: "doree", films: "doree", installation: "doree", profil: "doree", systeme: "doree", utilisateur: "doree", recap: "doree",
   application: "doree", reparation: "doree", confirm_restauration: "doree", restauration: "doree",
   fin_restauration: "aube", resultat: "nuit", adieu: "nuit", lot: "doree", recap_lot: "nuit",
 };
@@ -41,19 +42,12 @@ export const ECRANS_TRAVAIL: Ecran[] = ["application", "reparation", "restaurati
 export const ETAPES = ["Accueil", "Box", "Préparation", "Vos choix", "Installation", "Terminé"] as const;
 export const ETAPE_DE: Record<Ecran, number> = {
   accueil: 0, adb: 0, recherche: 1, connexion: 1, etat: 2, resume: 2, meteo: 2, films: 2, installation: 2,
-  systeme: 3, utilisateur: 3, recap: 3, application: 4, reparation: 4, confirm_restauration: 4, restauration: 4,
+  profil: 3, systeme: 3, utilisateur: 3, recap: 3, application: 4, reparation: 4, confirm_restauration: 4, restauration: 4,
   fin_restauration: 5, resultat: 5, adieu: 5, lot: 4, recap_lot: 5,
 };
 
 const TOKEN_OK = /^[A-Za-z0-9._~+/=-]+$/;
 export const jetonValide = (j: string) => TOKEN_OK.test(j);
-
-/** Valeur par défaut de la case d'une appli système : l'état actuel d'abord, puis la recommandation (comme le kit). */
-export function desactiverParDefaut(a: AppliSysteme): boolean {
-  if (a.etat === "garde") return false;
-  if (a.etat === "desactive") return true;
-  return a.recommande === "desactiver";
-}
 
 class Zen {
   init = $state<EtatInitial | null>(null);
@@ -88,6 +82,8 @@ class Zen {
   jeton = $state("");
   desactiver = $state<Record<string, boolean>>({});
   desinstaller = $state<Record<string, boolean>>({});
+  /** Profil de départ des applis système (« perso » dès que l'utilisateur détaille ses choix). */
+  profil = $state<Profil>("recommande");
 
   // Action longue en cours
   travail = $state({ actif: false, etape: "", fraction: null as number | null, avertissements: [] as string[], annulation: false });
@@ -266,13 +262,23 @@ class Zen {
       this.desactiver = Object.fromEntries(inv.applis_systeme.map((a) => [a.paquet, desactiverParDefaut(a)]));
       this.desinstaller = Object.fromEntries(inv.applis_utilisateur.map((a) => [a.paquet, false]));
       this.fin();
-      this.aller("systeme");
+      this.profil = "recommande";
+      this.aller("profil");
     } catch (e) { this.echec(e, () => void this.installerZenHome()); }
   }
 
   recommande() {
     if (!this.inventaire) return;
     for (const a of this.inventaire.applis_systeme) this.desactiver[a.paquet] = desactiverParDefaut(a);
+  }
+  /** Applique un profil prêt à l'emploi (jamais de désinstallation) puis va au récapitulatif ; « perso » ouvre les écrans détaillés. */
+  choisirProfil(p: Profil) {
+    this.profil = p;
+    if (p === "perso") return this.aller("systeme");
+    if (!this.inventaire) return;
+    this.desactiver = choixDuProfil(p, this.inventaire.applis_systeme);
+    this.desinstaller = Object.fromEntries(this.inventaire.applis_utilisateur.map((a) => [a.paquet, false]));
+    this.aller("recap");
   }
   toutSelectionner(v: boolean) {
     if (!this.inventaire) return;
@@ -441,7 +447,8 @@ class Zen {
     this.inventaire = inv;
     this.desactiver = Object.fromEntries(inv.applis_systeme.map((a) => [a.paquet, desactiverParDefaut(a)]));
     this.desinstaller = Object.fromEntries(inv.applis_utilisateur.map((a) => [a.paquet, false]));
-    this.aller("systeme");
+    this.profil = "recommande";
+    this.aller("profil");
   }
 
   // ---- Fin ----

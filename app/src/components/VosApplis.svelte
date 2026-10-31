@@ -49,7 +49,7 @@
     </ul>
     {#snippet pied()}
       <button class="btn primary" type="button" onclick={suite}><span>{choisies.length ? "Continuer" : "Tout garder"}</span><Icone nom="fleche" /></button>
-      <button class="lien" type="button" onclick={() => zen.aller("systeme")}>Retour</button>
+      <button class="lien" type="button" onclick={() => zen.aller(zen.profil === "perso" ? "systeme" : "recap")}>Retour</button>
     {/snippet}
   </Panneau>
 {/if}
