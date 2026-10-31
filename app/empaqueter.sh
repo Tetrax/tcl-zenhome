@@ -14,12 +14,17 @@ MDP="${MDP_SIGNATURE-$(security find-generic-password -a zenhome -s zenhome-upda
 VERSION="$(sed -n 's/^  "version": "\(.*\)",/\1/p' src-tauri/tauri.conf.json)"
 [ -n "$VERSION" ] || { echo "Version introuvable dans tauri.conf.json." >&2; exit 1; }
 
+# Jeton TMDB du projet (« API Read Access Token ») : lu dans le trousseau, jamais affiché, transmis au seul build
+# (binaire lisible par nature, mais jamais dans le dépôt). Absent : build sans films inclus.
+JETON_TMDB="$(security find-generic-password -a zenhome -s zenhome-tmdb -w 2>/dev/null || true)"
+[ -n "$JETON_TMDB" ] || echo "Attention : jeton TMDB absent du trousseau (compte zenhome, service zenhome-tmdb) : build SANS films inclus." >&2
+
 BUNDLE="${BUNDLE:-src-tauri/target/universal-apple-darwin/release/bundle}"
 APP="$BUNDLE/macos/Zen Home.app"
 if [ -z "${SANS_BUILD:-}" ]; then
-  # Aucun secret dans l'environnement du build (npm, vite, build.rs, proc-macros) : l'archive de mise à jour
+  # Aucun secret de signature dans l'environnement du build (npm, vite, build.rs, proc-macros) : l'archive de mise à jour
   # est donc créée et signée plus bas, par nos soins.
-  npm run tauri build -- --target universal-apple-darwin --bundles app,dmg --config '{"bundle":{"createUpdaterArtifacts":false}}'
+  ZENHOME_TMDB_JETON="$JETON_TMDB" npm run tauri build -- --target universal-apple-darwin --bundles app,dmg --config '{"bundle":{"createUpdaterArtifacts":false}}'
   codesign --verify --deep --strict "$APP"
   # Sortie lue en entier : avec pipefail, « grep -q » couperait codesign (SIGPIPE) et ferait échouer le contrôle.
   grep -q '^Authority=Zen Home Dev$' <<< "$(codesign -dvv "$APP" 2>&1)" \
@@ -35,7 +40,7 @@ cp "$OUT/Zen-Home-Mac.dmg" "$OUT/Zen-Home-Mac_${VERSION}.dmg"
 COPYFILE_DISABLE=1 tar -C "$BUNDLE/macos" -czf "$OUT/$TAR" "Zen Home.app"
 # --app-version inscrit la version dans le « trusted comment » signé (exigé par requireSignedVersion).
 TAURI_SIGNING_PRIVATE_KEY_PASSWORD="$MDP" npx tauri signer sign -f "$CLE" --app-version "$VERSION" "$OUT/$TAR" >/dev/null
-unset MDP MDP_SIGNATURE
+unset MDP MDP_SIGNATURE JETON_TMDB
 [ -s "$OUT/$TAR.sig" ] || { echo "Signature de l'archive absente." >&2; exit 1; }
 
 URL="https://github.com/$DEPOT/releases/download/app-v${VERSION}/$TAR"

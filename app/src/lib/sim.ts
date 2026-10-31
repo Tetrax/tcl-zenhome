@@ -127,7 +127,8 @@ export const simulation: Api = {
   async etatInitial() {
     await pause(250);
     return { version: "0.0.2-sim", adb_installe: !q.has("sansadb"), demo: true, sauvegardes_dir_existe: true, reprise_en_attente: q.has("reprise"), origine: q.has("sansorigine") ? null : { date: DATE_ORIGINE },
-      boxes_memorisees: q.has("sansmemoire") ? [] : [{ nom: BOXES[0].nom, ip: BOXES[0].ip }] };
+      boxes_memorisees: q.has("sansmemoire") ? [] : [{ nom: BOXES[0].nom, ip: BOXES[0].ip }],
+      films_inclus: !q.has("sansfilms") };
   },
 
   installerAdb: (accord, sur) => exclusive(async () => {

@@ -8,7 +8,7 @@ Les commandes longues reçoivent un `Channel<Evenement>` (Tauri `ipc::Channel`) 
 
 | Commande | Arguments | Résultat |
 |---|---|---|
-| `etat_initial` | — | `{ version, adb_installe: bool, demo: bool, sauvegardes_dir_existe: bool, reprise_en_attente: bool, origine: { date: string } \| null, boxes_memorisees: [{ nom: string, ip: string }] }` |
+| `etat_initial` | — | `{ version, adb_installe: bool, demo: bool, sauvegardes_dir_existe: bool, reprise_en_attente: bool, origine: { date: string } \| null, boxes_memorisees: [{ nom: string, ip: string }], films_inclus: bool }` |
 | `installer_adb` | `accord: bool`, `canal` | `null` ; progression via `{type:"progression", fraction}` |
 | `chercher_box` | — | `[{ id: number, nom: string, ip: string }]` (les `id` désignent la dernière liste gardée côté Rust ; ils ne sont jamais réutilisés d'une recherche à l'autre : un id d'une recherche précédente donne `choix_invalide`) |
 | `connecter` | `cible: {id: number} \| {ip: string}`, `canal` | `{ nom, ip, modele }` |
@@ -62,7 +62,7 @@ Le cœur n'écrit pas de `rapport.txt` (seul le kit en écrit un) : le dossier d
 - Les **arguments** de commande passent en camelCase : `ville_id` s'envoie `villeId`. Les autres (`accord`, `canal`, `cible`, `saisie`, `jeton`, `choix`, `reparer`, `demande`, `decision`) sont des mots simples, donc inchangés. Les champs des objets (`cible`, `choix`, résultats, événements) restent en snake_case tels que dans ce document.
 - `canal` : `const canal = new Channel<Evenement>(); canal.onmessage = (e) => ...`, puis `invoke("connecter", { cible, canal })`.
 - `cible` : `{ id: 0 }` (id issu du dernier `chercher_box`, jamais d'une recherche plus ancienne) ou `{ ip: "192.168.1.20" }` (IP privée ou link-local, sinon erreur `injoignable`).
-- `installer` : `{ villeId: number | null, jeton: string | null, canal }`. Le jeton TMDB n'est jamais renvoyé ni journalisé ; vide ou `null` = pas de jeton.
+- `installer` : `{ villeId: number | null, jeton: string | null, canal }`. Le jeton TMDB n'est jamais renvoyé ni journalisé ; vide ou `null` = jeton du projet s'il existe, sinon pas de films. Le jeton du projet est injecté à la compilation (variable `ZENHOME_TMDB_JETON`, lue par `app/empaqueter.sh` dans le trousseau, jamais dans le dépôt) et reste côté Rust : l'interface ne reçoit que `etat_initial().films_inclus` (vrai s'il est compilé). Un jeton personnel fourni est prioritaire. Dans le navigateur, `?sansfilms` simule `films_inclus = false`.
 - `decider` : `{ demande: <id reçu>, decision: "reessayer" | "arreter" }`. L'identifiant est à usage unique ; sans réponse après 5 minutes, l'action s'arrête (comme « arreter »). Une demande inconnue ou déjà répondue renvoie `choix_invalide`.
 - `desinstaller_mac` : `{ garderSauvegardes: bool }`, sans `canal`.
 - `couper_debogage` n'a pas de `canal` (pas d'événements : si la box ne répond pas, l'action s'arrête).
