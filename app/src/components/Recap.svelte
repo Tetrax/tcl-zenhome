@@ -10,6 +10,7 @@
 
 <Panneau titre="Récapitulatif" large>
   <p class="lead">Voici ce qui va être fait sur {zen.lot ? "vos box" : "votre box"}. Rien ne change avant votre clic sur « Appliquer ».</p>
+  <p class="petit">Profil : <b>{{ recommande: "Recommandé", simple: "Simple", leger: "Léger", perso: "Personnalisé" }[zen.profil]}</b></p>
   <dl class="grille">
     <div><dt>Applis système désactivées (réversible)</dt><dd class="grand">{choix.desactiver.length}</dd></div>
     <div><dt>Applis système gardées</dt><dd class="grand">{choix.garder.length}</dd></div>
@@ -22,11 +23,13 @@
   {/if}
   <p class="petit" style="margin-top:16px">
     Météo : <b>{zen.ville ? [zen.ville.nom, zen.ville.pays].filter(Boolean).join(", ") : "aucune"}</b> ·
-    Films : <b>{zen.jeton ? "avec votre jeton TMDB" : "sans"}</b>
+    Films : <b>{zen.jeton ? "avec votre jeton TMDB" : zen.init?.films_inclus ? "inclus" : "sans"}</b>
   </p>
   <p class="petit" style="margin-top:6px">Une sauvegarde de l'état actuel {zen.lot ? "de chaque box est déjà enregistrée" : "est déjà enregistrée"} sur ce Mac.</p>
   {#snippet pied()}
     <button class="btn primary" type="button" onclick={() => zen.appliquer()}><span>Appliquer</span><Icone nom="fleche" /></button>
-    <button class="lien" type="button" onclick={() => zen.aller((inv?.applis_utilisateur.length ?? 0) > 0 ? "utilisateur" : "systeme")}>Retour</button>
+    <button class="btn" type="button" onclick={() => { zen.profil = "perso"; zen.aller("systeme"); }}><span>Modifier en détail</span></button>
+    {#if (inv?.applis_utilisateur.length ?? 0) > 0}<button class="lien" type="button" onclick={() => zen.aller("utilisateur")}>Supprimer aussi des applis…</button>{/if}
+    <button class="lien" type="button" onclick={() => zen.aller("profil")}>Retour</button>
   {/snippet}
 </Panneau>

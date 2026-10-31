@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "check": "svelte-check --tsconfig ./tsconfig.json",
     "test:lot": "node --test src/lib/lot.test.ts",
+    "test:profils": "node --test src/lib/profils.test.ts",
     "tauri": "tauri"
   },
   "license": "MIT",

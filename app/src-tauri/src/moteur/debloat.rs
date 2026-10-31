@@ -104,7 +104,7 @@ mod tests {
         let l = liste_mibox4();
         assert_eq!(l.len(), 24);
         let n = |b| l.iter().filter(|e| e.balise == b).count();
-        assert_eq!((n(Balise::Aucune), n(Balise::Option), n(Balise::Garder)), (11, 10, 3));
+        assert_eq!((n(Balise::Aucune), n(Balise::Option), n(Balise::Garder)), (11, 4, 9));
         let doublons = l.iter().enumerate().filter(|(i, e)| l[..*i].iter().any(|f| f.paquet == e.paquet)).count();
         assert_eq!(doublons, 0);
     }
@@ -120,7 +120,7 @@ mod tests {
         assert_eq!((k.balise, k.libelle.as_str()), (Balise::Garder, "Recherche vocale"));
         assert_eq!(k.recommandation(), Recommandation::Garder);
         let t = e("com.google.android.tts");
-        assert_eq!((t.balise, t.recommandation()), (Balise::Option, Recommandation::Desactiver));
+        assert_eq!((t.balise, t.recommandation()), (Balise::Garder, Recommandation::Garder));
         assert_eq!(a.recommandation(), Recommandation::Desactiver);
         assert_eq!(e("android.autoinstalls.config.xioami.mibox3").libelle, "Installations automatiques");
     }

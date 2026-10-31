@@ -13,6 +13,7 @@
   import Resume from "./components/Resume.svelte";
   import Meteo from "./components/Meteo.svelte";
   import Films from "./components/Films.svelte";
+  import Profil from "./components/Profil.svelte";
   import AppliSysteme from "./components/AppliSysteme.svelte";
   import VosApplis from "./components/VosApplis.svelte";
   import Recap from "./components/Recap.svelte";
@@ -92,6 +93,7 @@
       {:else if zen.ecran === "resume"}<Resume />
       {:else if zen.ecran === "meteo"}<Meteo />
       {:else if zen.ecran === "films"}<Films />
+      {:else if zen.ecran === "profil"}<Profil />
       {:else if zen.ecran === "systeme"}<AppliSysteme />
       {:else if zen.ecran === "utilisateur"}<VosApplis />
       {:else if zen.ecran === "recap"}<Recap />

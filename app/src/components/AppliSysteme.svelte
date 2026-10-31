@@ -34,7 +34,7 @@
     const suivant = (zen.inventaire?.applis_utilisateur.length ?? 0) > 0 ? "utilisateur" : "recap";
     zen.aller(suivant);
   }
-  function precedente() { zen.aller("films"); }
+  function precedente() { zen.aller("profil"); }
 </script>
 
 <Panneau titre="Alléger votre box" large>
