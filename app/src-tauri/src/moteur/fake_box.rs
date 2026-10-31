@@ -1,4 +1,4 @@
-//! Fausse Mi Box 4 : un `Transport` avec un vrai état mutable (paquets, réglages, accueil, appops...) et un journal
+//! Fausse box (Mi Box 4 ou TV TCL) : un `Transport` avec un vrai état mutable (paquets, réglages, accueil, appops...) et un journal
 //! des commandes reçues. Sert aux tests des étapes 4-5 et au mode démo. Les commandes sont interprétées à partir du
 //! texte réellement envoyé à adb, comme le ferait le shell de la box.
 
@@ -6,13 +6,17 @@ use std::collections::BTreeMap;
 use std::path::Path;
 use std::sync::{Mutex, MutexGuard};
 
-use super::debloat;
+use super::appareils::{Appareil, MIBOX4, ModeAccueil, TCL_G08, TOUS};
 use super::transport::{Commande, ErreurTransport, EtatLien, Sortie, Transport, decouper_shell, paquet_valide};
 
-pub const ACCUEIL_ORIGINE: &str = "com.google.android.tvlauncher/.MainActivity";
 pub const ZEN_HOME: &str = "tv.zenhome";
+const ACCUEIL_ZEN: &str = "tv.zenhome/.Home";
+const ROLE_HOME: &str = "android.app.role.HOME";
+
 /// Activités qui sont de vrais accueils : `set-home-activity` refuse toute autre.
-pub const ACCUEILS_CONNUS: [&str; 3] = [ACCUEIL_ORIGINE, "tv.zenhome/.Home", "com.mitv.tvhome/.MainActivity"];
+fn accueil_connu(c: &str) -> bool {
+    c == ACCUEIL_ZEN || c == "com.mitv.tvhome/.MainActivity" || TOUS.iter().any(|a| a.accueil == c)
+}
 const SETUPWRAITH: &str = "com.google.android.tungsten.setupwraith";
 
 #[derive(Debug, Clone)]
@@ -40,6 +44,9 @@ pub enum WifiFake {
 #[derive(Debug, Clone)]
 pub struct EtatBox {
     pub produit: String,
+    /// `ro.product.brand` et `ro.product.device`.
+    pub marque: String,
+    pub device: String,
     pub modele: String,
     pub android: String,
     /// `ro.build.version.sdk`.
@@ -49,8 +56,12 @@ pub struct EtatBox {
     pub global: BTreeMap<String, String>,
     pub secure: BTreeMap<String, String>,
     pub system: BTreeMap<String, String>,
+    /// Accueil d'origine de l'appareil (composant `paquet/.Classe`).
+    pub accueil_origine: String,
     /// Accueil préféré (`set-home-activity`), composant `paquet/.Classe`.
     pub accueil_prefere: Option<String>,
+    /// Détenteur du rôle HOME (appareil Android 10+ seulement ; `None` : pas de rôle). Il décide de l'accueil affiché.
+    pub role_home: Option<String>,
     pub appops: BTreeMap<(String, String), String>,
     pub wifi: WifiFake,
     /// Composant au premier plan.
@@ -115,12 +126,22 @@ fn paquet_tiers(p: &str, mo: u64, derniere: &str, libelle: &str) -> PaquetFake {
 impl EtatBox {
     /// Mi Box 4 d'origine (Android 9) : accueil d'origine actif, liste de debloat présente, quatre applis tierces.
     pub fn mibox4() -> Self {
+        Self::pour(&MIBOX4)
+    }
+
+    /// TV TCL G08 d'origine (Android 14, rôle HOME au lanceur d'origine).
+    pub fn tcl_g08() -> Self {
+        Self::pour(&TCL_G08)
+    }
+
+    fn pour(app: &Appareil) -> Self {
+        let role = app.mode_accueil == ModeAccueil::RoleHome;
         let mut paquets = BTreeMap::new();
-        for e in debloat::liste_mibox4() {
+        for e in app.liste() {
             paquets.insert(e.paquet.clone(), paquet_systeme("app", &e.paquet));
         }
         for p in [
-            "com.google.android.tvlauncher",
+            app.launcher(),
             SETUPWRAITH,
             "com.android.vending",
             "com.android.tv.settings",
@@ -139,19 +160,23 @@ impl EtatBox {
         let mut secure = BTreeMap::new();
         secure.insert("android_id".to_string(), "0123456789abcdef".to_string());
         Self {
-            produit: "oneday".into(),
-            modele: "MIBOX4".into(),
-            android: "9".into(),
-            sdk: "28".into(),
+            produit: app.produits[0].into(),
+            marque: app.marque.into(),
+            device: app.device.unwrap_or(app.produits[0]).into(),
+            modele: if role { "Smart TV Pro" } else { "MIBOX4" }.into(),
+            android: if role { "14" } else { "9" }.into(),
+            sdk: if role { "34" } else { "28" }.into(),
             serie: "TESTSERIAL0001".into(),
             paquets,
             global: BTreeMap::from([("device_name".to_string(), "BOX-TEST".to_string())]),
             secure,
             system: BTreeMap::new(),
+            accueil_origine: app.accueil.into(),
             accueil_prefere: None,
+            role_home: role.then(|| app.launcher().into()),
             appops: BTreeMap::new(),
             wifi: WifiFake::Libre,
-            premier_plan: Some(ACCUEIL_ORIGINE.into()),
+            premier_plan: Some(app.accueil.into()),
             zen_home_visible: true,
             config: BTreeMap::new(),
         }
@@ -161,12 +186,17 @@ impl EtatBox {
         self.paquets.get(paquet).is_some_and(|p| !p.desactive)
     }
 
-    /// Ce que la touche Accueil affiche : l'accueil d'origine tant qu'il est actif (priorité système plus haute que
-    /// l'accueil préféré, comme sur la vraie Mi Box), sinon l'accueil préféré.
+    /// Ce que la touche Accueil affiche. Avec un rôle HOME : l'activité d'accueil de son détenteur (s'il est actif).
+    /// Sans rôle : l'accueil d'origine tant qu'il est actif (priorité système plus haute que l'accueil préféré, comme
+    /// sur la vraie Mi Box), sinon l'accueil préféré.
     fn accueil_affiche(&self) -> Option<String> {
-        let origine = ACCUEIL_ORIGINE.split('/').next().unwrap_or_default();
+        if let Some(titulaire) = &self.role_home {
+            let composant = if titulaire == ZEN_HOME { Some(ACCUEIL_ZEN) } else { TOUS.iter().map(|a| a.accueil).find(|c| c.split('/').next() == Some(titulaire)) };
+            return composant.filter(|_| self.actif(titulaire) && (titulaire != ZEN_HOME || self.zen_home_visible)).map(String::from);
+        }
+        let origine = self.accueil_origine.split('/').next().unwrap_or_default();
         if self.actif(origine) {
-            return Some(ACCUEIL_ORIGINE.into());
+            return Some(self.accueil_origine.clone());
         }
         let c = self.accueil_prefere.clone()?;
         let p = c.split('/').next().unwrap_or_default();
@@ -235,6 +265,8 @@ impl Interne {
             ["getprop"] => sortie(
                 [
                     ("ro.product.name", &e.produit),
+                    ("ro.product.brand", &e.marque),
+                    ("ro.product.device", &e.device),
                     ("ro.product.model", &e.modele),
                     ("ro.build.version.release", &e.android),
                     ("ro.build.version.sdk", &e.sdk),
@@ -246,6 +278,8 @@ impl Interne {
             ),
             ["getprop", k] => sortie(match *k {
                 "ro.product.name" => format!("{}\n", e.produit),
+                "ro.product.brand" => format!("{}\n", e.marque),
+                "ro.product.device" => format!("{}\n", e.device),
                 "ro.product.model" => format!("{}\n", e.modele),
                 "ro.build.version.release" => format!("{}\n", e.android),
                 "ro.build.version.sdk" => format!("{}\n", e.sdk),
@@ -344,17 +378,29 @@ impl Interne {
             }),
             ["cmd", "package", "resolve-activity", ..] => sortie(format!(
                 "priority=0 preferredOrder=0 match=0x108000 specificIndex=-1 isDefault=true\n{}\n",
-                e.accueil_affiche().unwrap_or_else(|| ACCUEIL_ORIGINE.into())
+                e.accueil_affiche().unwrap_or_else(|| e.accueil_origine.clone())
             )),
             ["cmd", "package", "set-home-activity", c] => {
                 let p = c.split('/').next().unwrap_or_default();
                 if !e.paquets.contains_key(p) {
                     return Err(echec(1, &format!("Error: Unknown package: {p}")));
                 }
-                if !ACCUEILS_CONNUS.contains(c) {
+                if !accueil_connu(c) {
                     return Err(echec(1, &format!("Error: {c} is not a home activity")));
                 }
                 e.accueil_prefere = Some((*c).into());
+                sortie("Success\n")
+            }
+            ["cmd", "role", ..] if e.sdk.parse::<u32>().is_ok_and(|v| v < 29) => Err(echec(1, "cmd: Can't find service: role")),
+            ["cmd", "role", "get-role-holders", "--user", "0", ROLE_HOME] => sortie(format!("{}\n", e.role_home.as_deref().unwrap_or_default())),
+            ["cmd", "role", "add-role-holder", ROLE_HOME, p] => {
+                if !e.paquets.contains_key(*p) {
+                    return Err(echec(1, &format!("Error: Unknown package: {p}")));
+                }
+                if *p != ZEN_HOME && !TOUS.iter().any(|a| a.launcher() == *p) {
+                    return Err(echec(1, &format!("Error: {p} cannot hold the role")));
+                }
+                e.role_home = Some((*p).into());
                 sortie("Success\n")
             }
             ["cmd", "appops", "get", p, op] => {
@@ -407,7 +453,16 @@ fn espace<'a>(e: &'a mut EtatBox, ns: &str) -> Result<&'a mut BTreeMap<String, S
 
 impl FakeBox {
     pub fn mibox4() -> Self {
-        Self(Mutex::new(Interne { etat: EtatBox::mibox4(), scenario: Scenario::default(), journal: Vec::new() }))
+        Self::avec(EtatBox::mibox4())
+    }
+
+    /// TV TCL G08 (Android 14, rôle HOME).
+    pub fn tcl_g08() -> Self {
+        Self::avec(EtatBox::tcl_g08())
+    }
+
+    fn avec(etat: EtatBox) -> Self {
+        Self(Mutex::new(Interne { etat, scenario: Scenario::default(), journal: Vec::new() }))
     }
 
     fn interne(&self) -> MutexGuard<'_, Interne> {

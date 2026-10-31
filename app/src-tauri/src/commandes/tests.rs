@@ -187,7 +187,8 @@ fn attente_utilisateur_puis_reessayer() {
         }
         enregistre(e);
     });
-    assert_eq!(r.unwrap().modele, "Xiaomi Mi Box 4");
+    let c = r.unwrap();
+    assert_eq!((c.modele.as_str(), c.appareil.as_str()), ("Xiaomi Mi Box 4", "mibox4"));
     assert!(recu.lock().unwrap().iter().any(|e| matches!(e, EvenementUi::AttenteUtilisateur { .. })));
 }
 
@@ -645,12 +646,12 @@ fn box_memorisee_apres_connexion_reussie_seulement() {
     std::fs::write(d.join("boxes.json"), r#"[{"serie":"A","nom":"Salon","ip":"8.8.8.8"}]"#).unwrap();
     assert!(c.etat_initial().boxes_memorisees.is_empty());
     // connexion manuelle par IP : le nom mémorisé est gardé
-    super::memoire::memoriser(&d, SERIE, "SALON", IP).unwrap();
+    super::memoire::memoriser(&d, SERIE, "SALON", IP, None).unwrap();
     assert_eq!(c.connecter(&Cible::Ip { ip: IP.into() }, &rien).unwrap().nom, "SALON");
     assert_eq!(super::memoire::lire(&d).last().unwrap().nom, "SALON");
     // une autre box sur l'IP mémorisée de A ne reprend pas son nom ; l'entrée de A ne bouge pas
     let d3 = dossier("memoire-autre");
-    super::memoire::memoriser(&d3, SERIE, "SALON", IP).unwrap();
+    super::memoire::memoriser(&d3, SERIE, "SALON", IP, None).unwrap();
     let c3 = Coeur::nouveau(config_deux(d3.clone(), &b, &b));
     c3.chercher_box().ok();
     let nom_b = c3.connecter(&Cible::Ip { ip: IP.into() }, &rien).unwrap().nom;

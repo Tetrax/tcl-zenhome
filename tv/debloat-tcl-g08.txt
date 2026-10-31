@@ -1,32 +1,42 @@
 # TCL G08 Smart TV Pro (G08_4K_GB), Google TV Android 14, plateforme merak
 # Construit depuis les listes CleanYourTV tcl-g10 / tcl-g05 / tcl-qm6k, filtré sur les paquets présents.
 # Tout est DÉSACTIVÉ (pm disable-user), rien n'est désinstallé. Annulation : pm enable <paquet>.
+# Ne jamais y mettre com.google.android.apps.tv.launcherx ni com.google.android.tungsten.setupwraith : verifier-tv.sh --fix les gère.
+#
+# Format (lu par le kit d'installation et par l'appli, textes affichés aux utilisateurs) :
+#   paquet  # [balise] Libellé : explication
+# Tout paquet est au choix ; la balise ne fixe que le choix recommandé :
+# Sans balise         : à désactiver (pistage, pub, remplacé par Zen Home).
+# [option]            : à désactiver, mais utile à certains.
+# [option:garder]     : à garder.
+# Les paquets gardés sont notés sur la TV dans settings global zenhome_garder et verifier-tv.sh --fix les laisse actifs.
+# Pas de « | » ni de saut de ligne dans les textes.
 
 # Pub, promos et contenu TCL
-com.tcl.channelplus                    # chaînes FAST TCL
-com.tcl.tv.tclhome_passive             # pousse du contenu TCL sur l'accueil
-com.tcl.waterfall.overseas             # flux de recommandations TCL
-com.tcl.esticker                       # bannières / autocollants promo
-com.tcl.exhibit                        # mode démo magasin
-com.tcl.interactive                    # contenus interactifs TCL
-com.tcl.messagebox                     # messages push TCL
-com.tcl.usercenter                     # compte TCL (tourne en fond, 15 Mo)
-com.tcl.ttvs                           # service TCL en fond (39 Mo)
-android.autoinstalls.config.google.gtvpai  # installe des applis partenaires en douce
+com.tcl.channelplus                    # Chaînes TCL : chaînes gratuites avec publicités, poussées par TCL.
+com.tcl.tv.tclhome_passive             # Contenus TCL : pousse du contenu TCL sur l'accueil.
+com.tcl.waterfall.overseas             # Recommandations TCL : flux de suggestions de contenus venant de TCL.
+com.tcl.esticker                       # Bannières TCL : bannières et autocollants promotionnels.
+com.tcl.exhibit                        # Mode démo magasin : sert à présenter la TV en boutique, inutile chez vous.
+com.tcl.interactive                    # Contenus interactifs TCL : contenus et promotions interactifs de TCL.
+com.tcl.messagebox                     # Messages TCL : messages promotionnels envoyés par TCL.
+com.tcl.usercenter                     # [option] Compte TCL : le compte TCL tourne en arrière-plan (15 Mo). Désactivez-le si vous n'en avez pas.
+com.tcl.ttvs                           # [option] Service TCL : tourne en arrière-plan (39 Mo) pour les services de TCL.
+android.autoinstalls.config.google.gtvpai  # Installations automatiques : installe des applis partenaires sans vous demander.
 
-# Télémétrie / diagnostics
-com.tcl.logkit
-com.tcl.guard
-com.google.android.feedback
-com.android.tv.feedbackconsent
+# Télémétrie et diagnostics
+com.tcl.logkit                         # Journaux TCL : collecte des journaux de fonctionnement pour TCL.
+com.tcl.guard                          # [option] Garde TCL : service de diagnostic de TCL.
+com.google.android.feedback             # Rapports Google : envoie des rapports d'utilisation à Google.
+com.android.tv.feedbackconsent         # Consentement aux rapports : demande l'autorisation d'envoyer des rapports à Google.
 
-# Applis inutiles
-com.tcl.smartalexa                     # intégration Alexa
-com.tcl.gamebar
-com.tcl.repairguide
-com.tcl.ocean.instructions             # manuel électronique
-com.google.android.play.games
-com.google.android.youtube.tvmusic     # YouTube Music (Spotify est installé)
+# Au choix
+com.tcl.smartalexa                     # [option] Alexa : l'assistant vocal d'Amazon. Désactivez-le si vous ne l'utilisez pas.
+com.tcl.gamebar                        # [option] Barre de jeux TCL : raccourcis pour jouer. Désactivez-la si vous ne jouez pas sur la TV.
+com.tcl.repairguide                    # [option] Guide de dépannage : aide de TCL en cas de panne.
+com.tcl.ocean.instructions             # [option] Manuel électronique : le mode d'emploi de la TV, à l'écran.
+com.google.android.play.games          # [option:garder] Play Jeux : l'appli de jeux Google. Désactivez-la si vous ne jouez pas sur la TV.
+com.google.android.youtube.tvmusic     # [option:garder] YouTube Music : désactivez-la si vous n'écoutez pas de musique avec.
 
-# Économiseur d'écran Google « Ambient » (45 Mo de RAM) -> remplacé par l'économiseur de base
-com.google.android.apps.tv.dreamx
+# Économiseur d'écran Google « Ambient » (45 Mo de RAM) : remplacé par celui de Zen Home
+com.google.android.apps.tv.dreamx      # Écran de veille Google : remplacé par celui de Zen Home.

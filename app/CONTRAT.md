@@ -11,7 +11,7 @@ Les commandes longues reçoivent un `Channel<Evenement>` (Tauri `ipc::Channel`) 
 | `etat_initial` | — | `{ version, adb_installe: bool, demo: bool, sauvegardes_dir_existe: bool, reprise_en_attente: bool, origine: { date: string } \| null, boxes_memorisees: [{ nom: string, ip: string }], films_inclus: bool }` |
 | `installer_adb` | `accord: bool`, `canal` | `null` ; progression via `{type:"progression", fraction}` |
 | `chercher_box` | — | `[{ id: number, nom: string, ip: string }]` (les `id` désignent la dernière liste gardée côté Rust ; ils ne sont jamais réutilisés d'une recherche à l'autre : un id d'une recherche précédente donne `choix_invalide`) |
-| `connecter` | `cible: {id: number} \| {ip: string}`, `canal` | `{ nom, ip, modele }` |
+| `connecter` | `cible: {id: number} \| {ip: string}`, `canal` | `{ nom, ip, modele, appareil }` (`modele` : modèle affiché de l'appareil reconnu ; `appareil` : son identifiant, le PROFIL du kit, `"mibox4"` ou `"tcl-g08"`) |
 | `chercher_villes` | `saisie: string` | `[{ id: number, nom, region?: string, pays?: string }]` |
 | `inventaire` | `canal` | `Inventaire` (voir plus bas) |
 | `installer` | `ville_id: number \| null`, `jeton: string \| null`, `canal` | `null` |
@@ -44,6 +44,10 @@ Précisions : `libelle` des applis de l'utilisateur = nom donné par Zen Home un
 La sauvegarde d'origine d'une box est la plus ancienne sauvegarde de sa série (suffixe du nom du dossier) dont `paquets-tous.txt` existe, est lisible et ne contient pas `tv.zenhome` : simple recherche dans `sauvegardes/`, rien n'est copié. `etat_initial().origine` est la plus récente de ces origines toutes box confondues (pas de session au démarrage), `date` au format `JJ/MM/AAAA HH:MM`, `null` s'il n'y en a pas.
 
 `restaurer` utilise l'origine de la box de la session si elle existe : seules les applis désactivées depuis (et non avant) Zen Home sont réactivées ; écran de veille, animations et accueil reprennent les valeurs de la sauvegarde (valeur absente ou « null » : le réglage est supprimé ; valeur invalide : valeur par défaut) ; la garde de désinstallation de Zen Home porte sur le paquet de cet accueil, qui doit être présent et actif. `depuis_sauvegarde` donne la date de l'origine utilisée, `null` pour la restauration générique (aucune origine, ou fichiers illisibles ou invalides : les sauvegardes sont des entrées non fiables, analysées strictement). Le reste (accessibilité, `zenhome_*`, Spotify, reprise) est inchangé.
+
+### Appareils pris en charge
+
+Le cœur reconnaît l'appareil à la connexion (table `moteur/appareils.rs`, identifiants = PROFIL du kit : `mibox4`, `tcl-g08`). Identification stricte : `ro.product.name` dans la liste exacte de l'appareil, `ro.product.brand` attendue, `ro.product.device` si elle est connue, SDK au moins égal au minimum ; une lecture vide est relue (3 essais), jamais prise pour un autre modèle. Un SDK plus récent que le dernier testé donne un événement `avertissement`, pas un refus. Tout autre appareil : erreur `autre_modele` (« Cet appareil n'est pas encore pris en charge. Rien n'a été modifié. »), rien n'est envoyé. L'appareil reconnu est gardé dans la session et décide de la liste d'allègement (`tv/debloat-<id>.txt`), de l'accueil et de l'écran de veille d'origine, du mode d'accueil (rôle HOME sous Android 10+, accueil préféré sous Android 9) et des paquets protégés (jamais désactivés ni désinstallés). La recherche (`chercher_box`) utilise les indices mDNS de tous les appareils ; ce n'est qu'une supposition, la connexion vérifie l'appareil. `boxes.json` garde l'identifiant d'appareil de chaque box (champ facultatif : l'ancien format reste lisible).
 
 ### Box mémorisées dans la recherche
 

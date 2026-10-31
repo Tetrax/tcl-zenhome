@@ -5,8 +5,9 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
+use crate::moteur::appareils::Appareil;
 use crate::moteur::choix::RapportChoix;
-use crate::moteur::debloat::{self, Balise, Recommandation};
+use crate::moteur::debloat::{Balise, Recommandation};
 use crate::moteur::inventaire::{Inventaire, nettoyer_libelle, taille_lisible};
 use crate::moteur::transport::assainir;
 use crate::moteur::verification::{Controle, Statut};
@@ -68,7 +69,10 @@ pub enum Cible {
 pub struct Connexion {
     pub nom: String,
     pub ip: String,
+    /// Modèle affiché de l'appareil reconnu.
     pub modele: String,
+    /// Identifiant de l'appareil reconnu (PROFIL du kit : « mibox4 », « tcl-g08 »).
+    pub appareil: String,
 }
 
 #[derive(Serialize)]
@@ -150,8 +154,8 @@ fn court(texte: &str) -> String {
 
 /// Inventaire de la box mis en forme : applis de la liste présentes sur la box, applis de l'utilisateur, résumé.
 /// `libelles` : noms lisibles obtenus de Zen Home (bruts), à défaut le nom du paquet.
-pub fn inventaire_ui(inv: &Inventaire, libelles: &HashMap<String, String>) -> InventaireUi {
-    let applis_systeme = debloat::liste_mibox4()
+pub fn inventaire_ui(app: &Appareil, inv: &Inventaire, libelles: &HashMap<String, String>) -> InventaireUi {
+    let applis_systeme = app.liste()
         .into_iter()
         .filter(|e| inv.tous.contains(&e.paquet))
         .map(|e| {

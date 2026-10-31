@@ -4,9 +4,9 @@
 
 use std::collections::HashSet;
 
+use super::appareils::Appareil;
 use super::connexion::Politique;
-use super::debloat;
-use super::inventaire::{Inventaire, PROTEGES, noms_paquets};
+use super::inventaire::{Inventaire, noms_paquets};
 use super::session::{Arret, ErreurAction, Observateur, Reprise, Session};
 use super::transport::{Commande, Espace, ErreurTransport, OptionPm, paquet_valide};
 
@@ -38,12 +38,14 @@ fn sans_doublons(l: &[String]) -> Vec<String> {
 }
 
 /// Refuse tout le choix si un seul paquet est hors règles : rien n'est envoyé.
-fn valider(inv: &Inventaire, c: &Choix) -> Result<Choix, ErreurAction> {
-    let liste: HashSet<String> = debloat::liste_mibox4().into_iter().map(|e| e.paquet).collect();
+fn valider(app: &Appareil, inv: &Inventaire, c: &Choix) -> Result<Choix, ErreurAction> {
+    let liste: HashSet<String> = app.liste().into_iter().map(|e| e.paquet).collect();
     let mut refus = Vec::new();
     for p in c.garder.iter().chain(&c.desactiver) {
         if !paquet_valide(p) {
             refus.push(format!("{p} : nom invalide"));
+        } else if app.est_protege(p) {
+            refus.push(format!("{p} : protégé, jamais désactivé"));
         } else if !liste.contains(p) {
             refus.push(format!("{p} : hors de la liste des applis à alléger"));
         } else if !inv.tous.contains(p) {
@@ -53,7 +55,7 @@ fn valider(inv: &Inventaire, c: &Choix) -> Result<Choix, ErreurAction> {
     for p in &c.desinstaller {
         if !paquet_valide(p) {
             refus.push(format!("{p} : nom invalide"));
-        } else if PROTEGES.contains(&p.as_str()) {
+        } else if app.est_protege(p) {
             refus.push(format!("{p} : protégé, jamais désinstallé"));
         } else if !inv.utilisateur.contains(p) {
             refus.push(format!("{p} : pas une appli de l'utilisateur de la box"));
@@ -75,13 +77,14 @@ enum Desinstallation {
 
 pub fn appliquer(
     t: &dyn super::transport::Transport,
+    app: &Appareil,
     pol: &Politique,
     obs: &mut dyn Observateur,
     inv: &Inventaire,
     choix: &Choix,
     depuis: &Reprise,
 ) -> Result<RapportChoix, Arret> {
-    let choix = valider(inv, choix)?;
+    let choix = valider(app, inv, choix)?;
     let mut rapport = RapportChoix { gardes: choix.garder.clone(), a_desactiver: choix.desactiver.clone(), ..Default::default() };
     let mut s = Session::nouvelle(t, pol, obs, "choix", 3, depuis);
 
@@ -152,6 +155,7 @@ pub fn appliquer(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::moteur::appareils::{MIBOX4, TCL_G08};
     use crate::moteur::fake_box::FakeBox;
     use crate::moteur::inventaire::inventaire;
     use crate::moteur::session::Silencieux;
@@ -182,7 +186,7 @@ mod tests {
         let (f, inv, d) = prete();
         f.modifier(|e| e.paquets.get_mut(TRACKER).unwrap().desactive = true);
         let inv = Inventaire { desactives: vec![TRACKER.into()], ..inv };
-        let r = appliquer(&f, &Politique::default(), &mut Silencieux, &inv, &choix(), &Reprise::default()).unwrap();
+        let r = appliquer(&f, &MIBOX4, &Politique::default(), &mut Silencieux, &inv, &choix(), &Reprise::default()).unwrap();
         let e = f.instantane();
         assert_eq!(e.global["zenhome_garder"], format!("{TRACKER},{AUTRE}"));
         assert!(!e.paquets[TRACKER].desactive);
@@ -201,7 +205,7 @@ mod tests {
         f.modifier(|e| {
             e.global.insert("zenhome_garder".into(), "a.b".into());
         });
-        appliquer(&f, &Politique::default(), &mut Silencieux, &inv, &Choix::default(), &Reprise::default()).unwrap();
+        appliquer(&f, &MIBOX4, &Politique::default(), &mut Silencieux, &inv, &Choix::default(), &Reprise::default()).unwrap();
         assert!(!f.instantane().global.contains_key("zenhome_garder"));
         let _ = std::fs::remove_dir_all(d);
     }
@@ -224,13 +228,13 @@ mod tests {
             ("garder absent de la box", Choix { garder: vec!["com.absent.dubox".into()], ..Default::default() }),
             ("conflit", Choix { garder: vec![AUTRE.into()], desactiver: vec![AUTRE.into()], ..Default::default() }),
         ] {
-            let r = appliquer(&f, &Politique::default(), &mut Silencieux, &inv, &c, &Reprise::default());
+            let r = appliquer(&f, &MIBOX4, &Politique::default(), &mut Silencieux, &inv, &c, &Reprise::default());
             assert!(matches!(r, Err(Arret::Echec(ErreurAction::Refus(_)))), "{nom} : {r:?}");
         }
         assert_eq!(f.journal().len(), avant, "aucune commande envoyée");
         // un choix à moitié bon est refusé en entier
         let c = Choix { desinstaller: vec!["fr.tf1.mytf1".into(), "tv.zenhome".into()], ..Default::default() };
-        assert!(appliquer(&f, &Politique::default(), &mut Silencieux, &inv, &c, &Reprise::default()).is_err());
+        assert!(appliquer(&f, &MIBOX4, &Politique::default(), &mut Silencieux, &inv, &c, &Reprise::default()).is_err());
         assert!(f.instantane().paquets.contains_key("fr.tf1.mytf1"));
         let _ = std::fs::remove_dir_all(d);
     }
@@ -240,7 +244,7 @@ mod tests {
         let (f, inv, d) = prete();
         // la 1re désinstallation est exécutée mais sa réponse se perd : la reprise ne doit pas la rejouer en échec
         f.perdre_reponse_desinstallation(1);
-        let r = appliquer(&f, &Politique::default(), &mut Silencieux, &inv, &choix(), &Reprise::default()).unwrap();
+        let r = appliquer(&f, &MIBOX4, &Politique::default(), &mut Silencieux, &inv, &choix(), &Reprise::default()).unwrap();
         assert_eq!(r.deja_absents, ["fr.tf1.mytf1"]);
         assert_eq!(r.desinstalles, ["com.exemple.lecteur"]);
         assert!(r.echecs.is_empty());
@@ -255,10 +259,27 @@ mod tests {
         let (f, inv, d) = prete();
         // la coupure tombe entre l'écriture et la relecture : l'opération (écrire + relire) est rejouée
         f.couper_apres(1, 1);
-        appliquer(&f, &Politique::default(), &mut Silencieux, &inv, &choix(), &Reprise::default()).unwrap();
+        appliquer(&f, &MIBOX4, &Politique::default(), &mut Silencieux, &inv, &choix(), &Reprise::default()).unwrap();
         assert_eq!(f.instantane().global["zenhome_garder"], format!("{TRACKER},{AUTRE}"));
         let ecritures = f.journal().iter().filter(|l| l.contains("settings put global zenhome_garder")).count();
         assert_eq!(ecritures, 2, "écriture idempotente rejouée une fois");
+        let _ = std::fs::remove_dir_all(d);
+    }
+
+    #[test]
+    fn tcl_accueil_d_origine_et_socle_proteges() {
+        let f = FakeBox::tcl_g08();
+        f.connecter().unwrap();
+        let d = std::env::temp_dir().join(format!("zenhome-choix-tcl-{}", std::process::id()));
+        let inv = inventaire(&f, &d.join("sauvegarde"), "2026-10-31 10:00").unwrap();
+        for p in [TCL_G08.launcher(), "com.google.android.gms", "tv.zenhome"] {
+            let c = Choix { desinstaller: vec![p.into()], ..Default::default() };
+            let r = appliquer(&f, &TCL_G08, &Politique::default(), &mut Silencieux, &inv, &c, &Reprise::default());
+            assert!(matches!(r, Err(Arret::Echec(ErreurAction::Refus(_)))), "{p} : {r:?}");
+        }
+        // la liste de la Mi Box n'est pas celle de la TCL
+        let c = Choix { garder: vec![TRACKER.into()], ..Default::default() };
+        assert!(appliquer(&f, &TCL_G08, &Politique::default(), &mut Silencieux, &inv, &c, &Reprise::default()).is_err());
         let _ = std::fs::remove_dir_all(d);
     }
 }
