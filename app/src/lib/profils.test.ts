@@ -40,3 +40,9 @@ test("appli absente de la box ignorée, aucune clé en trop", () => {
   assert.deepEqual(Object.keys(c), ["pub"]);
   assert.equal("com.google.android.katniss" in c, false);
 });
+
+test("Léger et Simple ne réactivent jamais une appli déjà désactivée", () => {
+  const deja = a("musique", "option", "garder", "desactive");
+  assert.equal(choixDuProfil("leger", [deja]).musique, true);
+  assert.equal(choixDuProfil("simple", [{ ...deja, paquet: GARDEES_SIMPLE[0] }])[GARDEES_SIMPLE[0]], true);
+});

@@ -13,11 +13,11 @@ export function desactiverParDefaut(a: AppliSysteme): boolean {
   return a.recommande === "desactiver";
 }
 
-/** Case « désactiver » de chaque appli (par paquet) pour un profil. Une appli absente de la box n'est pas dans `applis`, donc ignorée. */
+/** Case « désactiver » de chaque appli (par paquet) pour un profil. Une appli absente de la box n'est pas dans `applis`, donc ignorée.
+ *  Une appli déjà désactivée le reste : un profil ne réactive jamais rien sans que l'utilisateur le décide en détail. */
 export function choixDuProfil(profil: Exclude<Profil, "perso">, applis: AppliSysteme[]): Record<string, boolean> {
   const desactiver = (a: AppliSysteme) =>
     profil === "recommande" ? desactiverParDefaut(a)
-    : profil === "leger" ? a.groupe === "pistage"
-    : !GARDEES_SIMPLE.includes(a.paquet);
+    : a.etat === "desactive" || (profil === "leger" ? a.groupe === "pistage" : !GARDEES_SIMPLE.includes(a.paquet));
   return Object.fromEntries(applis.map((a) => [a.paquet, desactiver(a)]));
 }

@@ -18,6 +18,9 @@ VERSION="$(sed -n 's/^  "version": "\(.*\)",/\1/p' src-tauri/tauri.conf.json)"
 # (binaire lisible par nature, mais jamais dans le dépôt). Absent : build sans films inclus.
 JETON_TMDB="$(security find-generic-password -a zenhome -s zenhome-tmdb -w 2>/dev/null || true)"
 [ -n "$JETON_TMDB" ] || echo "Attention : jeton TMDB absent du trousseau (compte zenhome, service zenhome-tmdb) : build SANS films inclus." >&2
+# Même format que celui accepté par le cœur (transport.rs, jeton_valide) : sinon toute installation sans jeton perso échouerait.
+[[ -z "$JETON_TMDB" || "$JETON_TMDB" =~ ^[A-Za-z0-9._~+/=-]+$ ]] \
+  || { echo "Jeton TMDB du trousseau au format inattendu (espaces, guillemets ?) : corrigez l'entrée zenhome-tmdb." >&2; exit 1; }
 
 BUNDLE="${BUNDLE:-src-tauri/target/universal-apple-darwin/release/bundle}"
 APP="$BUNDLE/macos/Zen Home.app"
