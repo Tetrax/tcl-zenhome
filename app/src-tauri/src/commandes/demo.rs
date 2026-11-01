@@ -1,4 +1,4 @@
-//! Mode démo : une Mi Box simulée (FakeBox) avec de petits délais pour que les animations se voient.
+//! Mode démo : des appareils simulés (FakeBox) avec de petits délais pour que les animations se voient.
 
 use std::path::Path;
 use std::sync::Arc;
@@ -7,8 +7,13 @@ use std::time::Duration;
 use crate::moteur::fake_box::{FakeBox, PaquetFake};
 use crate::moteur::transport::{Commande, ErreurTransport, EtatLien, Sortie, Transport};
 
-/// Les deux Mi Box simulées : nom, IP et numéro de série (SALON est la première, celle qui a une sauvegarde d'origine).
-pub const BOXES: [(&str, &str, &str); 2] = [("SALON", "192.168.50.14", "ZH-DEMO-0001"), ("CHAMBRE", "192.168.50.15", "ZH-DEMO-0002")];
+/// Les appareils simulés : nom, IP, numéro de série et identifiant d'appareil. SALON (Mi Box) est le premier, celui qui a une
+/// sauvegarde d'origine ; CHAMBRE est une TV TCL ; BUREAU est un appareil inconnu (refusé, pour montrer le rapport d'appareil).
+pub const BOXES: [(&str, &str, &str, &str); 3] = [
+    ("SALON", "192.168.50.14", "ZH-DEMO-0001", "mibox4"),
+    ("CHAMBRE", "192.168.50.15", "ZH-DEMO-0002", "tcl-g08"),
+    ("BUREAU", "192.168.50.16", "ZH-DEMO-0003", "inconnu"),
+];
 const SERIE: &str = BOXES[0].2;
 
 /// Délai artificiel par commande (le moteur lui-même n'attend jamais avec une FakeBox).
@@ -60,10 +65,14 @@ fn tiers(p: &str, mo: u64, derniere: &str, libelle: &str) -> PaquetFake {
 }
 
 impl DemoBox {
-    pub fn nouvelle(rythme: Duration, serie: &str) -> Arc<Self> {
-        let box_ = FakeBox::mibox4();
+    pub fn nouvelle(rythme: Duration, serie: &str, appareil: &str) -> Arc<Self> {
+        let box_ = if appareil == "tcl-g08" { FakeBox::tcl_g08() } else { FakeBox::mibox4() };
         box_.modifier(|e| {
             e.serie = serie.into();
+            if appareil == "inconnu" {
+                (e.produit, e.marque, e.device, e.modele) = ("streamer_x5".into(), "Acme".into(), "x5".into(), "Streamer X5".into());
+                (e.android, e.sdk, e.role_home) = ("12".into(), "31".into(), Some("com.acme.launcher".into()));
+            }
             // Netflix est commune aux deux box ; les autres applis sont propres à chacune.
             let propres: &[(&str, u64, &str, &str)] = if serie == SERIE {
                 &[("org.videolan.vlc", 42, "2026-09-02 18:20:00", "VLC"), ("com.disney.disneyplus", 160, "2026-10-01 21:10:45", "Disney+")]

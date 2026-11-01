@@ -28,9 +28,10 @@ use crate::moteur::connexion::{Connecte, EchecConnexion, Politique, connecter_bo
 use crate::moteur::installation::{self, Parametres};
 use crate::moteur::inventaire::{self, ErreurInventaire, Inventaire, libelles_broadcast};
 use crate::moteur::origine;
+use crate::moteur::rapport_appareil;
 use crate::moteur::restauration;
 use crate::moteur::session::{Arret, Decision, ErreurAction, Reprise, Session};
-use crate::moteur::transport::{AdbProcess, ArgConfig, Commande, Espace, ErreurTransport, Transport};
+use crate::moteur::transport::{AdbProcess, ArgConfig, Commande, Espace, ErreurTransport, EtatLien, Transport};
 use crate::moteur::verification;
 
 include!(concat!(env!("OUT_DIR"), "/apk_empreinte.rs"));
@@ -74,7 +75,7 @@ impl Config {
     }
 
     pub fn demo(version: String, donnees: PathBuf, rythme: Duration) -> Self {
-        let boxes = demo::BOXES.map(|(_, ip, serie)| (ip, demo::DemoBox::nouvelle(rythme, serie)));
+        let boxes = demo::BOXES.map(|(_, ip, serie, appareil)| (ip, demo::DemoBox::nouvelle(rythme, serie, appareil)));
         let fabrique: Fabrique = Box::new(move |ip| {
             let (_, b) = boxes.iter().find(|(i, _)| *i == ip.to_string()).unwrap_or(&boxes[0]);
             Ok(b.clone() as TransportPartage)
@@ -274,7 +275,7 @@ impl Coeur {
     fn boxes_memorisees(&self) -> Vec<BoxMemoriseeUi> {
         let vue = |b: BoxTrouvee| BoxMemoriseeUi { nom: b.nom, ip: b.ip };
         if self.cfg.demo {
-            let (nom, ip, _) = demo::BOXES[0];
+            let (nom, ip, _, _) = demo::BOXES[0];
             return vec![vue(BoxTrouvee { nom: nom.into(), ip: ip.into(), appareil: Some(appareils::MIBOX4.id.into()), libelle: appareils::MIBOX4.nom_defaut.into() })];
         }
         memoire::lire(&self.cfg.donnees).into_iter().rev().map(vue).collect()
@@ -319,7 +320,10 @@ impl Coeur {
             std::thread::sleep(self.cfg.rythme_demo * 10);
             Ok(demo::BOXES
                 .iter()
-                .map(|(nom, ip, _)| BoxTrouvee { nom: (*nom).into(), ip: (*ip).into(), appareil: Some(appareils::MIBOX4.id.into()), libelle: appareils::MIBOX4.nom_defaut.into() })
+                .map(|(nom, ip, _, appareil)| {
+                    let a = appareils::par_id(appareil);
+                    BoxTrouvee { nom: (*nom).into(), ip: (*ip).into(), appareil: a.map(|a| a.id.into()), libelle: a.map_or("Appareil à vérifier", |a| a.nom_defaut).into() }
+                })
                 .collect())
         } else {
             // `annuler` lève le drapeau : la recherche rend alors ce qu'elle a trouvé, sans erreur
@@ -341,7 +345,7 @@ impl Coeur {
                 return Err(err.into());
             }
         };
-        let vue = trouvees.iter().zip(base..).map(|(b, id)| BoxUi { id, nom: b.nom.clone(), ip: b.ip.clone() }).collect();
+        let vue = trouvees.iter().zip(base..).map(|(b, id)| BoxUi { id, nom: b.nom.clone(), ip: b.ip.clone(), appareil: b.appareil.clone(), libelle: b.libelle.clone() }).collect();
         e.prochain_id = base.saturating_add(trouvees.len() as u32);
         e.boxes = trouvees;
         Ok(vue)
@@ -434,6 +438,33 @@ impl Coeur {
             return Ok(());
         }
         rapport::ouvrir(&rapport::mailto(&corps))
+    }
+
+    /// Rapport d'un appareil, reconnu ou non : se connecte SANS contrôle du modèle et ne fait que des lectures
+    /// (voir `rapport_appareil.rs`). Le texte est filtré et borné comme les autres rapports.
+    pub fn rapport_appareil(&self, cible: &Cible, emettre: Emetteur) -> Result<String, ErreurCommande> {
+        let (_occupation, surveillance) = self.prendre()?;
+        let (_, ip) = self.resoudre(cible)?;
+        let ancienne = self.etat().session.take();
+        if let Some(s) = ancienne {
+            s.t.deconnecter();
+        }
+        emettre(EvenementUi::Etape { nom: "Lecture de l'appareil".into() });
+        let t = (self.cfg.fabrique)(ip)?;
+        let w = Surveille { t: &*t, surveillance: &surveillance };
+        let texte = (|| {
+            w.deconnecter();
+            w.connecter()?;
+            match w.etat()? {
+                EtatLien::Device => {}
+                EtatLien::NonAutorise => return Err(ErreurTransport::NonAutorise),
+                _ => return Err(ErreurTransport::Vide),
+            }
+            rapport_appareil::composer(&w)
+        })();
+        clore(&*t);
+        let texte = texte.map_err(|e| interruption(&surveillance).unwrap_or_else(|| e.into()))?;
+        Ok(rapport::complet(&self.cfg.version, &rapport::systeme(), "", &texte))
     }
 
     pub fn en_demo(&self) -> bool {

@@ -5,9 +5,9 @@
 
   const profils: { cle: Exclude<Profil, "perso">; titre: string; phrase: string; desactive: string; garde: string; conseille?: boolean }[] = [
     { cle: "recommande", titre: "Recommandé", conseille: true, phrase: "Le choix conseillé par Zen Home, qui tient compte de l'état actuel de la box.",
-      desactive: "pistage, publicité et applis inutiles sur une Mi Box", garde: "ce qui sert souvent : jeux, musique, films Google, lecteur USB, aide à la lecture, recherche vocale et mises à jour Xiaomi" },
+      desactive: "pistage, publicité et applis inutiles sur une box ou une TV", garde: "ce qui sert souvent : jeux, musique, films Google, lecteur USB, aide à la lecture, recherche vocale et mises à jour du constructeur" },
     { cle: "simple", titre: "Simple", phrase: "Une box épurée : tout ce qui n'est pas indispensable est désactivé.",
-      desactive: "pistage, publicité et applis facultatives (jeux, musique, lecteur USB…)", garde: "recherche vocale et mises à jour Xiaomi" },
+      desactive: "pistage, publicité et applis facultatives (jeux, musique, lecteur USB…)", garde: "recherche vocale et mises à jour du constructeur" },
     { cle: "leger", titre: "Léger", phrase: "On ne touche qu'au pistage et à la publicité.",
       desactive: "pistage et publicité", garde: "tout le reste (jeux, musique, lecteur USB, recherche vocale…)" },
   ];

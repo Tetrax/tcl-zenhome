@@ -25,7 +25,7 @@
     {:else}
       <h2 id="dlg-titre" tabindex="-1">La box ne répond plus</h2>
       {#if zen.boxActive}<p class="lead"><b>Allez devant la TV « {zen.boxActive} ».</b></p>{/if}
-      <p class="lead">La connexion avec la Mi Box{zen.box ? ` (${zen.box.ip})` : ""} a été perdue.</p>
+      <p class="lead">La connexion avec la box ou la TV{zen.box ? ` (${zen.box.ip})` : ""} a été perdue.</p>
       <p class="petit">Vérifiez qu'elle est allumée et pas en veille (appuyez sur une touche de la télécommande), et toujours sur le même Wi-Fi que ce Mac. Puis cliquez sur « Réessayer ».</p>
       <p class="petit">Ce qui a déjà été fait est conservé : Zen Home reprend là où il s'est arrêté.</p>
     {/if}

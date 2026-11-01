@@ -45,6 +45,10 @@ pub struct BoxUi {
     pub id: u32,
     pub nom: String,
     pub ip: String,
+    /// Appareil supposé d'après l'annonce réseau (simple indice, la connexion vérifie) ; `None` si inconnu.
+    pub appareil: Option<String>,
+    /// Libellé de cet appareil supposé.
+    pub libelle: String,
 }
 
 #[derive(Serialize)]

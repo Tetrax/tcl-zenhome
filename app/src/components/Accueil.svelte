@@ -16,19 +16,12 @@
     <div class="note alerte"><Icone nom="alerte" /><p><b>Une opération précédente a été interrompue.</b> Branchez la box, puis choisissez « Réparer » : Zen Home vérifiera son état et corrigera ce qui reste à faire.</p></div>
   {/if}
   <MiseAJour />
-  <p class="lead">Un accueil apaisé pour votre Xiaomi Mi Box 4, sans publicité ni pistage. Il suffit d'une dizaine de minutes.</p>
+  <p class="lead">Un accueil apaisé pour votre box ou TV Android (Xiaomi Mi Box 4, TV TCL Google TV), sans publicité ni pistage. Il suffit d'une dizaine de minutes.</p>
   <h3 style="margin-top:22px">Avant de commencer</h3>
   <ol class="consignes">
-    <li>Allumez la TV et la Mi Box, et laissez-les allumées pendant toute l'installation (environ 10 minutes).</li>
-    <li>La Mi Box et ce Mac doivent être sur le même réseau Wi-Fi.</li>
-    <li>
-      Sur la box, débloquez les options cachées : <span class="chemin">Paramètres &gt; Préférences de l'appareil &gt; À propos</span>,
-      descendez jusqu'à « Build » et appuyez 7 fois sur OK, jusqu'au message « Vous êtes maintenant développeur ».
-    </li>
-    <li>
-      Revenez en arrière, puis activez le débogage :
-      <span class="chemin">Préférences de l'appareil &gt; Options pour les concepteurs &gt; Débogage USB</span>.
-    </li>
+    <li>Allumez la TV et la box (ou la TV Google TV), et laissez-les allumées pendant toute l'installation (environ 10 minutes).</li>
+    <li>La box ou la TV et ce Mac doivent être sur le même réseau Wi-Fi.</li>
+    <li>À l'étape suivante, vous choisirez votre appareil : Zen Home vous montrera comment y activer le débogage.</li>
     <li>Gardez la télécommande à portée de main : une demande d'autorisation va s'afficher sur la TV, il faudra l'accepter.</li>
   </ol>
   <p class="petit">macOS peut demander si Zen Home peut trouver des appareils sur votre réseau local : acceptez, c'est ce qui permet de retrouver la box.</p>

@@ -48,6 +48,7 @@ pub fn run() {
             commandes::couper_debogage,
             commandes::ouvrir_sauvegardes,
             commandes::rapport_texte,
+            commandes::rapport_appareil,
             commandes::envoyer_rapport,
             commandes::desinstaller_mac,
         ])

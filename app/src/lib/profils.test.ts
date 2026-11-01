@@ -18,7 +18,7 @@ const desactivees = (c: Record<string, boolean>) => Object.keys(c).filter((p) =>
 
 test("Simple : tout désactivé sauf recherche vocale et mises à jour Xiaomi", () => {
   assert.deepEqual(desactivees(choixDuProfil("simple", applis)), ["pub", "stats", "tv", "tts", "jeux"]);
-  assert.equal(GARDEES_SIMPLE.length, 3);
+  assert.equal(GARDEES_SIMPLE.length, 4);
 });
 
 test("Simple désactive une option que Recommandé garde (jeux, musique…)", () => {

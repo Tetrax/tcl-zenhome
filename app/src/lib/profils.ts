@@ -3,8 +3,9 @@ import type { AppliSysteme } from "./types";
 
 export type Profil = "recommande" | "simple" | "leger" | "perso";
 
-/** Gardées même par le profil « Simple » : recherche vocale (micro de la télécommande), mises à jour Xiaomi et téléchargements Xiaomi (utilisés par les mises à jour). */
-export const GARDEES_SIMPLE = ["com.google.android.katniss", "com.xiaomi.mitv.updateservice", "com.mitv.download.service"];
+/** Gardées même par le profil « Simple » : recherche vocale (micro de la télécommande), mises à jour Xiaomi et téléchargements Xiaomi (utilisés par les mises à jour), service système TCL (mises à jour de la TV).
+ *  Un paquet absent de la box est simplement ignoré. */
+export const GARDEES_SIMPLE = ["com.google.android.katniss", "com.xiaomi.mitv.updateservice", "com.mitv.download.service", "com.tcl.ttvs"];
 
 /** Valeur par défaut de la case d'une appli système : l'état actuel d'abord, puis la recommandation (comme le kit). */
 export function desactiverParDefaut(a: AppliSysteme): boolean {

@@ -6,6 +6,8 @@
   import DialogueAttente from "./components/DialogueAttente.svelte";
   import Accueil from "./components/Accueil.svelte";
   import OutilAdb from "./components/OutilAdb.svelte";
+  import Appareil from "./components/Appareil.svelte";
+  import RapportAppareil from "./components/RapportAppareil.svelte";
   import Recherche from "./components/Recherche.svelte";
   import Connexion from "./components/Connexion.svelte";
   import EtatDesLieux from "./components/EtatDesLieux.svelte";
@@ -86,6 +88,8 @@
     <div class="vue" in:fondu={{ delay: 350 }} out:fondu={{ duration: 350, sortie: true }} onoutrostart={(e) => ((e.currentTarget as HTMLElement).inert = true)}>
       {#if zen.ecran === "accueil"}<Accueil />
       {:else if zen.ecran === "adb"}<OutilAdb />
+      {:else if zen.ecran === "appareil"}<Appareil />
+      {:else if zen.ecran === "rapport_appareil"}<RapportAppareil />
       {:else if zen.ecran === "recherche"}<Recherche />
       {:else if zen.ecran === "connexion"}<Connexion />
       {:else if zen.ecran === "etat"}<EtatDesLieux />
