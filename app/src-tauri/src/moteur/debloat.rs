@@ -215,11 +215,13 @@ bon.paquet  # Tel quel : explication ici
         let l = TCL_G08.liste();
         assert_eq!(l.len(), 21);
         let n = |b| l.iter().filter(|e| e.balise == b).count();
-        assert_eq!((n(Balise::Aucune), n(Balise::Option), n(Balise::Garder)), (12, 7, 2));
+        assert_eq!((n(Balise::Aucune), n(Balise::Option), n(Balise::Garder)), (12, 6, 3));
         assert!(l.iter().all(|e| !e.libelle.is_empty() && !e.explication.is_empty()), "chaque ligne a un libellé et une explication");
         let e = |p: &str| l.iter().find(|e| e.paquet == p).unwrap().clone();
         assert_eq!((e("com.tcl.logkit").balise, e("com.tcl.logkit").libelle.as_str()), (Balise::Aucune, "Journaux TCL"));
         assert_eq!(e("com.google.android.play.games").recommandation(), Recommandation::Garder);
         assert_eq!(e("com.tcl.gamebar").recommandation(), Recommandation::Desactiver);
+        // Rôle incertain, peut-être lié aux mises à jour de la TV : gardé par prudence.
+        assert_eq!(e("com.tcl.ttvs").recommandation(), Recommandation::Garder);
     }
 }

@@ -21,12 +21,12 @@ com.tcl.exhibit                        # Mode démo magasin : sert à présenter
 com.tcl.interactive                    # Contenus interactifs TCL : contenus et promotions interactifs de TCL.
 com.tcl.messagebox                     # Messages TCL : messages promotionnels envoyés par TCL.
 com.tcl.usercenter                     # [option] Compte TCL : le compte TCL tourne en arrière-plan (15 Mo). Désactivez-le si vous n'en avez pas.
-com.tcl.ttvs                           # [option] Service TCL : tourne en arrière-plan (39 Mo) pour les services de TCL.
+com.tcl.ttvs                           # [option:garder] Service système TCL : peut servir aux mises à jour de la TV (réseau et clé USB). Recommandé de garder.
 android.autoinstalls.config.google.gtvpai  # Installations automatiques : installe des applis partenaires sans vous demander.
 
 # Télémétrie et diagnostics
 com.tcl.logkit                         # Journaux TCL : collecte des journaux de fonctionnement pour TCL.
-com.tcl.guard                          # [option] Garde TCL : service de diagnostic de TCL.
+com.tcl.guard                          # [option] Safety Guard (TCL) : « nettoyeur » et gestion des permissions de TCL, qui tourne en arrière-plan. Désactivable sans risque connu.
 com.google.android.feedback             # Rapports Google : envoie des rapports d'utilisation à Google.
 com.android.tv.feedbackconsent         # Consentement aux rapports : demande l'autorisation d'envoyer des rapports à Google.
 
