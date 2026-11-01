@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use super::appareils::{Appareil, ModeAccueil};
 use super::connexion::Politique;
-use super::debloat::Entree;
+use super::debloat::{Balise, Entree};
 use super::installation::{DREAM, KEYSVC_FULL, KEYSVC_SHORT, PKG, activer_accessibilite, definir_accueil, installer_apk};
 use super::inventaire::{EtatWifi, accueil_prefere, etat_wifi, liste_garder, noms_paquets};
 use super::session::{Arret, Observateur, Reprise, Session};
@@ -138,12 +138,15 @@ fn controler(s: &mut Session, app: &Appareil, liste: &[Entree]) -> Result<Contro
     }
 
     // Choix « garder » du kit : s'applique à TOUT paquet de la liste.
-    let garder = liste_garder(&s.lire(&Commande::settings_get(Espace::Global, "zenhome_garder")?)?);
+    // Clé absente (aucun choix fait) : les entrées `[option:garder]` sont gardées ; `-` = l'utilisateur ne garde rien.
+    let brut = s.lire(&Commande::settings_get(Espace::Global, "zenhome_garder")?)?;
+    let aucun_choix = matches!(brut.trim(), "" | "null");
+    let garder = liste_garder(&brut);
     let mut debloat_ko = Vec::new();
     for e in liste {
         let p = e.paquet.as_str();
         let (mut etat, mut det) = (etat_pkg(p), "");
-        if etat == Statut::Ko && garder.iter().any(|g| g == p) {
+        if etat == Statut::Ko && (garder.iter().any(|g| g == p) || (aucun_choix && e.balise == Balise::Garder)) {
             (etat, det) = (Statut::Avert, "gardé actif (votre choix)");
         }
         if tab.ajouter(format!("Désactivé : {p}"), etat, det) == Statut::Ko {
@@ -355,7 +358,8 @@ pub fn verifier(
     s.etape(0, "Contrôle");
     let avant = controler(&mut s, app, &liste)?;
     let (mut apres, mut retour_arriere) = (None, false);
-    if reparer && avant.ko > 0 {
+    // Une reprise qui a déjà désactivé des paquets passe quand même par le contrôle du premier plan (et le retour arrière).
+    if reparer && (avant.ko > 0 || !depuis.desactives.is_empty()) {
         s.etape(1, "Réparation");
         retour_arriere = corriger(&mut s, app, &avant, apk)?;
         s.etape(2, "Nouveau contrôle");
@@ -369,6 +373,7 @@ pub fn verifier(
 mod tests {
     use super::*;
     use crate::moteur::appareils::{MIBOX4, TCL_G08};
+    use crate::moteur::debloat::Balise;
     use crate::moteur::fake_box::{FakeBox, WifiFake};
     use crate::moteur::session::Silencieux;
 
@@ -403,9 +408,9 @@ mod tests {
         // Spotify est installé sur la box de test et n'est pas restreint
         assert_eq!(ligne(c, "Spotify : arrière-plan restreint").statut, Statut::Ko);
         assert_eq!(ligne(c, "Wi-Fi non lié à setupwraith").statut, Statut::Ok);
-        // 2 + 24 paquets actifs + installé + rôle + a11y + veille + usage + spotify
-        assert_eq!(c.ko, 1 + 1 + 2 + 24 + 1 + 1 + 1 + 1);
-        assert!(c.tableau().contains("KO : 32"));
+        // 2 + 24 paquets actifs (dont 9 [option:garder], AVERT sans `zenhome_garder`) + installé + rôle + a11y + veille + usage + spotify
+        assert_eq!(c.ko, 1 + 1 + 2 + 15 + 1 + 1 + 1 + 1);
+        assert!(c.tableau().contains("KO : 23"));
         assert!(f.journal().iter().all(|l| !l.contains("disable") && !l.starts_with("install")), "lecture seule");
     }
 
@@ -417,7 +422,7 @@ mod tests {
         assert!(!r.retour_arriere);
         let e = f.instantane();
         assert!(e.paquets[LAUNCHERX].desactive && e.paquets[WRAITH].desactive);
-        assert!(MIBOX4.liste().iter().all(|d| e.paquets[&d.paquet].desactive));
+        assert!(MIBOX4.liste().iter().all(|d| e.paquets[&d.paquet].desactive == (d.balise != Balise::Garder)));
         assert_eq!(e.premier_plan.as_deref(), Some("tv.zenhome/.Home"));
         // seconde passe : rien à réparer, aucune commande de modification
         let avant = f.journal().len();
@@ -573,7 +578,12 @@ mod tests {
         let e = f.instantane();
         assert_eq!(e.role_home.as_deref(), Some(PKG));
         assert!(e.paquets[LAUNCHERX_TCL].desactive && e.paquets[WRAITH].desactive);
-        assert!(TCL_G08.liste().iter().all(|d| e.paquets[&d.paquet].desactive));
+        // sans `zenhome_garder` (aucun choix fait), les entrées [option:garder] restent actives
+        for d in TCL_G08.liste() {
+            assert_eq!(e.paquets[&d.paquet].desactive, d.balise != Balise::Garder, "{}", d.paquet);
+        }
+        assert!(!e.paquets["com.tcl.ttvs"].desactive);
+        assert_eq!(ligne(r.final_(), "Désactivé : com.tcl.ttvs").statut, Statut::Avert);
         assert_eq!(e.premier_plan.as_deref(), Some("tv.zenhome/.Home"));
         assert_eq!(ligne(r.final_(), "Rôle HOME = tv.zenhome").statut, Statut::Ok);
         let j = f.journal();
@@ -584,6 +594,35 @@ mod tests {
         let avant = f.journal().len();
         assert!(lancer_tcl(&f, true, Some(&apk())).apres.is_none());
         assert!(f.journal()[avant..].iter().all(|l| !l.contains("disable") && !l.contains("add-role")));
+    }
+
+    #[test]
+    fn tcl_garder_vide_explicite_desactive_tout() {
+        let f = tcl();
+        f.modifier(|e| {
+            e.global.insert("zenhome_garder".into(), crate::moteur::choix::AUCUN_GARDE.into());
+        });
+        let r = lancer_tcl(&f, true, Some(&apk()));
+        assert!(r.ok, "{}", r.final_().tableau());
+        assert!(f.instantane().paquets["com.tcl.ttvs"].desactive);
+    }
+
+    #[test]
+    fn reprise_avec_desactives_controle_le_premier_plan_meme_si_tout_est_ok() {
+        let f = tcl();
+        f.zen_home_visible(false);
+        // coupure juste après le pm disable de l'accueil d'origine (dernière action de la réparation)
+        let coupe = CoupeApresDisable(&f, LAUNCHERX_TCL);
+        let r = verifier(&coupe, &TCL_G08, &Politique::default(), &mut Silencieux, true, Some(&apk()), &Reprise::default());
+        let Err(Arret::EnPause(pause)) = r else { panic!("attendu : pause, obtenu {:?}", r.map(|_| ())) };
+        assert!(f.instantane().paquets[LAUNCHERX_TCL].desactive);
+        f.perdre_lien(0);
+        // « Arrêter » : la reprise est conservée ; tout est OK au contrôle, sauf que Zen Home n'est pas au premier plan
+        let r = verifier(&f, &TCL_G08, &Politique::default(), &mut Silencieux, true, Some(&apk()), &pause.reprise).unwrap();
+        assert!(r.retour_arriere && r.apres.is_some());
+        let e = f.instantane();
+        assert!(!e.paquets[LAUNCHERX_TCL].desactive);
+        assert_eq!(e.role_home.as_deref(), Some(LAUNCHERX_TCL));
     }
 
     #[test]

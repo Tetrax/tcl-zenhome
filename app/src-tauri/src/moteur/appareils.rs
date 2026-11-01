@@ -97,7 +97,7 @@ pub static TCL_G08: Appareil = Appareil {
     mode_accueil: ModeAccueil::RoleHome,
     accueil: "com.google.android.apps.tv.launcherx/.home.HomeActivity",
     veille: "com.google.android.apps.tv.dreamx/.service.Backdrop",
-    proteges: &[],
+    proteges: &["com.tcl.tv", "com.tcl.micmanager", "com.tcl.framework.custom", "com.tcl.suspension"],
     liste: include_str!("../../../../tv/debloat-tcl-g08.txt"),
 };
 

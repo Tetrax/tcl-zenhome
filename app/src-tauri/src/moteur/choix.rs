@@ -10,6 +10,9 @@ use super::inventaire::{Inventaire, noms_paquets};
 use super::session::{Arret, ErreurAction, Observateur, Reprise, Session};
 use super::transport::{Commande, Espace, ErreurTransport, OptionPm, paquet_valide};
 
+/// Valeur de `zenhome_garder` quand l'utilisateur a choisi de ne rien garder (clé absente = aucun choix fait).
+pub const AUCUN_GARDE: &str = "-";
+
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Choix {
     /// Applis système de la liste à garder actives.
@@ -89,9 +92,10 @@ pub fn appliquer(
     let mut s = Session::nouvelle(t, pol, obs, "choix", 3, depuis);
 
     if s.etape(0, "Mémorisation de vos choix") {
-        let g = choix.garder.join(",");
+        // Liste vide : valeur sentinelle (et non une clé absente), pour distinguer « ne rien garder » de « aucun choix fait ».
+        let g = if choix.garder.is_empty() { AUCUN_GARDE.to_string() } else { choix.garder.join(",") };
         let cle = "zenhome_garder";
-        let ecrire = if g.is_empty() { Commande::settings_delete(Espace::Global, cle)? } else { Commande::settings_put(Espace::Global, cle, &g)? };
+        let ecrire = Commande::settings_put(Espace::Global, cle, &g)?;
         let lire = Commande::settings_get(Espace::Global, cle)?;
         let mut relu = None;
         // écriture puis relecture, recommencée si la box a décroché entre les deux (3 essais, comme le kit)
@@ -100,7 +104,6 @@ pub fn appliquer(
                 t.shell(&ecrire)?;
                 t.shell(&lire).map(|r| r.stdout.trim().to_string())
             })?;
-            let v = if v == "null" { String::new() } else { v };
             let ok = v == g;
             relu = Some(v);
             if ok {
@@ -200,13 +203,13 @@ mod tests {
     }
 
     #[test]
-    fn liste_vide_supprime_la_cle() {
+    fn liste_vide_ecrit_la_sentinelle() {
         let (f, inv, d) = prete();
         f.modifier(|e| {
             e.global.insert("zenhome_garder".into(), "a.b".into());
         });
         appliquer(&f, &MIBOX4, &Politique::default(), &mut Silencieux, &inv, &Choix::default(), &Reprise::default()).unwrap();
-        assert!(!f.instantane().global.contains_key("zenhome_garder"));
+        assert_eq!(f.instantane().global["zenhome_garder"], AUCUN_GARDE);
         let _ = std::fs::remove_dir_all(d);
     }
 

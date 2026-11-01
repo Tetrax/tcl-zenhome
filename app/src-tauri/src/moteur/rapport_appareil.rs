@@ -69,16 +69,18 @@ pub fn composer(t: &dyn Transport) -> Result<String, ErreurTransport> {
     let systeme = paquets(&lire(t, &Commande::pm_list(&[OptionPm::Systeme]))?);
     // « désactivés » : seulement ceux du système (un paquet de l'utilisateur désactivé ne figure pas au rapport)
     let desactives: BTreeSet<String> = paquets(&lire(t, &Commande::pm_list(&[OptionPm::Desactives]))?).intersection(&systeme).cloned().collect();
-    let nb_utilisateur = paquets(&lire(t, &Commande::pm_list(&[OptionPm::Tiers]))?).len();
-    s.push_str(&format!("applis de l'utilisateur : {nb_utilisateur}\n"));
+    let tiers = paquets(&lire(t, &Commande::pm_list(&[OptionPm::Tiers]))?);
+    s.push_str(&format!("applis de l'utilisateur : {}\n", tiers.len()));
+    // un accueil, un rôle HOME ou un écran de veille peut être une appli de l'utilisateur : son nom n'est pas recopié
+    let anonyme = |v: String| if tiers.iter().any(|p| v.contains(p.as_str())) { "(appli de l'utilisateur)".to_string() } else { v };
 
     let accueil = lire(t, &Commande::resoudre_accueil())?;
-    s.push_str(&format!("accueil résolu : {}\n", valeur(accueil.lines().rev().find(|l| !l.trim().is_empty()).unwrap_or(""))));
+    s.push_str(&format!("accueil résolu : {}\n", anonyme(valeur(accueil.lines().rev().find(|l| !l.trim().is_empty()).unwrap_or("")))));
     if sdk.is_some_and(|v| v >= 29) {
-        s.push_str(&format!("détenteur du rôle HOME : {}\n", valeur(&lire(t, &Commande::role_home_detenteur())?)));
+        s.push_str(&format!("détenteur du rôle HOME : {}\n", anonyme(valeur(&lire(t, &Commande::role_home_detenteur())?))));
     }
     let veille = lire(t, &Commande::settings_get(Espace::Secure, "screensaver_components")?)?;
-    s.push_str(&format!("screensaver_components : {}\n\n", valeur(&veille)));
+    s.push_str(&format!("screensaver_components : {}\n\n", anonyme(valeur(&veille))));
 
     s.push_str(&liste("Paquets système", &systeme));
     s.push('\n');
@@ -132,6 +134,18 @@ mod tests {
         assert!(texte.contains("com.android.vending"));
         f.serie_illisible(true);
         assert!(composer(&f).unwrap().contains("numéro de série : illisible"));
+    }
+
+    #[test]
+    fn accueil_role_et_veille_d_une_appli_de_l_utilisateur_sont_masques() {
+        let f = connectee(FakeBox::tcl_g08());
+        f.modifier(|e| {
+            e.role_home = Some("com.exemple.lecteur".into());
+            e.secure.insert("screensaver_components".into(), "com.exemple.lecteur/.Veille".into());
+        });
+        let texte = composer(&f).unwrap();
+        assert!(!texte.contains("com.exemple.lecteur"), "{texte}");
+        assert!(texte.contains("détenteur du rôle HOME : (appli de l'utilisateur)\nscreensaver_components : (appli de l'utilisateur)"), "{texte}");
     }
 
     #[test]

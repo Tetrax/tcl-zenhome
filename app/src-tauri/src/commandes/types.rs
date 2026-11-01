@@ -183,6 +183,7 @@ pub fn inventaire_ui(app: &Appareil, inv: &Inventaire, libelles: &HashMap<String
     let applis_utilisateur = inv
         .applis
         .iter()
+        .filter(|a| !app.est_protege(&a.paquet))
         .map(|a| AppliUtilisateur {
             paquet: a.paquet.clone(),
             libelle: nettoyer_libelle(libelles.get(&a.paquet).map_or("", String::as_str), &a.paquet),
@@ -227,5 +228,31 @@ pub fn rapport_application(r: &RapportChoix) -> RapportApplication {
         gardees: r.gardes.len(),
         desinstallees: r.desinstalles.iter().chain(&r.deja_absents).map(|p| assainir(p)).collect(),
         echecs: r.echecs.iter().map(|p| assainir(p)).collect(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::moteur::appareils::{MIBOX4, TCL_G08};
+    use crate::moteur::fake_box::FakeBox;
+    use crate::moteur::inventaire::{AppUtilisateur, inventaire};
+    use crate::moteur::transport::Transport;
+
+    #[test]
+    fn aucun_paquet_protege_n_est_propose_a_la_desinstallation() {
+        for (f, app, proteges) in [
+            (FakeBox::tcl_g08(), &TCL_G08, &["com.tcl.tv", "com.tcl.micmanager", "com.tcl.framework.custom", "com.tcl.suspension"][..]),
+            (FakeBox::mibox4(), &MIBOX4, &["com.google.android.tvlauncher"][..]),
+        ] {
+            f.connecter().unwrap();
+            let d = std::env::temp_dir().join(format!("zenhome-types-{}-{}", app.id, std::process::id()));
+            let mut inv = inventaire(&f, &d.join("sauvegarde"), "2026-10-31 10:00").unwrap();
+            inv.applis.extend(proteges.iter().map(|p| AppUtilisateur { paquet: (*p).into(), octets: None, derniere_utilisation: None }));
+            let ui = inventaire_ui(app, &inv, &HashMap::new());
+            assert!(!ui.applis_utilisateur.is_empty());
+            assert!(ui.applis_utilisateur.iter().all(|a| !proteges.contains(&a.paquet.as_str())), "{}", app.id);
+            let _ = std::fs::remove_dir_all(d);
+        }
     }
 }
