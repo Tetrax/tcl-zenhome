@@ -11,6 +11,7 @@ const FIXES: Record<string, string> = {
 };
 const PAQUETS: Record<string, string> = {
   "com.google.android.tvlauncher": "L'ancien accueil Google est désactivé",
+  "com.google.android.apps.tv.launcherx": "L'ancien accueil Google TV est désactivé",
   "com.google.android.tungsten.setupwraith": "L'assistant de configuration Google est désactivé",
 };
 

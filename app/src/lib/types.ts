@@ -8,9 +8,11 @@ export interface EtatInitial { version: string; adb_installe: boolean; demo: boo
   /** Vrai si l'appli embarque un jeton TMDB : les films marchent sans jeton personnel. */
   films_inclus: boolean }
 export interface BoxMemorisee { nom: string; ip: string }
-export interface BoxTrouvee { id: number; nom: string; ip: string }
+/** `appareil` : appareil supposé d'après l'annonce réseau (simple indice, la connexion vérifie), null si inconnu ; `libelle` : son nom court. */
+export interface BoxTrouvee { id: number; nom: string; ip: string; appareil?: string | null; libelle?: string }
 export type Cible = { id: number } | { ip: string };
-export interface BoxConnectee { nom: string; ip: string; modele: string }
+/** `appareil` : identifiant de l'appareil reconnu (« mibox4 », « tcl-g08 »). */
+export interface BoxConnectee { nom: string; ip: string; modele: string; appareil: string }
 export interface Ville { id: number; nom: string; region?: string; pays?: string }
 
 export interface AppliSysteme {

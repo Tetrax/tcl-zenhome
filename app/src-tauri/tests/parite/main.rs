@@ -15,6 +15,9 @@
 //! apk             le chemin de l'APK diffère (chemin fourni à l'action / chemin de la copie de tv/) ; normalisé en `APK`.
 //! garder          après la restauration, le kit (pas restaurer-tv.sh) supprime `zenhome_garder` ; l'action Rust le fait
 //!                 en dernière commande. Vérifié puis retiré de la suite Rust avant comparaison.
+//! aucun choix     `zenhome_garder` absent : le moteur traite les entrées [option:garder] comme gardées (AVERT), le kit les
+//!                 désactive. Les scénarios partent de la sentinelle `-` (ignorée par le kit) ; le cas absent est testé
+//!                 dans verification.rs.
 //! position        le moteur masque lat/lon/ville (`***`) dans son journal, comme le jeton ; le faux adb du banc journalise
 //!                 les valeurs en clair. Valeurs normalisées en `***` des deux côtés : la parité des valeurs elles-mêmes
 //!                 n'est plus comparée ici (elle l'est dans les tests unitaires de installation.rs, via la fausse box).
@@ -32,6 +35,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicU32, Ordering};
 
+use zen_home_lib::moteur::appareils::MIBOX4;
 use zen_home_lib::moteur::connexion::Politique;
 use zen_home_lib::moteur::fake_box::{EtatBox, FakeBox, PaquetFake, WifiFake};
 use zen_home_lib::moteur::installation::{Parametres, installer};
@@ -326,10 +330,10 @@ fn parite(s: Scenario) {
     let ok_rust = match &s.action {
         Action::Installer { params } => {
             let p = Parametres { apk: apk.clone(), lat: params.lat.clone(), lon: params.lon.clone(), ville: params.ville.clone(), jeton: params.jeton.clone() };
-            installer(&f, &pol, &mut Silencieux, &p, &Reprise::default()).map(|_| true).unwrap_or(false)
+            installer(&f, &MIBOX4, &pol, &mut Silencieux, &p, &Reprise::default()).map(|_| true).unwrap_or(false)
         }
-        Action::Reparer => verifier(&f, &pol, &mut Silencieux, true, Some(&apk), &Reprise::default()).expect("vérification").ok,
-        Action::Restaurer => restaurer(&f, &pol, &mut Silencieux, &Reprise::default(), None).map(|_| true).unwrap_or(false),
+        Action::Reparer => verifier(&f, &MIBOX4, &pol, &mut Silencieux, true, Some(&apk), &Reprise::default()).expect("vérification").ok,
+        Action::Restaurer => restaurer(&f, &MIBOX4, &pol, &mut Silencieux, &Reprise::default(), None).map(|_| true).unwrap_or(false),
     };
     let mut rust = suite_rust(&f);
 
@@ -364,7 +368,11 @@ fn parite(s: Scenario) {
 }
 
 fn base() -> EtatBox {
-    EtatBox::mibox4()
+    let mut e = EtatBox::mibox4();
+    // écart « aucun choix » : clé absente, le moteur garde les [option:garder] là où le kit les désactive ; les scénarios
+    // partent donc de « l'utilisateur ne garde rien » (sentinelle `-`, sans paquet valide pour le kit).
+    e.global.insert("zenhome_garder".into(), "-".into());
+    e
 }
 
 fn sans_params() -> Parametres {

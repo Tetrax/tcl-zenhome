@@ -52,6 +52,7 @@ fn main() {
         "couper_debogage",
         "ouvrir_sauvegardes",
         "rapport_texte",
+        "rapport_appareil",
         "envoyer_rapport",
         "desinstaller_mac",
     ])))

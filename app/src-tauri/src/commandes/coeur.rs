@@ -22,20 +22,20 @@ use super::evenements::{Emetteur, EvenementUi, ObservateurUi};
 use super::{memoire, persistance, rapport};
 use super::surveillance::{Attente, Interruption, Occupation, Surveillance, Surveille};
 use super::types::*;
+use crate::moteur::appareils::{self, Appareil};
 use crate::moteur::choix::{self, Choix};
-use crate::moteur::connexion::{EchecConnexion, Politique, connecter_box, lire_serie};
+use crate::moteur::connexion::{Connecte, EchecConnexion, Politique, connecter_box, lire_serie};
 use crate::moteur::installation::{self, Parametres};
 use crate::moteur::inventaire::{self, ErreurInventaire, Inventaire, libelles_broadcast};
 use crate::moteur::origine;
+use crate::moteur::rapport_appareil;
 use crate::moteur::restauration;
 use crate::moteur::session::{Arret, Decision, ErreurAction, Reprise, Session};
-use crate::moteur::transport::{AdbProcess, ArgConfig, Commande, Espace, ErreurTransport, Transport};
+use crate::moteur::transport::{AdbProcess, ArgConfig, Commande, Espace, ErreurTransport, EtatLien, Transport};
 use crate::moteur::verification;
 
 include!(concat!(env!("OUT_DIR"), "/apk_empreinte.rs"));
 
-/// Seul appareil pris en charge (`connecter_box` refuse tout autre produit).
-const MODELE_AFFICHE: &str = "Xiaomi Mi Box 4";
 const APK_TAILLE_MAX: u64 = 200 * 1024 * 1024;
 
 pub type TransportPartage = Arc<dyn Transport + Send + Sync>;
@@ -75,7 +75,7 @@ impl Config {
     }
 
     pub fn demo(version: String, donnees: PathBuf, rythme: Duration) -> Self {
-        let boxes = demo::BOXES.map(|(_, ip, serie)| (ip, demo::DemoBox::nouvelle(rythme, serie)));
+        let boxes = demo::BOXES.map(|(_, ip, serie, appareil)| (ip, demo::DemoBox::nouvelle(rythme, serie, appareil)));
         let fabrique: Fabrique = Box::new(move |ip| {
             let (_, b) = boxes.iter().find(|(i, _)| *i == ip.to_string()).unwrap_or(&boxes[0]);
             Ok(b.clone() as TransportPartage)
@@ -102,6 +102,8 @@ impl Config {
 
 struct SessionBox {
     t: TransportPartage,
+    /// Appareil reconnu à la connexion : liste d'allègement, accueil, veille et paquets protégés en dépendent.
+    appareil: &'static Appareil,
     /// Numéro de série et paquets désactivés par un passage interrompu (l'étape repart toujours de zéro : toutes les
     /// opérations du moteur sont rejouables, et un nouveau choix ne doit jamais sauter la mémorisation).
     reprise: Reprise,
@@ -145,6 +147,7 @@ impl Drop for ApkVerifie {
 pub struct Contexte<'a> {
     coeur: &'a Coeur,
     t: TransportPartage,
+    appareil: &'static Appareil,
     reprise: Reprise,
     inventaire: Option<Inventaire>,
     surveillance: Surveillance,
@@ -229,13 +232,13 @@ impl Coeur {
     /// `delai_decision` : temps laissé à l'utilisateur pour répondre à une demande (nul : on arrête aussitôt).
     fn agir_avec<T>(&self, emettre: Emetteur, delai_decision: Duration, f: impl FnOnce(&Contexte) -> Result<T, ErreurCommande>) -> Result<T, ErreurCommande> {
         let (_occupation, surveillance) = self.prendre()?;
-        let (t, reprise, inventaire) = {
+        let (t, appareil, reprise, inventaire) = {
             let e = self.etat();
             let s = e.session.as_ref().ok_or_else(ErreurCommande::aucune_box)?;
-            (s.t.clone(), s.reprise.clone(), s.inventaire.clone())
+            (s.t.clone(), s.appareil, s.reprise.clone(), s.inventaire.clone())
         };
         let conserver = |r: &Reprise| self.conserver(r);
-        f(&Contexte { coeur: self, t, reprise, inventaire, surveillance, emettre, conserver: &conserver, delai_decision })
+        f(&Contexte { coeur: self, t, appareil, reprise, inventaire, surveillance, emettre, conserver: &conserver, delai_decision })
     }
 
     #[cfg(test)]
@@ -272,8 +275,8 @@ impl Coeur {
     fn boxes_memorisees(&self) -> Vec<BoxMemoriseeUi> {
         let vue = |b: BoxTrouvee| BoxMemoriseeUi { nom: b.nom, ip: b.ip };
         if self.cfg.demo {
-            let (nom, ip, _) = demo::BOXES[0];
-            return vec![vue(BoxTrouvee { nom: nom.into(), ip: ip.into() })];
+            let (nom, ip, _, _) = demo::BOXES[0];
+            return vec![vue(BoxTrouvee { nom: nom.into(), ip: ip.into(), appareil: Some(appareils::MIBOX4.id.into()), libelle: appareils::MIBOX4.nom_defaut.into() })];
         }
         memoire::lire(&self.cfg.donnees).into_iter().rev().map(vue).collect()
     }
@@ -315,10 +318,17 @@ impl Coeur {
         let (_occupation, _) = self.prendre()?;
         let resultat = if self.cfg.demo {
             std::thread::sleep(self.cfg.rythme_demo * 10);
-            Ok(demo::BOXES.iter().map(|(nom, ip, _)| BoxTrouvee { nom: (*nom).into(), ip: (*ip).into() }).collect())
+            Ok(demo::BOXES
+                .iter()
+                .map(|(nom, ip, _, appareil)| {
+                    let a = appareils::par_id(appareil);
+                    BoxTrouvee { nom: (*nom).into(), ip: (*ip).into(), appareil: a.map(|a| a.id.into()), libelle: a.map_or("Appareil à vérifier", |a| a.nom_defaut).into() }
+                })
+                .collect())
         } else {
             // `annuler` lève le drapeau : la recherche rend alors ce qu'elle a trouvé, sans erreur
-            zh_reseau::chercher_box(Duration::from_secs(15), &memoire::lire(&self.cfg.donnees), &self.annule)
+            let indices: Vec<_> = appareils::TOUS.iter().map(|a| a.indice()).collect();
+            zh_reseau::chercher_box(Duration::from_secs(15), &memoire::lire(&self.cfg.donnees), &indices, &self.annule)
         };
         self.garder_recherche(resultat)
     }
@@ -335,7 +345,7 @@ impl Coeur {
                 return Err(err.into());
             }
         };
-        let vue = trouvees.iter().zip(base..).map(|(b, id)| BoxUi { id, nom: b.nom.clone(), ip: b.ip.clone() }).collect();
+        let vue = trouvees.iter().zip(base..).map(|(b, id)| BoxUi { id, nom: b.nom.clone(), ip: b.ip.clone(), appareil: b.appareil.clone(), libelle: b.libelle.clone() }).collect();
         e.prochain_id = base.saturating_add(trouvees.len() as u32);
         e.boxes = trouvees;
         Ok(vue)
@@ -430,6 +440,33 @@ impl Coeur {
         rapport::ouvrir(&rapport::mailto(&corps))
     }
 
+    /// Rapport d'un appareil, reconnu ou non : se connecte SANS contrôle du modèle et ne fait que des lectures
+    /// (voir `rapport_appareil.rs`). Le texte est filtré et borné comme les autres rapports.
+    pub fn rapport_appareil(&self, cible: &Cible, emettre: Emetteur) -> Result<String, ErreurCommande> {
+        let (_occupation, surveillance) = self.prendre()?;
+        let (_, ip) = self.resoudre(cible)?;
+        let ancienne = self.etat().session.take();
+        if let Some(s) = ancienne {
+            s.t.deconnecter();
+        }
+        emettre(EvenementUi::Etape { nom: "Lecture de l'appareil".into() });
+        let t = (self.cfg.fabrique)(ip)?;
+        let w = Surveille { t: &*t, surveillance: &surveillance };
+        let texte = (|| {
+            w.deconnecter();
+            w.connecter()?;
+            match w.etat()? {
+                EtatLien::Device => {}
+                EtatLien::NonAutorise => return Err(ErreurTransport::NonAutorise),
+                _ => return Err(ErreurTransport::Vide),
+            }
+            rapport_appareil::composer(&w)
+        })();
+        clore(&*t);
+        let texte = texte.map_err(|e| interruption(&surveillance).unwrap_or_else(|| e.into()))?;
+        Ok(rapport::complet(&self.cfg.version, &rapport::systeme(), "", &texte))
+    }
+
     pub fn en_demo(&self) -> bool {
         self.cfg.demo
     }
@@ -494,7 +531,7 @@ impl Coeur {
             }
             Cible::Ip { ip } => {
                 let ip = zh_reseau::valider_ipv4(ip).ok_or_else(ip_invalide)?;
-                let nom = e.boxes.iter().find(|b| b.ip == ip.to_string()).map_or_else(|| "Mi Box".to_string(), |b| b.nom.clone());
+                let nom = e.boxes.iter().find(|b| b.ip == ip.to_string()).map_or_else(String::new, |b| b.nom.clone());
                 Ok((nom, ip))
             }
         }
@@ -512,19 +549,19 @@ impl Coeur {
         let t = (self.cfg.fabrique)(ip)?;
         let r = self.etablir(&t, emettre, &surveillance);
         match r {
-            Ok(serie) => {
+            Ok((serie, appareil)) => {
                 let mut reprise = Reprise::pour_box(serie);
                 // Paquets désactivés par un passage interrompu sur CETTE box : la prochaine vérification les reprend.
                 if let Some(d) = persistance::lire(&self.cfg.donnees, reprise.serie.as_deref().unwrap_or_default()) {
                     reprise.desactives = d.desactives;
                 }
-                let mut nom = nom;
+                let mut nom = if nom.is_empty() { appareil.nom_defaut.to_string() } else { nom };
                 if let (false, Some(serie)) = (self.cfg.demo, reprise.serie.as_deref()) {
-                    nom = memoire::nom_pour(&self.cfg.donnees, serie, &ip.to_string(), &nom);
-                    let _ = memoire::memoriser(&self.cfg.donnees, serie, &nom, &ip.to_string());
+                    nom = memoire::nom_pour(&self.cfg.donnees, serie, &ip.to_string(), &nom, appareil.nom_defaut);
+                    let _ = memoire::memoriser(&self.cfg.donnees, serie, &nom, &ip.to_string(), Some(appareil.id));
                 }
-                self.etat().session = Some(SessionBox { t, reprise, inventaire: None });
-                Ok(Connexion { nom, ip: ip.to_string(), modele: MODELE_AFFICHE.into() })
+                self.etat().session = Some(SessionBox { t, appareil, reprise, inventaire: None });
+                Ok(Connexion { nom, ip: ip.to_string(), modele: appareil.nom.into(), appareil: appareil.id.into() })
             }
             Err(e) => {
                 clore(&*t);
@@ -533,15 +570,15 @@ impl Coeur {
         }
     }
 
-    /// Connexion + numéro de série (lu juste après, il identifie la box pour toute la session).
-    fn etablir(&self, t: &TransportPartage, emettre: Emetteur, surveillance: &Surveillance) -> Result<String, ErreurCommande> {
+    /// Connexion + numéro de série (lu juste après, il identifie la box pour toute la session) + appareil reconnu.
+    fn etablir(&self, t: &TransportPartage, emettre: Emetteur, surveillance: &Surveillance) -> Result<(String, &'static Appareil), ErreurCommande> {
         let w = Surveille { t: &**t, surveillance };
         let pol = &self.cfg.politique;
         let conserver = |_: &Reprise| Ok(());
         let obs = ObservateurUi { emettre, attente: &self.attente, surveillance, delai_decision: self.cfg.delai_decision, conserver: &conserver };
-        loop {
+        let Connecte { appareil, sdk_recent } = loop {
             match connecter_box(&w, pol) {
-                Ok(_) => break,
+                Ok(c) => break c,
                 Err(e @ (EchecConnexion::NonAutorise | EchecConnexion::Injoignable(_))) => {
                     if let Some(i) = interruption(surveillance) {
                         return Err(i);
@@ -552,10 +589,15 @@ impl Coeur {
                 }
                 Err(e) => return Err(interruption(surveillance).unwrap_or_else(|| e.into())),
             }
+        };
+        if sdk_recent {
+            emettre(EvenementUi::Avertissement {
+                texte: format!("Cette {} utilise une version d'Android plus récente que celles testées : vérifiez le résultat à la fin.", appareil.mot),
+            });
         }
         for essai in 0..3 {
             match lire_serie(&w) {
-                Ok(s) => return Ok(s),
+                Ok(s) => return Ok((s, appareil)),
                 Err(ErreurTransport::NonAutorise) => return Err(ErreurCommande::non_autorise()),
                 Err(_) if essai < 2 => w.attendre(pol.pause),
                 Err(_) => {}
@@ -602,7 +644,7 @@ impl Coeur {
             }
             (c.emettre)(EvenementUi::Etape { nom: "Lecture des noms des applis".into() });
             let libelles = Self::libelles(&w);
-            let vue = inventaire_ui(&inv, &libelles);
+            let vue = inventaire_ui(c.appareil, &inv, &libelles);
             if let Some(s) = self.etat().session.as_mut() {
                 s.inventaire = Some(inv);
             }
@@ -685,7 +727,7 @@ impl Coeur {
                 ville: ville.map(|v| v.nom),
                 jeton: jeton.map(|j| j.trim().to_string()).filter(|j| !j.is_empty()).or_else(|| self.cfg.jeton_projet.clone()),
             };
-            let r = installation::installer(&c.transport(), &self.cfg.politique, &mut c.observateur(), &p, &c.reprise);
+            let r = installation::installer(&c.transport(), c.appareil, &self.cfg.politique, &mut c.observateur(), &p, &c.reprise);
             c.issue(r).map(|_| ())
         })
     }
@@ -694,7 +736,7 @@ impl Coeur {
         self.agir(emettre, |c| {
             let inv = c.inventaire.as_ref().ok_or_else(|| ErreurCommande::nouvelle("lecture", "Lisez d'abord l'état de la box avant d'appliquer vos choix."))?;
             let demande = Choix { garder: choix.garder.clone(), desactiver: choix.desactiver.clone(), desinstaller: choix.desinstaller.clone() };
-            let r = choix::appliquer(&c.transport(), &self.cfg.politique, &mut c.observateur(), inv, &demande, &c.reprise);
+            let r = choix::appliquer(&c.transport(), c.appareil, &self.cfg.politique, &mut c.observateur(), inv, &demande, &c.reprise);
             let rapport = c.issue(r)?;
             // L'inventaire de la session suit ce qui vient d'être fait : une même désinstallation n'est pas rejouée.
             if let Some(i) = self.etat().session.as_mut().and_then(|s| s.inventaire.as_mut()) {
@@ -718,7 +760,7 @@ impl Coeur {
             } else {
                 None
             };
-            let r = verification::verifier(&c.transport(), &self.cfg.politique, &mut c.observateur(), reparer, apk.as_ref().map(|a| a.chemin.as_path()), &c.reprise);
+            let r = verification::verifier(&c.transport(), c.appareil, &self.cfg.politique, &mut c.observateur(), reparer, apk.as_ref().map(|a| a.chemin.as_path()), &c.reprise);
             let rapport = c.issue(r)?;
             if reparer && rapport.ok {
                 self.oublier_reprise();
@@ -731,7 +773,7 @@ impl Coeur {
         self.agir(emettre, |c| {
             // Sauvegarde faite avant Zen Home pour cette box, s'il y en a une : sinon restauration générique.
             let origine = origine::origine(&self.cfg.donnees.join("sauvegardes"), &nom_serie(&c.reprise));
-            let r = restauration::restaurer(&c.transport(), &self.cfg.politique, &mut c.observateur(), &c.reprise, origine.as_ref());
+            let r = restauration::restaurer(&c.transport(), c.appareil, &self.cfg.politique, &mut c.observateur(), &c.reprise, origine.as_ref());
             let rapport = c.issue(r)?;
             if !rapport.incomplete {
                 self.oublier_reprise();

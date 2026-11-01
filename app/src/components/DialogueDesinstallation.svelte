@@ -40,9 +40,9 @@
   {:else}
     <h2 id="dlg-desinstaller" tabindex="-1">Désinstaller Zen Home de ce Mac ?</h2>
     <p class="lead">L'application et ses fichiers seront retirés de ce Mac. L'application est mise à la Corbeille.</p>
-    <div class="note"><p>Votre Mi Box n'est pas modifiée : Zen Home reste installé sur la TV. Pour l'enlever de la TV, choisissez d'abord « Revenir à avant Zen Home ».</p></div>
+    <div class="note"><p>Votre box ou TV n'est pas modifiée : Zen Home reste installé sur la TV. Pour l'enlever de la TV, choisissez d'abord « Revenir à avant Zen Home ».</p></div>
     {#if sauvegardes}
-      <p class="lead" style="margin-top:16px">Il y a des sauvegardes de la configuration d'origine de votre Mi Box. Que voulez-vous en faire ?</p>
+      <p class="lead" style="margin-top:16px">Il y a des sauvegardes de la configuration d'origine de votre box ou TV. Que voulez-vous en faire ?</p>
     {/if}
     {#if erreur}<div class="note alerte"><p>{erreur.message}</p></div>{/if}
     <div class="pied" style="animation:none">

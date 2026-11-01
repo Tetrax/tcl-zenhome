@@ -5,17 +5,9 @@ use std::collections::HashMap;
 use std::fmt;
 use std::path::Path;
 
+use super::appareils::SOCLE;
 use super::connexion::{EtatConnexion, Politique, assurer_connexion, nettoyer_modele};
 use super::transport::{Commande, Dumpsys, Espace, ErreurTransport, OptionPm, Transport, est_format, paquet_valide};
-
-/// Jamais désinstallés ni proposés à la désinstallation (PROTEGES du kit).
-pub const PROTEGES: [&str; 5] = [
-    "tv.zenhome",
-    "com.google.android.tvlauncher",
-    "com.google.android.tungsten.setupwraith",
-    "com.android.vending",
-    "com.android.tv.settings",
-];
 
 /// Lectures d'une même commande avant d'abandonner (le kit relit 3 fois la liste des paquets).
 const ESSAIS_LECTURE: u32 = 3;
@@ -378,7 +370,7 @@ pub fn inventaire(t: &dyn Transport, dossier: &Path, horodatage: &str) -> Result
     let utilisateur_noms = noms_paquets(&utilisateur);
     let applis = utilisateur_noms
         .iter()
-        .filter(|p| paquet_valide(p) && !PROTEGES.contains(&p.as_str()))
+        .filter(|p| paquet_valide(p) && !SOCLE.contains(&p.as_str()))
         .map(|p| AppUtilisateur { paquet: p.clone(), octets: tai.get(p).copied(), derniere_utilisation: der.get(p).cloned() })
         .collect();
     let props = proprietes(&props_brut);
@@ -583,7 +575,7 @@ mod tests {
         let der = utilisations(USAGESTATS);
         let applis = noms_paquets(UTILISATEUR)
             .into_iter()
-            .filter(|p| paquet_valide(p) && !PROTEGES.contains(&p.as_str()))
+            .filter(|p| paquet_valide(p) && !SOCLE.contains(&p.as_str()))
             .map(|p| AppUtilisateur { octets: tai.get(&p).copied(), derniere_utilisation: der.get(&p).cloned(), paquet: p })
             .collect();
         let p = proprietes(PROPRIETES);

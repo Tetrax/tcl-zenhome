@@ -1,12 +1,12 @@
 // Simulation du cœur Rust pour un navigateur (hors Tauri) : mêmes réponses, mêmes événements, avec des délais.
 // Réglages par l'URL :
 //   ?aucune          aucune box trouvée (saisie manuelle de l'adresse)
-//   ?plusieurs       (par défaut il y a déjà deux box : SALON 192.168.50.14 et CHAMBRE 192.168.50.15)
+//   ?plusieurs       (par défaut il y a trois appareils : SALON 192.168.50.14 (Mi Box), CHAMBRE 192.168.50.15 (TV TCL) et BUREAU 192.168.50.16 (inconnu))
 //   ?coupure         coupure simulée : reconnexion pendant l'application, puis box injoignable pendant la vérification
 //   ?autorisation    la connexion attend l'autorisation sur la TV (Réessayer)
 //   ?refus           la première connexion échoue (non_autorise)
 //   ?refus2          la première connexion à la 2e box (CHAMBRE) seulement échoue (non_autorise)
-//   ?autremodele     la connexion échoue (autre_modele)
+//   ?autremodele     la connexion échoue (autre_modele) ; BUREAU (192.168.50.16) est de toute façon un appareil inconnu : refus + rapport d'appareil
 //   ?sansadb         adb n'est pas installé (écran d'installation d'adb)
 //   ?reprise         une vérification précédente a été interrompue (reprise_en_attente)
 //   ?sansorigine     aucune sauvegarde d'origine (restauration générique ; par défaut seule SALON en a une)
@@ -92,6 +92,18 @@ const SYS: Omit<AppliSysteme, "etat">[] = [
   { paquet: "com.xiaomi.mitv.updateservice", libelle: "Mises à jour Xiaomi", explication: "Installe les mises à jour de sécurité de la box. Recommandé de garder.", recommande: "garder", groupe: "option" },
   { paquet: "com.mitv.download.service", libelle: "Téléchargements Xiaomi", explication: "Utilisé par les mises à jour Xiaomi. Recommandé de garder.", recommande: "garder", groupe: "option" },
 ];
+/** Applis à alléger de la TV TCL (extrait de tv/debloat-tcl-g08.txt). */
+const SYS_TCL: Omit<AppliSysteme, "etat">[] = [
+  { paquet: "com.tcl.channelplus", libelle: "Chaînes TCL", explication: "Chaînes gratuites avec publicités, poussées par TCL.", recommande: "desactiver", groupe: "pistage" },
+  { paquet: "com.tcl.tv.tclhome_passive", libelle: "Contenus TCL", explication: "Pousse du contenu TCL sur l'accueil.", recommande: "desactiver", groupe: "pistage" },
+  { paquet: "com.tcl.messagebox", libelle: "Messages TCL", explication: "Messages promotionnels envoyés par TCL.", recommande: "desactiver", groupe: "pistage" },
+  { paquet: "com.tcl.logkit", libelle: "Journaux TCL", explication: "Collecte des journaux de fonctionnement pour TCL.", recommande: "desactiver", groupe: "pistage" },
+  { paquet: "com.google.android.feedback", libelle: "Rapports Google", explication: "Envoie des rapports d'utilisation à Google.", recommande: "desactiver", groupe: "pistage" },
+  { paquet: "com.tcl.usercenter", libelle: "Compte TCL", explication: "Le compte TCL tourne en arrière-plan. Désactivez-le si vous n'en avez pas.", recommande: "desactiver", groupe: "option" },
+  { paquet: "com.tcl.smartalexa", libelle: "Alexa", explication: "L'assistant vocal d'Amazon. Désactivez-le si vous ne l'utilisez pas.", recommande: "desactiver", groupe: "option" },
+  { paquet: "com.tcl.ttvs", libelle: "Service système TCL", explication: "Peut servir aux mises à jour de la TV. Recommandé de garder.", recommande: "garder", groupe: "option" },
+  { paquet: "com.google.android.play.games", libelle: "Play Jeux", explication: "L'appli de jeux Google. Désactivez-la si vous ne jouez pas sur la TV.", recommande: "garder", groupe: "option" },
+];
 const UTIL: AppliUtilisateur[] = [
   { paquet: "com.netflix.ninja", libelle: "Netflix", taille: "182 Mo", derniere_utilisation: "hier" },
   { paquet: "com.google.android.youtube.tv", libelle: "YouTube", taille: "96 Mo", derniere_utilisation: "aujourd'hui" },
@@ -105,19 +117,22 @@ const UTIL: AppliUtilisateur[] = [
 /** Une box simulée : son propre état, ses applis et sa sauvegarde d'origine (SALON seulement). */
 interface BoxSim {
   id: number; nom: string; ip: string; origine: boolean;
+  /** Appareil réel de la box simulée (« inconnu » : refusé à la connexion). */
+  appareil: "mibox4" | "tcl-g08" | "inconnu"; modele: string; android: string;
   sansSys: string[]; util: string[]; etats: Map<string, AppliSysteme["etat"]>; applis: number; desactivees: number;
 }
 const BOXES: BoxSim[] = [
-  { id: 1, nom: "SALON", ip: "192.168.50.14", origine: true, sansSys: ["com.android.camera2"],
+  { id: 1, nom: "SALON", ip: "192.168.50.14", origine: true, appareil: "mibox4", modele: "Xiaomi Mi Box 4", android: "Android TV 9", sansSys: ["com.android.camera2"],
     util: ["com.netflix.ninja", "com.google.android.youtube.tv", "com.spotify.tv.android", "tv.twitch.android.app", "com.example.vieille.appli"],
     etats: new Map([["com.google.android.tv", "desactive"], ["com.google.android.katniss", "garde"]]), applis: 61, desactivees: 2 },
-  { id: 2, nom: "CHAMBRE", ip: "192.168.50.15", origine: false, sansSys: ["com.mitv.videoplayer", "com.google.android.play.games"],
+  { id: 2, nom: "CHAMBRE", ip: "192.168.50.15", origine: false, appareil: "tcl-g08", modele: "TV TCL G08 (Google TV)", android: "Android 14", sansSys: ["com.tcl.smartalexa"],
     util: ["com.netflix.ninja", "com.google.android.youtube.tv", "com.spotify.tv.android", "com.king.candycrushsaga", "com.disney.disneyplus"],
-    etats: new Map([["com.google.android.katniss", "desactive"], ["com.google.android.backdrop", "desactive"]]), applis: 58, desactivees: 2 },
+    etats: new Map([["com.tcl.channelplus", "desactive"], ["com.tcl.ttvs", "garde"]]), applis: 58, desactivees: 2 },
+  { id: 3, nom: "BUREAU", ip: "192.168.50.16", origine: false, appareil: "inconnu", modele: "Streamer X5", android: "Android 12", sansSys: [], util: [], etats: new Map(), applis: 40, desactivees: 0 },
 ];
 // La box simulée suit la box connectée.
 let box = BOXES[0];
-const sysBox = () => SYS.filter((a) => !box.sansSys.includes(a.paquet));
+const sysBox = () => (box.appareil === "tcl-g08" ? SYS_TCL : SYS).filter((a) => !box.sansSys.includes(a.paquet));
 const utilBox = () => UTIL.filter((u) => box.util.includes(u.paquet));
 let choixFait: Choix | null = null;
 
@@ -142,7 +157,7 @@ export const simulation: Api = {
     return exclusive(async () => {
       await pause(3400);
       if (q.has("aucune")) return [];
-      return BOXES.map(({ id, nom, ip }) => ({ id, nom, ip }));
+      return BOXES.map(({ id, nom, ip, appareil }) => ({ id, nom, ip, appareil: appareil === "inconnu" ? null : appareil, libelle: appareil === "mibox4" ? "Mi Box" : appareil === "tcl-g08" ? "TV TCL" : "Appareil à vérifier" }));
     });
   },
 
@@ -157,10 +172,10 @@ export const simulation: Api = {
       if ((await demander(sur, "autorisation")) === "arreter") throw erreur("annule", "Opération arrêtée. Rien n'a été modifié.");
       sur({ type: "reconnectee" });
     }
-    if (q.has("autremodele")) throw erreur("autre_modele", "Cet appareil n'est pas une Xiaomi Mi Box 4 (modèle détecté : « SHIELD »). Par sécurité, Zen Home s'arrête ici, sans rien modifier.");
+    if (q.has("autremodele") || choisie?.appareil === "inconnu") throw erreur("autre_modele", "Cet appareil n'est pas encore pris en charge. Rien n'a été modifié.");
     await progresser(sur, "Lecture du modèle de la box", 700, 0.4, 1);
     box = choisie ?? BOXES[0];
-    return { nom: box.nom, ip, modele: "Xiaomi Mi Box 4 (MIBOX4)" };
+    return { nom: box.nom, ip, modele: box.modele, appareil: box.appareil };
   }),
 
   async chercherVilles(saisie): Promise<Ville[]> {
@@ -194,7 +209,7 @@ export const simulation: Api = {
     return {
       applis_systeme: sysBox().map((a) => ({ ...a, etat: box.etats.get(a.paquet) ?? "actif" })),
       applis_utilisateur: utilBox(),
-      resume: { modele: "Xiaomi Mi Box 4", android: "Android TV 9", nb_applis: box.applis, nb_desactivees: box.desactivees },
+      resume: { modele: box.modele, android: box.android, nb_applis: box.applis, nb_desactivees: box.desactivees },
     };
   }),
 
@@ -216,7 +231,7 @@ export const simulation: Api = {
     const total = choix.desactiver.length + choix.desinstaller.length || 1;
     let fait = 0;
     for (const p of choix.desactiver) {
-      const a = SYS.find((s) => s.paquet === p)!;
+      const a = sysBox().find((s) => s.paquet === p)!;
       sur({ type: "etape", nom: `Désactivation : ${a.libelle}` });
       await pause(380);
       if (q.has("coupure") && !coupureFaite && fait === 3) {
@@ -288,5 +303,19 @@ export const simulation: Api = {
   async ouvrirSauvegardes() { await pause(150); },
   async rapportTexte(erreur, resume) { return `Zen Home 0.0.2-sim\nSystème : simulation\n${erreur ? `Erreur : ${erreur}\n` : ""}\n${resume}\n`; },
   async envoyerRapport() { await pause(150); },
+  rapportAppareil: (cible: Cible, sur) => exclusive(async () => {
+    const choisie = BOXES.find((b) => ("ip" in cible ? b.ip === cible.ip : b.id === cible.id));
+    await progresser(sur, "Lecture de l'appareil", 1500);
+    if (!choisie) throw erreur("injoignable", "La box ne répond pas. Vérifiez qu'elle est allumée (réveillez-la avec la télécommande) et sur le même Wi-Fi.");
+    const tcl = choisie.appareil === "tcl-g08", inconnu = choisie.appareil === "inconnu";
+    const [nom, marque, device, sdk, release] = tcl ? ["G08_4K_GB", "TCL", "G08", "34", "14"] : inconnu ? ["streamer_x5", "Acme", "x5", "31", "12"] : ["oneday", "Xiaomi", "oneday", "28", "9"];
+    return ["Zen Home 0.0.2-sim", "Système : simulation", "",
+      "Rapport d'appareil", "", `ro.product.name : ${nom}`, `ro.product.model : ${choisie.modele}`, `ro.product.brand : ${marque}`, `ro.product.manufacturer : ${marque}`,
+      `ro.product.device : ${device}`, `ro.build.version.sdk : ${sdk}`, `ro.build.version.release : ${release}`, "ro.build.version.security_patch : 2026-08-05",
+      "ro.build.characteristics : tv", "numéro de série : lisible", `applis de l'utilisateur : ${choisie.util.length || 4}`,
+      "accueil résolu : com.acme.launcher/.Home", ...(+sdk >= 29 ? ["détenteur du rôle HOME : com.acme.launcher"] : []),
+      "screensaver_components : (vide)", "", "Paquets système (3) :", "com.android.settings", "com.android.vending", "com.google.android.gms", "",
+      "Paquets système désactivés (0) :", ""].join("\n");
+  }),
   desinstallerMac: () => exclusive(async () => { await pause(1500); }),
 };

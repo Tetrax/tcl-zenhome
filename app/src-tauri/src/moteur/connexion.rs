@@ -3,10 +3,8 @@
 
 use std::time::Duration;
 
+use super::appareils::{Appareil, Proprietes, identifier};
 use super::transport::{Commande, ErreurTransport, EtatLien, Transport};
-
-/// `ro.product.name` de la Xiaomi Mi Box 4 (seul appareil vérifié).
-pub const PRODUIT_MIBOX4: &str = "oneday";
 
 #[derive(Debug, Clone)]
 pub struct Politique {
@@ -35,8 +33,16 @@ pub enum EchecConnexion {
     Injoignable(String),
     /// Lien établi mais modèle illisible (réponses vides) : box à redémarrer.
     LectureModele,
-    /// Ce n'est pas une Mi Box 4 : on s'arrête sans rien modifier. Contient le nom nettoyé.
+    /// Appareil non pris en charge : on s'arrête sans rien modifier. Contient le résumé nettoyé (`Inconnu::resume`).
     ModeleDifferent(String),
+}
+
+/// Appareil reconnu à la connexion.
+#[derive(Debug, Clone, Copy)]
+pub struct Connecte {
+    pub appareil: &'static Appareil,
+    /// Android plus récent que le dernier SDK testé : à signaler, pas à refuser.
+    pub sdk_recent: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -64,9 +70,26 @@ pub fn lire_serie(t: &dyn Transport) -> Result<String, ErreurTransport> {
     }
 }
 
-/// Connexion à partir de zéro : déconnexion préalable, `connect` (jusqu'à 5 essais), lecture du modèle (3 essais :
-/// vide = lecture ratée, pas un autre modèle), refus si ce n'est pas une Mi Box 4. Renvoie `ro.product.name`.
-pub fn connecter_box(t: &dyn Transport, pol: &Politique) -> Result<String, EchecConnexion> {
+/// Lit une propriété : une réponse vide est une lecture ratée (lien instable), relue après reconnexion.
+fn lire_propriete(t: &dyn Transport, pol: &Politique, cle: &str) -> Result<String, EchecConnexion> {
+    let lecture = Commande::getprop(cle).expect("propriété constante valide");
+    for essai in 1..=pol.essais_modele {
+        match t.shell(&lecture) {
+            Ok(s) if !s.stdout.trim().is_empty() => return Ok(s.stdout.trim().to_string()),
+            Err(ErreurTransport::NonAutorise) => return Err(EchecConnexion::NonAutorise),
+            _ => {}
+        }
+        if essai < pol.essais_modele {
+            t.attendre(pol.pause);
+            let _ = t.connecter();
+        }
+    }
+    Err(EchecConnexion::LectureModele)
+}
+
+/// Connexion à partir de zéro : déconnexion préalable, `connect` (jusqu'à 5 essais), lecture du nom, de la marque, du
+/// device et du SDK (3 essais chacune : vide = lecture ratée, pas un autre modèle), refus si l'appareil n'est pas reconnu.
+pub fn connecter_box(t: &dyn Transport, pol: &Politique) -> Result<Connecte, EchecConnexion> {
     t.deconnecter();
     let mut dernier = String::new();
     let mut lien = false;
@@ -89,29 +112,14 @@ pub fn connecter_box(t: &dyn Transport, pol: &Politique) -> Result<String, Echec
     if !lien {
         return Err(EchecConnexion::Injoignable(dernier));
     }
-    let lecture = Commande::getprop("ro.product.name").expect("propriété constante valide");
-    let mut produit = String::new();
-    for essai in 1..=pol.essais_modele {
-        match t.shell(&lecture) {
-            Ok(s) if !s.stdout.trim().is_empty() => {
-                produit = s.stdout.trim().to_string();
-                break;
-            }
-            Err(ErreurTransport::NonAutorise) => return Err(EchecConnexion::NonAutorise),
-            _ => {}
-        }
-        if essai < pol.essais_modele {
-            t.attendre(pol.pause);
-            let _ = t.connecter();
-        }
+    let nom = lire_propriete(t, pol, "ro.product.name")?;
+    let marque = lire_propriete(t, pol, "ro.product.brand")?;
+    let device = lire_propriete(t, pol, "ro.product.device")?;
+    let sdk = lire_propriete(t, pol, "ro.build.version.sdk")?;
+    match identifier(&Proprietes { nom: &nom, marque: &marque, device: &device, sdk: &sdk }) {
+        Ok(appareil) => Ok(Connecte { appareil, sdk_recent: appareil.plus_recent_que_teste(sdk.parse().unwrap_or_default()) }),
+        Err(inconnu) => Err(EchecConnexion::ModeleDifferent(inconnu.resume)),
     }
-    if produit.is_empty() {
-        return Err(EchecConnexion::LectureModele);
-    }
-    if produit != PRODUIT_MIBOX4 {
-        return Err(EchecConnexion::ModeleDifferent(nettoyer_modele(&produit)));
-    }
-    Ok(produit)
 }
 
 /// Vérifie le lien et le rétablit si la box a décroché : jusqu'à `pol.reconnexions` cycles déconnexion + connexion.
@@ -154,8 +162,19 @@ mod tests {
     #[test]
     fn connexion_ok() {
         let f = FakeBox::mibox4();
-        assert_eq!(connecter_box(&f, &Politique::default()), Ok("oneday".to_string()));
-        assert_eq!(f.journal(), ["disconnect", "connect", "etat", "shell: getprop ro.product.name"]);
+        assert_eq!(connecter_box(&f, &Politique::default()).unwrap().appareil.id, "mibox4");
+        assert_eq!(
+            f.journal(),
+            [
+                "disconnect",
+                "connect",
+                "etat",
+                "shell: getprop ro.product.name",
+                "shell: getprop ro.product.brand",
+                "shell: getprop ro.product.device",
+                "shell: getprop ro.build.version.sdk"
+            ]
+        );
     }
 
     #[test]
@@ -163,19 +182,19 @@ mod tests {
         let f = FakeBox::mibox4();
         f.modele("G08_4K_GB\u{7}; rm -rf /");
         let r = connecter_box(&f, &Politique::default());
-        assert_eq!(r, Err(EchecConnexion::ModeleDifferent("G08_4K_GB rm -rf ".to_string())));
-        // rien d'autre que la lecture du modèle n'a été envoyé
-        assert_eq!(f.journal().iter().filter(|l| l.starts_with("shell:")).count(), 1);
+        assert_eq!(r.unwrap_err(), EchecConnexion::ModeleDifferent("G08_4K_GB rm -rf  / Xiaomi / oneday / 28".to_string()));
+        // rien d'autre que la lecture des propriétés n'a été envoyé
+        assert!(f.journal().iter().filter(|l| l.starts_with("shell:")).all(|l| l.starts_with("shell: getprop ")));
     }
 
     #[test]
     fn autorisation_en_attente_puis_acceptee() {
         let f = FakeBox::mibox4();
         f.autorisation_en_attente();
-        assert_eq!(connecter_box(&f, &Politique::default()), Err(EchecConnexion::NonAutorise));
+        assert_eq!(connecter_box(&f, &Politique::default()).unwrap_err(), EchecConnexion::NonAutorise);
         assert!(f.journal().iter().all(|l| !l.starts_with("shell:")), "aucune commande avant l'autorisation");
         f.accepter_autorisation();
-        assert_eq!(connecter_box(&f, &Politique::default()), Ok("oneday".to_string()));
+        assert!(connecter_box(&f, &Politique::default()).is_ok());
     }
 
     #[test]
@@ -198,19 +217,19 @@ mod tests {
     fn modele_vide_relu_trois_fois() {
         let f = FakeBox::mibox4();
         f.lectures_vides(2);
-        assert_eq!(connecter_box(&f, &Politique::default()), Ok("oneday".to_string()));
-        assert_eq!(f.journal().iter().filter(|l| l.starts_with("shell:")).count(), 3);
+        assert!(connecter_box(&f, &Politique::default()).is_ok());
+        assert_eq!(f.journal().iter().filter(|l| l.starts_with("shell:")).count(), 3 + 3, "3 lectures du nom, puis une par propriété");
         // vide = lecture ratée, jamais « un autre modèle »
         let g = FakeBox::mibox4();
         g.lectures_vides(3);
-        assert_eq!(connecter_box(&g, &Politique::default()), Err(EchecConnexion::LectureModele));
+        assert_eq!(connecter_box(&g, &Politique::default()).unwrap_err(), EchecConnexion::LectureModele);
     }
 
     #[test]
     fn coupure_pendant_la_lecture_du_modele_puis_reprise() {
         let f = FakeBox::mibox4();
         f.couper(1);
-        assert_eq!(connecter_box(&f, &Politique::default()), Ok("oneday".to_string()));
+        assert!(connecter_box(&f, &Politique::default()).is_ok());
         assert_eq!(compte(&f, "connect"), 2, "reconnexion entre deux lectures, comme le kit");
     }
 
@@ -257,5 +276,28 @@ mod tests {
     fn assurer_connexion_apres_deconnexion_totale() {
         let f = FakeBox::mibox4();
         assert_eq!(assurer_connexion(&f, &Politique::default()), EtatConnexion::Connectee);
+    }
+
+    #[test]
+    fn la_tcl_est_reconnue_et_un_sdk_recent_est_signale() {
+        let f = FakeBox::tcl_g08();
+        let c = connecter_box(&f, &Politique::default()).unwrap();
+        assert_eq!((c.appareil.id, c.sdk_recent), ("tcl-g08", false));
+        f.modifier(|e| e.sdk = "35".into());
+        let c = connecter_box(&f, &Politique::default()).unwrap();
+        assert!(c.sdk_recent, "reconnue malgré un Android plus récent : simple avertissement");
+    }
+
+    #[test]
+    fn marque_ou_sdk_inattendus_sont_refuses() {
+        for (cle, valeur) in [("marque", "Autre"), ("device", "autre"), ("sdk", "27")] {
+            let f = FakeBox::mibox4();
+            f.modifier(|e| match cle {
+                "marque" => e.marque = valeur.into(),
+                "device" => e.device = valeur.into(),
+                _ => e.sdk = valeur.into(),
+            });
+            assert!(matches!(connecter_box(&f, &Politique::default()), Err(EchecConnexion::ModeleDifferent(_))));
+        }
     }
 }

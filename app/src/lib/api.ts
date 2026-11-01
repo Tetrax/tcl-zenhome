@@ -23,6 +23,8 @@ export interface Api {
   rapportTexte(erreur: string, resume: string): Promise<string>;
   /** Ouvre la messagerie avec un e-mail prêt (adresse et sujet fixes, corps borné par le cœur). */
   envoyerRapport(erreur: string, resume: string): Promise<void>;
+  /** Rapport d'un appareil, reconnu ou non : lectures seulement, texte complet déjà filtré par le cœur. */
+  rapportAppareil(cible: Cible, sur: SurEvenement): Promise<string>;
   desinstallerMac(garderSauvegardes: boolean): Promise<void>;
 }
 
@@ -57,6 +59,7 @@ async function tauri(): Promise<Api> {
     ouvrirSauvegardes: () => invoke("ouvrir_sauvegardes"),
     rapportTexte: (erreur, resume) => invoke("rapport_texte", { erreur, resume }),
     envoyerRapport: (erreur, resume) => invoke("envoyer_rapport", { erreur, resume }),
+    rapportAppareil: (cible, sur) => invoke("rapport_appareil", { cible, canal: canal(sur) }),
     desinstallerMac: (garderSauvegardes) => invoke("desinstaller_mac", { garderSauvegardes }),
   };
 }
@@ -90,5 +93,6 @@ export const api: Api = {
   ouvrirSauvegardes: () => appeler("ouvrirSauvegardes"),
   rapportTexte: (e, r) => appeler("rapportTexte", e, r),
   envoyerRapport: (e, r) => appeler("envoyerRapport", e, r),
+  rapportAppareil: (c, s) => appeler("rapportAppareil", c, s),
   desinstallerMac: (g) => appeler("desinstallerMac", g),
 };

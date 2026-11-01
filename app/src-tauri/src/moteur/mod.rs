@@ -2,6 +2,7 @@
 //! étape 5 : actions installation, choix, vérification, restauration).
 //! Référence fonctionnelle : kit/Zen Home.command et tv/*.sh.
 
+pub mod appareils;
 pub mod choix;
 pub mod connexion;
 pub mod debloat;
@@ -9,6 +10,7 @@ pub mod fake_box;
 pub mod installation;
 pub mod inventaire;
 pub mod origine;
+pub mod rapport_appareil;
 pub mod restauration;
 pub mod session;
 pub mod transport;

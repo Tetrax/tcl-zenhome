@@ -11,7 +11,7 @@
 {:else if zen.ecran === "confirm_restauration"}
   <!-- Le bouton par défaut (focus) est « Annuler ». -->
   <Panneau titre="Revenir à avant Zen Home ?">
-    <p class="lead">{#if zen.lot}Ces box vont revenir comme avant Zen Home{:else}Votre Mi Box va revenir comme elle était avant Zen Home{#if zen.init?.origine}, à partir de la sauvegarde du {zen.init.origine.date}{/if}{/if}. Cela va :</p>
+    <p class="lead">{#if zen.lot}Ces box vont revenir comme avant Zen Home{:else}{zen.box?.modele ?? "Votre appareil"} va revenir à son état d'avant Zen Home{#if zen.init?.origine}, à partir de la sauvegarde du {zen.init.origine.date}{/if}{/if}. Cela va :</p>
     <ul class="lead" style="margin:6px 0 0;padding-left:22px;display:grid;gap:4px">
       {#if zen.lot}
         <li>réactiver les applis que Zen Home a désactivées ;</li>

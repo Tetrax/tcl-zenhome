@@ -131,6 +131,12 @@ pub async fn rapport_texte(coeur: Etat<'_>, erreur: String, resume: String) -> R
 }
 
 #[tauri::command]
+pub async fn rapport_appareil(coeur: Etat<'_>, cible: Cible, canal: Channel<EvenementUi>) -> Result<String, ErreurCommande> {
+    let c = coeur.inner().clone();
+    bloquant(move || c.rapport_appareil(&cible, &emetteur(canal))).await
+}
+
+#[tauri::command]
 pub async fn envoyer_rapport(coeur: Etat<'_>, erreur: String, resume: String) -> Result<(), ErreurCommande> {
     let c = coeur.inner().clone();
     bloquant(move || c.envoyer_rapport(&erreur, &resume)).await

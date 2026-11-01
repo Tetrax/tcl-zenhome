@@ -1,9 +1,7 @@
-//! Liste annotée des applis à alléger (tv/debloat-mibox4.txt), lue avec les règles de `charger_liste` du kit.
+//! Listes annotées des applis à alléger (tv/debloat-<appareil>.txt), lues avec les règles de `charger_liste` du kit.
+//! Les listes sont compilées dans l'appli par `appareils`.
 //!
 //! Format d'une ligne : `paquet  # [balise] Libellé : explication`.
-
-/// Contenu de la liste, compilé dans l'appli (chemin relatif à ce fichier : racine du dépôt).
-const LISTE_MIBOX4: &str = include_str!("../../../../tv/debloat-mibox4.txt");
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Balise {
@@ -88,20 +86,16 @@ pub fn analyser(texte: &str) -> Result<Vec<Entree>, ListeVide> {
     if liste.is_empty() { Err(ListeVide) } else { Ok(liste) }
 }
 
-/// La liste de la Mi Box 4 embarquée dans l'appli.
-pub fn liste_mibox4() -> Vec<Entree> {
-    analyser(LISTE_MIBOX4).expect("tv/debloat-mibox4.txt est vide ou illisible")
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::moteur::appareils::{MIBOX4, TCL_G08, TOUS};
     use std::path::Path;
     use std::process::Command;
 
     #[test]
     fn liste_integree_24_paquets() {
-        let l = liste_mibox4();
+        let l = MIBOX4.liste();
         assert_eq!(l.len(), 24);
         let n = |b| l.iter().filter(|e| e.balise == b).count();
         assert_eq!((n(Balise::Aucune), n(Balise::Option), n(Balise::Garder)), (11, 4, 9));
@@ -111,7 +105,7 @@ mod tests {
 
     #[test]
     fn entrees_connues() {
-        let l = liste_mibox4();
+        let l = MIBOX4.liste();
         let e = |p: &str| l.iter().find(|e| e.paquet == p).unwrap().clone();
         let a = e("tv.alphonso.alphonso_eula");
         assert_eq!((a.balise, a.libelle.as_str()), (Balise::Aucune, "Alphonso"));
@@ -127,7 +121,7 @@ mod tests {
 
     #[test]
     fn les_paquets_proteges_ne_sont_pas_dans_la_liste() {
-        let l = liste_mibox4();
+        let l = MIBOX4.liste();
         for p in ["com.google.android.tvlauncher", "com.google.android.tungsten.setupwraith", "tv.zenhome"] {
             assert!(l.iter().all(|e| e.paquet != p), "{p}");
         }
@@ -189,28 +183,45 @@ bon.paquet  # Tel quel : explication ici
         let lib = std::fs::read_to_string(racine.join("tv/lib.sh")).unwrap();
         let re = lib.lines().find(|l| l.starts_with("RE_PAQUET=")).expect("RE_PAQUET dans lib.sh");
         let script = format!(
-            "{re}\nTV_DIR=\"$1\"; DEBLOAT=debloat-mibox4.txt\nD_PKG=(); D_TAG=(); D_LAB=(); D_EXP=()\n\
+            "{re}\nTV_DIR=\"$1\"; DEBLOAT=\"$2\"\nD_PKG=(); D_TAG=(); D_LAB=(); D_EXP=()\n\
              erreur() {{ echo \"$1\" >&2; exit 1; }}\n{fonction}\ncharger_liste\n\
              for ((i = 0; i < ${{#D_PKG[@]}}; i++)); do printf '%s|%s|%s|%s\\n' \"${{D_PKG[i]}}\" \"${{D_TAG[i]}}\" \"${{D_LAB[i]}}\" \"${{D_EXP[i]}}\"; done\n"
         );
-        let Ok(sortie) = Command::new("bash").arg("-c").arg(&script).arg("bash").arg(racine.join("tv")).output() else {
-            eprintln!("bash absent : test de parité ignoré");
-            return;
-        };
-        assert!(sortie.status.success(), "bash : {}", String::from_utf8_lossy(&sortie.stderr));
-        let attendu: Vec<String> = String::from_utf8(sortie.stdout).unwrap().lines().map(String::from).collect();
-        let obtenu: Vec<String> = liste_mibox4()
-            .iter()
-            .map(|e| {
-                let tag = match e.balise {
-                    Balise::Aucune => "",
-                    Balise::Option => "option",
-                    Balise::Garder => "garder",
-                };
-                format!("{}|{}|{}|{}", e.paquet, tag, e.libelle, e.explication)
-            })
-            .collect();
-        assert_eq!(attendu.len(), 24);
-        assert_eq!(obtenu, attendu);
+        for a in TOUS {
+            let Ok(sortie) = Command::new("bash").arg("-c").arg(&script).arg("bash").arg(racine.join("tv")).arg(format!("debloat-{}.txt", a.id)).output() else {
+                eprintln!("bash absent : test de parité ignoré");
+                return;
+            };
+            assert!(sortie.status.success(), "{} bash : {}", a.id, String::from_utf8_lossy(&sortie.stderr));
+            let attendu: Vec<String> = String::from_utf8(sortie.stdout).unwrap().lines().map(String::from).collect();
+            let obtenu: Vec<String> = a.liste()
+                .iter()
+                .map(|e| {
+                    let tag = match e.balise {
+                        Balise::Aucune => "",
+                        Balise::Option => "option",
+                        Balise::Garder => "garder",
+                    };
+                    format!("{}|{}|{}|{}", e.paquet, tag, e.libelle, e.explication)
+                })
+                .collect();
+            assert!(!attendu.is_empty());
+            assert_eq!(obtenu, attendu, "{}", a.id);
+        }
+    }
+
+    #[test]
+    fn liste_tcl_annotee_21_paquets() {
+        let l = TCL_G08.liste();
+        assert_eq!(l.len(), 21);
+        let n = |b| l.iter().filter(|e| e.balise == b).count();
+        assert_eq!((n(Balise::Aucune), n(Balise::Option), n(Balise::Garder)), (12, 6, 3));
+        assert!(l.iter().all(|e| !e.libelle.is_empty() && !e.explication.is_empty()), "chaque ligne a un libellé et une explication");
+        let e = |p: &str| l.iter().find(|e| e.paquet == p).unwrap().clone();
+        assert_eq!((e("com.tcl.logkit").balise, e("com.tcl.logkit").libelle.as_str()), (Balise::Aucune, "Journaux TCL"));
+        assert_eq!(e("com.google.android.play.games").recommandation(), Recommandation::Garder);
+        assert_eq!(e("com.tcl.gamebar").recommandation(), Recommandation::Desactiver);
+        // Rôle incertain, peut-être lié aux mises à jour de la TV : gardé par prudence.
+        assert_eq!(e("com.tcl.ttvs").recommandation(), Recommandation::Garder);
     }
 }

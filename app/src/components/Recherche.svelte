@@ -5,6 +5,7 @@
   import BlocErreur from "./BlocErreur.svelte";
   import Icone from "./Icone.svelte";
   import { zen } from "../lib/zen.svelte";
+  import { fiche } from "../lib/appareils";
   import { ipLocale, ipValide } from "../lib/validation";
 
   let manuel = $state(zen.forcerManuel);
@@ -15,6 +16,7 @@
   onMount(() => {
     if (!zen.rechercheFaite && !zen.rechercheEnCours) void zen.chercher();
   });
+  const ficheAppareil = $derived(fiche(zen.famille));
   const cherche = $derived(zen.rechercheEnCours || !zen.rechercheFaite);
   // Les box mémorisées sont proposées tout de suite, la recherche continue derrière.
   const props = $derived(zen.propositions);
@@ -53,7 +55,7 @@
 {#if zen.erreur}
   <BlocErreur />
 {:else if cherche && props.length === 0}
-  <Panneau titre="Recherche de votre Mi Box">
+  <Panneau titre="Recherche de votre box ou TV">
     <div class="travail" style="align-items:flex-start;text-align:left">
       <div class="radar" aria-hidden="true"><i></i><i></i><i></i></div>
       <p class="lead" style="margin-top:0" aria-live="polite">Gardez la TV allumée. Votre ordinateur et la box doivent être sur le même réseau Wi-Fi.</p>
@@ -65,25 +67,25 @@
     {/snippet}
   </Panneau>
 {:else}
-  <Panneau titre={cherche ? "Recherche de votre Mi Box" : aucune ? "Je ne trouve pas votre box" : unique ? (unique.recente ? "Mi Box connue" : "Mi Box trouvée") : props.length > 1 ? "Plusieurs Mi Box trouvées" : "Adresse de la box"}>
+  <Panneau titre={cherche ? "Recherche de votre box ou TV" : aucune ? "Je ne trouve pas votre appareil" : unique ? (unique.recente ? "Appareil connu" : "Appareil trouvé") : props.length > 1 ? "Plusieurs appareils trouvés" : "Adresse de l'appareil"}>
     {#if cherche}
       <p class="petit" style="margin:0 0 12px" aria-live="polite">La recherche continue<span class="dots" aria-hidden="true"><i>.</i><i>.</i><i>.</i></span> Vous pouvez déjà choisir une box configurée récemment.</p>
     {/if}
     {#if aucune}
-      <div class="note alerte"><Icone nom="alerte" /><p>Je n'ai pas trouvé de Mi Box allumée sur ce réseau. Vérifiez qu'elle est allumée (pas en veille) et sur le même Wi-Fi que ce Mac, ou indiquez son adresse.</p></div>
+      <div class="note alerte"><Icone nom="alerte" /><p>Je n'ai pas trouvé de box ou de TV allumée sur ce réseau. Vérifiez qu'elle est allumée (pas en veille) et sur le même Wi-Fi que ce Mac, ou indiquez son adresse.</p></div>
     {:else if unique}
       <div class="carte">
         <span class="icone"><Icone nom="check" taille={24} /></span>
         <div>
-          <div class="gros">Mi Box « {unique.nom} »</div>
+          <div class="gros">{unique.libelle && unique.libelle !== unique.nom ? `${unique.libelle} ` : ""}« {unique.nom} »</div>
           <p class="ip" style="margin-top:2px">{unique.ip}{detail(unique) ? ` · ${detail(unique)}` : ""}</p>
         </div>
       </div>
       <p class="lead" style="margin-top:14px">Est-ce bien la vôtre ?</p>
     {:else if props.length > 1}
-      <p class="lead">Plusieurs Mi Box sont proposées sur ce réseau. Cochez celles que vous voulez configurer : elles auront les mêmes choix.</p>
+      <p class="lead">Plusieurs appareils sont proposés sur ce réseau. {zen.famille === "autre" ? "Choisissez celui dont vous voulez le rapport." : "Cochez ceux que vous voulez configurer : ils auront les mêmes choix."}</p>
       <p style="margin:6px 0 0"><button class="lien" type="button" onclick={() => (zen.coches = toutes ? [] : props.map((b) => b.ip))}>{toutes ? "Tout désélectionner" : "Tout sélectionner"}</button></p>
-      <ul class="liste" aria-label="Mi Box trouvées">
+      <ul class="liste" aria-label="Appareils trouvés">
         {#each props as b (b.ip)}
           <li>
             <label class="ligne">
@@ -98,7 +100,7 @@
 
     {#if formulaire}
       <form class="champ" onsubmit={envoyer} novalidate>
-        <label for="champ-ip">Quelle est l'adresse IP de votre box ?</label>
+        <label for="champ-ip">Quelle est l'adresse IP de votre appareil ?</label>
         <div class="rang">
           <input id="champ-ip" bind:this={champ} bind:value={ip} inputmode="decimal" autocomplete="off" spellcheck="false" placeholder="192.168.1.23"
             aria-invalid={erreurIp ? "true" : undefined} aria-describedby="aide-ip erreur-ip" />
@@ -106,8 +108,8 @@
         </div>
         <p class="msg" id="erreur-ip" role="alert">{erreurIp}</p>
         <p class="petit" id="aide-ip" style="margin-top:0">
-          Sur la box : <span class="chemin">Paramètres &gt; Préférences de l'appareil &gt; À propos &gt; État &gt; Adresse IP</span>. Elle ressemble à 192.168.1.23.
-          Le « débogage USB » doit être activé (Options pour les concepteurs).
+          {#if ficheAppareil}Sur l'appareil : <span class="chemin">{ficheAppareil.adresseIp}</span>.{:else}Dans les réglages réseau de l'appareil.{/if} Elle ressemble à 192.168.1.23.
+          Le « débogage USB » doit être activé{#if ficheAppareil} ({ficheAppareil.debogage}){/if}.
         </p>
       </form>
     {/if}
@@ -115,7 +117,7 @@
       {#if unique && !formulaire}
         <button class="btn primary" type="button" onclick={valider}>C'est elle</button>
       {:else if props.length > 1 && !formulaire}
-        <button class="btn primary" type="button" onclick={valider} disabled={nbCoches === 0}>{nbCoches > 1 ? `Configurer ces ${nbCoches} box` : "Choisir cette box"}</button>
+        <button class="btn primary" type="button" onclick={valider} disabled={nbCoches === 0}>{nbCoches > 1 ? `Configurer ces ${nbCoches} appareils` : "Choisir cet appareil"}</button>
       {/if}
       {#if !formulaire}<button class="btn" type="button" onclick={ouvrirManuel}>Autre adresse</button>{/if}
       {#if !cherche}<button class="lien" type="button" onclick={() => { manuel = false; void zen.chercher(); }}>Relancer la recherche</button>{/if}

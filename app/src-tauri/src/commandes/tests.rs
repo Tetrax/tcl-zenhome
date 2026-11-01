@@ -187,7 +187,8 @@ fn attente_utilisateur_puis_reessayer() {
         }
         enregistre(e);
     });
-    assert_eq!(r.unwrap().modele, "Xiaomi Mi Box 4");
+    let c = r.unwrap();
+    assert_eq!((c.modele.as_str(), c.appareil.as_str()), ("Xiaomi Mi Box 4", "mibox4"));
     assert!(recu.lock().unwrap().iter().any(|e| matches!(e, EvenementUi::AttenteUtilisateur { .. })));
 }
 
@@ -625,7 +626,7 @@ fn ids_de_box_jamais_reutilises() {
     let seconde = c.chercher_box().unwrap();
     assert!(seconde.iter().all(|b| premiere.iter().all(|p| p.id != b.id)), "ids neufs à chaque recherche");
     assert_eq!(code(c.connecter(&Cible::Id { id: premiere[0].id }, &rien)), "choix_invalide", "id périmé");
-    assert_eq!(code(c.connecter(&Cible::Id { id: seconde[1].id + 1 }, &rien)), "choix_invalide", "id inconnu");
+    assert_eq!(code(c.connecter(&Cible::Id { id: seconde[2].id + 1 }, &rien)), "choix_invalide", "id inconnu");
     let connexion = c.connecter(&Cible::Id { id: seconde[1].id }, &rien).unwrap();
     assert_eq!(connexion.nom, seconde[1].nom);
 }
@@ -645,12 +646,12 @@ fn box_memorisee_apres_connexion_reussie_seulement() {
     std::fs::write(d.join("boxes.json"), r#"[{"serie":"A","nom":"Salon","ip":"8.8.8.8"}]"#).unwrap();
     assert!(c.etat_initial().boxes_memorisees.is_empty());
     // connexion manuelle par IP : le nom mémorisé est gardé
-    super::memoire::memoriser(&d, SERIE, "SALON", IP).unwrap();
+    super::memoire::memoriser(&d, SERIE, "SALON", IP, None).unwrap();
     assert_eq!(c.connecter(&Cible::Ip { ip: IP.into() }, &rien).unwrap().nom, "SALON");
     assert_eq!(super::memoire::lire(&d).last().unwrap().nom, "SALON");
     // une autre box sur l'IP mémorisée de A ne reprend pas son nom ; l'entrée de A ne bouge pas
     let d3 = dossier("memoire-autre");
-    super::memoire::memoriser(&d3, SERIE, "SALON", IP).unwrap();
+    super::memoire::memoriser(&d3, SERIE, "SALON", IP, None).unwrap();
     let c3 = Coeur::nouveau(config_deux(d3.clone(), &b, &b));
     c3.chercher_box().ok();
     let nom_b = c3.connecter(&Cible::Ip { ip: IP.into() }, &rien).unwrap().nom;
@@ -731,13 +732,17 @@ fn parcours_demo_a_deux_box() {
     let d = dossier("demo-deux");
     let c = Coeur::nouveau(Config::demo("0.0.0-test".into(), d.clone(), Duration::ZERO));
     c.installer_adb(true, &rien).unwrap();
-    let boxes = c.chercher_box().unwrap();
-    assert_eq!(boxes.iter().map(|b| (b.nom.as_str(), b.ip.as_str())).collect::<Vec<_>>(), [("SALON", "192.168.50.14"), ("CHAMBRE", "192.168.50.15")]);
+    let toutes = c.chercher_box().unwrap();
+    assert_eq!(
+        toutes.iter().map(|b| (b.nom.as_str(), b.ip.as_str(), b.appareil.as_deref())).collect::<Vec<_>>(),
+        [("SALON", "192.168.50.14", Some("mibox4")), ("CHAMBRE", "192.168.50.15", Some("tcl-g08")), ("BUREAU", "192.168.50.16", None)]
+    );
+    let boxes = &toutes[..2];
     let villes = c.chercher_villes("Montpel").unwrap();
 
     // passage 1 sur chaque box, puis passage 2
     let mut applis = vec![];
-    for b in &boxes {
+    for b in boxes {
         c.connecter(&Cible::Id { id: b.id }, &rien).unwrap();
         inventaire(&c);
         c.installer(Some(villes[0].id), None, &rien).unwrap();
@@ -776,4 +781,18 @@ fn parcours_demo_a_deux_box() {
     assert!(origine.is_some_and(|o| o != "15/09/2026 21:00"));
     c.connecter(&Cible::Id { id: boxes[0].id }, &rien).unwrap();
     assert_eq!(c.restaurer(&rien).unwrap().depuis_sauvegarde.as_deref(), Some("15/09/2026 21:00"));
+}
+
+#[test]
+fn demo_appareil_inconnu_refuse_puis_rapport() {
+    let c = Coeur::nouveau(Config::demo("0.0.0-test".into(), dossier("demo-inconnu"), Duration::ZERO));
+    c.installer_adb(true, &rien).unwrap();
+    let boxes = c.chercher_box().unwrap();
+    let (tcl, inconnu) = (&boxes[1], &boxes[2]);
+    assert_eq!(c.connecter(&Cible::Id { id: tcl.id }, &rien).unwrap().appareil, "tcl-g08");
+    assert_eq!(code(c.connecter(&Cible::Id { id: inconnu.id }, &rien)), "autre_modele");
+    let texte = c.rapport_appareil(&Cible::Id { id: inconnu.id }, &rien).unwrap();
+    assert!(texte.starts_with("Zen Home 0.0.0-test") && texte.contains("ro.product.brand : Acme") && texte.contains("ro.build.version.sdk : 31"), "{texte}");
+    assert!(!texte.contains("ZH-DEMO-0003") && !texte.contains("192.168.50.16"));
+    assert_eq!(code(c.rapport_appareil(&Cible::Ip { ip: "8.8.8.8".into() }, &rien)), "injoignable");
 }

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-rapport-appareil"
+description = "Enables the rapport_appareil command without any pre-configured scope."
+commands.allow = ["rapport_appareil"]
+
+[[permission]]
+identifier = "deny-rapport-appareil"
+description = "Denies the rapport_appareil command without any pre-configured scope."
+commands.deny = ["rapport_appareil"]

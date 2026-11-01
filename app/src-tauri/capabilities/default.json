@@ -25,6 +25,7 @@
     "allow-couper-debogage",
     "allow-ouvrir-sauvegardes",
     "allow-rapport-texte",
+    "allow-rapport-appareil",
     "allow-envoyer-rapport",
     "allow-desinstaller-mac"
   ]

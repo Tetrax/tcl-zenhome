@@ -403,6 +403,19 @@ impl Commande {
         Ok(Self::simple(format!("cmd package set-home-activity {composant}")))
     }
 
+    /// Détenteur du rôle HOME (Android 10+).
+    pub fn role_home_detenteur() -> Self {
+        Self::simple("cmd role get-role-holders --user 0 android.app.role.HOME")
+    }
+
+    /// Donne le rôle HOME à un paquet (Android 10+).
+    pub fn role_home_ajouter(paquet: &str) -> Result<Self, ErreurTransport> {
+        if !paquet_valide(paquet) {
+            return refus(format!("paquet invalide : {paquet}"));
+        }
+        Ok(Self::simple(format!("cmd role add-role-holder android.app.role.HOME {paquet}")))
+    }
+
     pub fn pm_disable(paquet: &str) -> Result<Self, ErreurTransport> {
         if !paquet_valide(paquet) {
             return refus(format!("paquet invalide : {paquet}"));
@@ -745,6 +758,7 @@ mod tests {
         assert!(Commande::settings_put(Espace::Global, "k;id", "v").is_err());
         assert!(Commande::set_home_activity("tv.zenhome/.Home$1").is_err());
         assert!(Commande::set_home_activity("tv.zenhome").is_err());
+        assert!(Commande::role_home_ajouter("tv.zenhome; reboot").is_err());
         assert!(Commande::appops_set("tv.zenhome", "get_usage_stats", "allow").is_err());
         assert!(Commande::appops_set("tv.zenhome", "GET_USAGE_STATS", "allow; id").is_err());
         assert!(Commande::broadcast_config(&[]).is_err());
@@ -767,6 +781,11 @@ mod tests {
         assert_eq!(
             Commande::set_home_activity("tv.zenhome/.Home").unwrap().texte(),
             "cmd package set-home-activity tv.zenhome/.Home"
+        );
+        assert_eq!(Commande::role_home_detenteur().texte(), "cmd role get-role-holders --user 0 android.app.role.HOME");
+        assert_eq!(
+            Commande::role_home_ajouter("tv.zenhome").unwrap().texte(),
+            "cmd role add-role-holder android.app.role.HOME tv.zenhome"
         );
         let b = Commande::broadcast_config(&[ArgConfig::Lat("48.86".into()), ArgConfig::Lon("-2.35".into()), ArgConfig::Ville("L'Aigle".into())])
             .unwrap();

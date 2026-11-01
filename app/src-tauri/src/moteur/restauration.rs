@@ -1,15 +1,14 @@
-//! Retour à l'état d'origine : équivalent de `tv/restaurer-tv.sh` pour la Mi Box 4, suivi de la suppression de
+//! Retour à l'état d'origine : équivalent de `tv/restaurer-tv.sh`, suivi de la suppression de
 //! `zenhome_garder` que fait le kit. Un échec n'arrête pas la restauration (comme `adb_essayer`).
 
+use super::appareils::{Appareil, ModeAccueil};
 use super::connexion::Politique;
 use super::installation::PKG;
 use super::origine::{Origine, Reglage};
 use super::session::{Arret, Observateur, Reprise, Session};
 use super::transport::{Commande, Espace, ErreurTransport, OptionPm, Transport, paquet_valide};
-use super::verification::{LAUNCHERX, SPOTIFY};
+use super::verification::SPOTIFY;
 
-pub const ACCUEIL_ORIGINE: &str = "com.google.android.tvlauncher/.MainActivity";
-pub const VEILLE_ORIGINE: &str = "com.google.android.backdrop/.Backdrop";
 /// Réglages globaux du kit, supprimés à la restauration (`zenhome_garder` en dernier, comme le kit).
 const REGLAGES_KIT: [&str; 7] =
     ["zenhome_dock", "zenhome_layout", "zenhome_rev", "zenhome_interval", "zenhome_title_mode", "zenhome_title_b64", "zenhome_garder"];
@@ -48,18 +47,29 @@ fn remettre(s: &mut Session<'_>, espace: Espace, cle: &str, origine: &Reglage, d
 
 /// Fixe l'accueil puis relit celui que la box résout : vrai seulement si le réglage est accepté ET si l'accueil
 /// effectif est bien du paquet visé (jamais Zen Home). Le composant d'une sauvegarde n'est pas fiable.
-fn fixer_accueil(s: &mut Session<'_>, accueil: &str) -> Result<bool, Arret> {
+/// Avec un rôle HOME, il est d'abord rendu à ce paquet (écart volontaire au kit : sinon Zen Home le garderait).
+fn fixer_accueil(s: &mut Session<'_>, app: &Appareil, accueil: &str) -> Result<bool, Arret> {
+    let paquet = accueil.split('/').next().unwrap_or_default();
+    if app.mode_accueil == ModeAccueil::RoleHome && paquet != PKG {
+        s.essayer(&Commande::role_home_ajouter(paquet)?)?;
+    }
     if !s.essayer(&Commande::set_home_activity(accueil)?)? {
         return Ok(false);
     }
     let sortie = s.lire(&Commande::resoudre_accueil())?;
     let resolu = sortie.lines().map(str::trim).rfind(|l| !l.is_empty()).and_then(|l| l.split('/').next()).unwrap_or_default();
-    let paquet = accueil.split('/').next().unwrap_or_default();
     Ok(resolu == paquet && paquet != PKG)
 }
 
 /// `origine` : sauvegarde faite avant Zen Home. Sans elle, restauration générique (tout réactiver, valeurs par défaut).
-pub fn restaurer(t: &dyn Transport, pol: &Politique, obs: &mut dyn Observateur, depuis: &Reprise, origine: Option<&Origine>) -> Result<RapportRestauration, Arret> {
+pub fn restaurer(
+    t: &dyn Transport,
+    app: &Appareil,
+    pol: &Politique,
+    obs: &mut dyn Observateur,
+    depuis: &Reprise,
+    origine: Option<&Origine>,
+) -> Result<RapportRestauration, Arret> {
     let mut s = Session::nouvelle(t, pol, obs, "restauration", 5, depuis);
     let mut reactives = Vec::new();
     let mut incomplete = false;
@@ -80,7 +90,7 @@ pub fn restaurer(t: &dyn Transport, pol: &Politique, obs: &mut dyn Observateur, 
     }
     if s.etape(1, "Écran de veille, animations et Spotify") {
         let inconnu = Reglage::Inconnu;
-        remettre(&mut s, Espace::Secure, "screensaver_components", origine.map_or(&inconnu, |o| &o.veille), Some(VEILLE_ORIGINE))?;
+        remettre(&mut s, Espace::Secure, "screensaver_components", origine.map_or(&inconnu, |o| &o.veille), Some(app.veille))?;
         for (i, (k, defaut)) in [("window_animation_scale", Some("1.0")), ("transition_animation_scale", Some("1.0")), ("animator_duration_scale", None)].into_iter().enumerate() {
             remettre(&mut s, Espace::Global, k, origine.map_or(&inconnu, |o| &o.animations[i]), defaut)?;
         }
@@ -94,14 +104,14 @@ pub fn restaurer(t: &dyn Transport, pol: &Politique, obs: &mut dyn Observateur, 
         let mut accueil = origine
             .and_then(|o| o.accueil.as_deref())
             .filter(|a| installes.as_ref().is_some_and(|l| l.iter().any(|p| a.split('/').next() == Some(p))))
-            .unwrap_or(ACCUEIL_ORIGINE);
-        let mut effectif = fixer_accueil(&mut s, accueil)?;
-        if !effectif && accueil != ACCUEIL_ORIGINE {
+            .unwrap_or(app.accueil);
+        let mut effectif = fixer_accueil(&mut s, app, accueil)?;
+        if !effectif && accueil != app.accueil {
             // accueil de la sauvegarde refusé ou non effectif : celui du kit
-            accueil = ACCUEIL_ORIGINE;
-            effectif = fixer_accueil(&mut s, accueil)?;
+            accueil = app.accueil;
+            effectif = fixer_accueil(&mut s, app, accueil)?;
         }
-        let launcher = accueil.split('/').next().unwrap_or(LAUNCHERX);
+        let launcher = accueil.split('/').next().unwrap_or(app.launcher());
         // Zen Home n'est désinstallé que si l'accueil d'origine est PRÉSENT et ACTIF : lectures relues, sinon on le garde.
         let desactives = s.lire(&Commande::pm_list(&[OptionPm::Desactives]))?;
         if installes.as_ref().is_some_and(|l| !l.iter().any(|p| p == PKG)) {
@@ -160,6 +170,7 @@ fn noms_valides(sortie: &str) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::moteur::appareils::{MIBOX4, TCL_G08};
     use crate::moteur::fake_box::FakeBox;
     use crate::moteur::origine::tests::{TOUS, dossier_temp, sauvegarde};
     use crate::moteur::origine::origine;
@@ -187,13 +198,13 @@ mod tests {
     #[test]
     fn restauration_complete() {
         let f = installee();
-        let r = restaurer(&f, &Politique::default(), &mut Silencieux, &Reprise::default(), None).unwrap();
+        let r = restaurer(&f, &MIBOX4, &Politique::default(), &mut Silencieux, &Reprise::default(), None).unwrap();
         let e = f.instantane();
         assert_eq!(r.reactives.len(), 3);
         assert!(e.paquets.values().all(|p| !p.desactive));
         assert!(!e.paquets.contains_key(PKG));
-        assert_eq!(e.secure["screensaver_components"], VEILLE_ORIGINE);
-        assert_eq!(e.accueil_prefere.as_deref(), Some(ACCUEIL_ORIGINE));
+        assert_eq!(e.secure["screensaver_components"], MIBOX4.veille);
+        assert_eq!(e.accueil_prefere.as_deref(), Some(MIBOX4.accueil));
         assert_eq!(e.secure["enabled_accessibility_services"], "com.autre/.Service", "les autres services sont conservés");
         assert_eq!(e.secure["accessibility_enabled"], "1");
         assert!(e.global.keys().all(|k| !k.starts_with("zenhome_")));
@@ -209,7 +220,7 @@ mod tests {
         f.modifier(|e| {
             e.secure.insert("enabled_accessibility_services".into(), "tv.zenhome/tv.zenhome.KeyService".into());
         });
-        restaurer(&f, &Politique::default(), &mut Silencieux, &Reprise::default(), None).unwrap();
+        restaurer(&f, &MIBOX4, &Politique::default(), &mut Silencieux, &Reprise::default(), None).unwrap();
         let e = f.instantane();
         assert!(!e.secure.contains_key("enabled_accessibility_services"));
         assert_eq!(e.secure["accessibility_enabled"], "0");
@@ -222,7 +233,7 @@ mod tests {
     fn coupure_puis_reprise_ne_desinstalle_pas_deux_fois() {
         let f = installee();
         f.perdre_reponse_desinstallation(1);
-        let r = restaurer(&f, &Politique::default(), &mut Silencieux, &Reprise::default(), None).unwrap();
+        let r = restaurer(&f, &MIBOX4, &Politique::default(), &mut Silencieux, &Reprise::default(), None).unwrap();
         assert_eq!(f.journal().iter().filter(|l| l.starts_with("uninstall:")).count(), 1);
         assert!(r.avertissements.is_empty(), "{:?}", r.avertissements);
         assert!(!f.instantane().paquets.contains_key(PKG));
@@ -233,7 +244,7 @@ mod tests {
         let f = installee();
         // la lecture des applis désactivées (étape 0) revient vide : rien n'est réactivé, l'accueil d'origine reste éteint
         f.lectures_vides(1);
-        let r = restaurer(&f, &Politique::default(), &mut Silencieux, &Reprise::default(), None).unwrap();
+        let r = restaurer(&f, &MIBOX4, &Politique::default(), &mut Silencieux, &Reprise::default(), None).unwrap();
         assert!(f.journal().iter().all(|l| !l.starts_with("uninstall:")), "{:?}", f.journal());
         assert!(f.instantane().paquets.contains_key(PKG));
         assert!(r.avertissements.iter().any(|a| a.contains("Zen Home") && a.contains("conservé")), "{:?}", r.avertissements);
@@ -247,7 +258,7 @@ mod tests {
         f.modifier(|e| {
             e.paquets.remove("com.google.android.tvlauncher");
         });
-        let r = restaurer(&f, &Politique::default(), &mut Silencieux, &Reprise::default(), None).unwrap();
+        let r = restaurer(&f, &MIBOX4, &Politique::default(), &mut Silencieux, &Reprise::default(), None).unwrap();
         assert!(r.avertissements.iter().any(|a| a.contains("set-home-activity")), "{:?}", r.avertissements);
         // accueil d'origine absent : Zen Home est conservé (la box resterait sans accueil)
         assert!(f.instantane().paquets.contains_key(PKG));
@@ -285,7 +296,7 @@ mod tests {
             avec_accueil_mitv(e);
             e.paquets.get_mut("com.google.android.tvlauncher").unwrap().desactive = true;
         });
-        let r = restaurer(&f, &Politique::default(), &mut Silencieux, &Reprise::default(), Some(&o)).unwrap();
+        let r = restaurer(&f, &MIBOX4, &Politique::default(), &mut Silencieux, &Reprise::default(), Some(&o)).unwrap();
         let e = f.instantane();
         assert_eq!(r.reactives.len(), 1, "{:?}", r.reactives);
         assert!(e.paquets["tv.alphonso.alphonso_eula"].desactive, "désactivée avant Zen Home : elle le reste");
@@ -306,8 +317,8 @@ mod tests {
     fn accueil_d_origine_absent_de_la_box_ou_desactive_garde_celui_du_kit() {
         let f = installee();
         let o = origine_de(&[("paquets-desactives.txt", ""), ("accueil.txt", "com.absent.home/.Main\n")]).unwrap();
-        restaurer(&f, &Politique::default(), &mut Silencieux, &Reprise::default(), Some(&o)).unwrap();
-        assert_eq!(f.instantane().accueil_prefere.as_deref(), Some(ACCUEIL_ORIGINE));
+        restaurer(&f, &MIBOX4, &Politique::default(), &mut Silencieux, &Reprise::default(), Some(&o)).unwrap();
+        assert_eq!(f.instantane().accueil_prefere.as_deref(), Some(MIBOX4.accueil));
         // accueil d'origine désactivé dans la sauvegarde : jamais retenu
         let o = origine_de(&[("paquets-desactives.txt", "package:com.android.tv.settings\n"), ("accueil.txt", "com.android.tv.settings/.Main\n")]).unwrap();
         assert_eq!(o.accueil, None);
@@ -323,7 +334,7 @@ mod tests {
         });
         // l'accueil d'origine reste éteint (lecture des désactivées vide) : l'accueil effectif n'est pas le sien, Zen Home est conservé
         f.lectures_vides(1);
-        let r = restaurer(&f, &Politique::default(), &mut Silencieux, &Reprise::default(), Some(&o)).unwrap();
+        let r = restaurer(&f, &MIBOX4, &Politique::default(), &mut Silencieux, &Reprise::default(), Some(&o)).unwrap();
         assert!(r.incomplete && f.instantane().paquets.contains_key(PKG), "{:?}", r.avertissements);
         assert!(r.avertissements.iter().any(|a| a.contains("conservé")), "{:?}", r.avertissements);
     }
@@ -333,9 +344,9 @@ mod tests {
         let f = installee();
         let o = origine_de(&[("paquets-desactives.txt", ""), ("accueil.txt", "com.android.tv.settings/.MainActivity\n")]).unwrap();
         assert_eq!(o.accueil.as_deref(), Some("com.android.tv.settings/.MainActivity"), "valide en forme, refusé par la box");
-        let r = restaurer(&f, &Politique::default(), &mut Silencieux, &Reprise::default(), Some(&o)).unwrap();
+        let r = restaurer(&f, &MIBOX4, &Politique::default(), &mut Silencieux, &Reprise::default(), Some(&o)).unwrap();
         let e = f.instantane();
-        assert_eq!(e.accueil_prefere.as_deref(), Some(ACCUEIL_ORIGINE));
+        assert_eq!(e.accueil_prefere.as_deref(), Some(MIBOX4.accueil));
         assert!(!e.paquets.contains_key(PKG), "retombé sur l'accueil du kit, actif : Zen Home désinstallé");
         assert!(r.avertissements.iter().any(|a| a.contains("set-home-activity")), "{:?}", r.avertissements);
         assert!(!r.incomplete);
@@ -349,7 +360,7 @@ mod tests {
             e.paquets.remove("com.google.android.tvlauncher");
         });
         let o = origine_de(&[("paquets-desactives.txt", ""), ("accueil.txt", "com.android.tv.settings/.MainActivity\n")]).unwrap();
-        let r = restaurer(&f, &Politique::default(), &mut Silencieux, &Reprise::default(), Some(&o)).unwrap();
+        let r = restaurer(&f, &MIBOX4, &Politique::default(), &mut Silencieux, &Reprise::default(), Some(&o)).unwrap();
         assert!(r.incomplete && f.instantane().paquets.contains_key(PKG));
     }
 
@@ -367,12 +378,84 @@ mod tests {
         ])
         .unwrap();
         let f = installee();
-        let r = restaurer(&f, &Politique::default(), &mut Silencieux, &Reprise::default(), Some(&o)).unwrap();
+        let r = restaurer(&f, &MIBOX4, &Politique::default(), &mut Silencieux, &Reprise::default(), Some(&o)).unwrap();
         let e = f.instantane();
-        assert_eq!(e.secure["screensaver_components"], VEILLE_ORIGINE);
+        assert_eq!(e.secure["screensaver_components"], MIBOX4.veille);
         assert_eq!(e.global["window_animation_scale"], "1.0");
         assert!(!e.global.contains_key("animator_duration_scale"));
-        assert_eq!(e.accueil_prefere.as_deref(), Some(ACCUEIL_ORIGINE));
+        assert_eq!(e.accueil_prefere.as_deref(), Some(MIBOX4.accueil));
         assert!(r.avertissements.is_empty() && !r.incomplete, "{:?}", r.avertissements);
+    }
+
+    fn installee_tcl() -> FakeBox {
+        let f = FakeBox::tcl_g08();
+        f.connecter().unwrap();
+        f.install(std::path::Path::new("ZenHome.apk")).unwrap();
+        f.modifier(|e| {
+            for p in ["com.google.android.apps.tv.launcherx", "com.google.android.tungsten.setupwraith", "com.tcl.logkit"] {
+                e.paquets.get_mut(p).unwrap().desactive = true;
+            }
+            e.accueil_prefere = Some("tv.zenhome/.Home".into());
+            e.role_home = Some(PKG.into());
+            e.secure.insert("screensaver_components".into(), "tv.zenhome/tv.zenhome.ZenDream".into());
+        });
+        f
+    }
+
+    #[test]
+    fn tcl_la_restauration_rend_le_role_home_avant_set_home_activity() {
+        let f = installee_tcl();
+        let r = restaurer(&f, &TCL_G08, &Politique::default(), &mut Silencieux, &Reprise::default(), None).unwrap();
+        let e = f.instantane();
+        assert!(r.avertissements.is_empty() && !r.incomplete, "{:?}", r.avertissements);
+        assert_eq!(e.role_home.as_deref(), Some(TCL_G08.launcher()));
+        assert_eq!(e.accueil_prefere.as_deref(), Some(TCL_G08.accueil));
+        assert_eq!(e.secure["screensaver_components"], TCL_G08.veille);
+        assert!(!e.paquets.contains_key(PKG) && e.paquets.values().all(|p| !p.desactive));
+        let j = f.journal();
+        let place = |m: &str| j.iter().position(|l| l == m).unwrap_or_else(|| panic!("{m}"));
+        assert!(
+            place(&format!("shell: cmd role add-role-holder android.app.role.HOME {}", TCL_G08.launcher()))
+                < place(&format!("shell: cmd package set-home-activity {}", TCL_G08.accueil))
+        );
+    }
+
+    #[test]
+    fn tcl_zen_home_est_garde_si_l_accueil_d_origine_reste_inactif() {
+        let f = installee_tcl();
+        // la lecture des applis désactivées (étape 0) revient vide : rien n'est réactivé, l'accueil d'origine reste éteint
+        f.lectures_vides(1);
+        let r = restaurer(&f, &TCL_G08, &Politique::default(), &mut Silencieux, &Reprise::default(), None).unwrap();
+        assert!(r.incomplete && f.instantane().paquets.contains_key(PKG), "{:?}", r.avertissements);
+        assert!(f.journal().iter().all(|l| !l.starts_with("uninstall:")));
+    }
+
+    #[test]
+    fn tcl_cycle_installer_appliquer_verifier_restaurer() {
+        use crate::moteur::choix::{Choix, appliquer};
+        use crate::moteur::installation::{Parametres, installer};
+        use crate::moteur::inventaire::inventaire;
+        use crate::moteur::verification::verifier;
+        let f = FakeBox::tcl_g08();
+        f.connecter().unwrap();
+        let (pol, apk) = (Politique::default(), std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml"));
+        let p = Parametres { apk: apk.clone(), lat: None, lon: None, ville: None, jeton: None };
+        installer(&f, &TCL_G08, &pol, &mut Silencieux, &p, &Reprise::default()).unwrap();
+        let d = dossier_temp("tcl-cycle");
+        let inv = inventaire(&f, &d.join("sauvegarde"), "2026-10-31 10:00").unwrap();
+        let choix = Choix { garder: vec!["com.tcl.usercenter".into()], desactiver: vec!["com.tcl.logkit".into()], desinstaller: vec!["fr.tf1.mytf1".into()] };
+        appliquer(&f, &TCL_G08, &pol, &mut Silencieux, &inv, &choix, &Reprise::default()).unwrap();
+        let v = verifier(&f, &TCL_G08, &pol, &mut Silencieux, true, Some(&apk), &Reprise::default()).unwrap();
+        assert!(v.ok, "{}", v.final_().tableau());
+        let e = f.instantane();
+        assert_eq!(e.role_home.as_deref(), Some(PKG));
+        assert!(!e.paquets["com.tcl.usercenter"].desactive && e.paquets["com.tcl.logkit"].desactive);
+        assert!(e.paquets[TCL_G08.launcher()].desactive && !e.paquets.contains_key("fr.tf1.mytf1"));
+        let r = restaurer(&f, &TCL_G08, &pol, &mut Silencieux, &Reprise::default(), None).unwrap();
+        assert!(!r.incomplete && r.avertissements.is_empty(), "{:?}", r.avertissements);
+        let e = f.instantane();
+        assert_eq!(e.role_home.as_deref(), Some(TCL_G08.launcher()));
+        assert!(!e.paquets.contains_key(PKG) && e.paquets.values().all(|p| !p.desactive));
+        let _ = std::fs::remove_dir_all(d);
     }
 }

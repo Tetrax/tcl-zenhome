@@ -1,6 +1,7 @@
 // État global et déroulé du parcours. L'interface n'envoie que des intentions au cœur (voir api.ts).
 import { api, normaliserErreur } from "./api";
 import { fusionner, reduire } from "./lot";
+import type { Famille } from "./appareils";
 import { choixDuProfil, desactiverParDefaut, type Profil } from "./profils";
 import type { Moment } from "../scene";
 import type {
@@ -10,7 +11,7 @@ import type {
 
 export type Mode = "installer" | "reparer" | "restaurer";
 export type Ecran =
-  | "accueil" | "adb" | "recherche" | "connexion" | "etat" | "resume" | "meteo" | "films"
+  | "accueil" | "adb" | "appareil" | "recherche" | "rapport_appareil" | "connexion" | "etat" | "resume" | "meteo" | "films"
   | "installation" | "profil" | "systeme" | "utilisateur" | "recap" | "application" | "reparation"
   | "confirm_restauration" | "restauration" | "fin_restauration" | "resultat" | "adieu" | "lot" | "recap_lot";
 
@@ -27,11 +28,11 @@ export interface BoxLot {
 }
 
 /** Une box proposée dans la recherche : trouvée (avec `id`) ou seulement mémorisée (connexion par son adresse). */
-export interface Proposition { id?: number; nom: string; ip: string; recente: boolean }
+export interface Proposition { id?: number; nom: string; ip: string; recente: boolean; libelle?: string }
 
 /** Moment de la journée affiché derrière chaque écran. */
 export const MOMENT: Record<Ecran, Moment> = {
-  accueil: "aube", adb: "matin", recherche: "matin", connexion: "jour", etat: "jour", resume: "jour",
+  accueil: "aube", adb: "matin", appareil: "matin", recherche: "matin", rapport_appareil: "jour", connexion: "jour", etat: "jour", resume: "jour",
   meteo: "doree", films: "doree", installation: "doree", profil: "doree", systeme: "doree", utilisateur: "doree", recap: "doree",
   application: "doree", reparation: "doree", confirm_restauration: "doree", restauration: "doree",
   fin_restauration: "aube", resultat: "nuit", adieu: "nuit", lot: "doree", recap_lot: "nuit",
@@ -41,7 +42,7 @@ export const ECRANS_TRAVAIL: Ecran[] = ["application", "reparation", "restaurati
 
 export const ETAPES = ["Accueil", "Box", "Préparation", "Vos choix", "Installation", "Terminé"] as const;
 export const ETAPE_DE: Record<Ecran, number> = {
-  accueil: 0, adb: 0, recherche: 1, connexion: 1, etat: 2, resume: 2, meteo: 2, films: 2, installation: 2,
+  accueil: 0, adb: 0, appareil: 1, recherche: 1, rapport_appareil: 1, connexion: 1, etat: 2, resume: 2, meteo: 2, films: 2, installation: 2,
   profil: 3, systeme: 3, utilisateur: 3, recap: 3, application: 4, reparation: 4, confirm_restauration: 4, restauration: 4,
   fin_restauration: 5, resultat: 5, adieu: 5, lot: 4, recap_lot: 5,
 };
@@ -53,6 +54,11 @@ class Zen {
   init = $state<EtatInitial | null>(null);
   ecran = $state<Ecran>("accueil");
   mode = $state<Mode>("installer");
+
+  /** Appareil choisi à l'écran « Quel appareil ? » : ne sert qu'aux consignes (le cœur vérifie le modèle à la connexion). */
+  famille = $state<Famille>("mibox");
+  /** Rapport d'appareil lu par le cœur (texte complet à copier ou envoyer). */
+  texteRapportAppareil = $state("");
 
   // Recherche et connexion
   rechercheEnCours = $state(false);
@@ -138,8 +144,9 @@ class Zen {
     this.mode = mode;
     this.box = null; this.cible = null; this.boxes = []; this.rechercheFaite = false; this.forcerManuel = false;
     this.lot = null; this.coches = [];
-    this.aller(this.init && !this.init.adb_installe ? "adb" : "recherche");
+    this.aller(this.init && !this.init.adb_installe ? "adb" : "appareil");
   }
+  choisirAppareil(f: Famille) { this.famille = f; this.aller("recherche"); }
   retourAccueil() {
     if (this.travail.actif || this.rechercheEnCours) void api.annuler().catch(() => {});
     this.lot = null; // la boucle du lot en cours s'arrête d'elle-même
@@ -167,7 +174,7 @@ class Zen {
       await api.installerAdb(true, this.sur);
       if (this.init) this.init.adb_installe = true;
       this.fin();
-      this.aller("recherche");
+      this.aller("appareil");
     } catch (e) { this.echec(e, () => void this.installerAdb()); }
   }
 
@@ -215,6 +222,7 @@ class Zen {
 
   // ---- Connexion ----
   async connecter(cible: Cible) {
+    if (this.famille === "autre") return this.rapportAppareil(cible); // « Autre appareil » : on ne configure rien, on lit seulement
     this.lot = null; this.cible = cible; this.box = null;
     this.aller("connexion");
     this.debut("Connexion à la box");
@@ -232,6 +240,19 @@ class Zen {
         this.aller("confirm_restauration");
       }
     } catch (e) { this.echec(e, () => void this.connecter(cible)); }
+  }
+
+  /** Rapport d'appareil (lectures seulement, sans contrôle du modèle) : pour « Autre appareil » ou après `autre_modele`. */
+  async rapportAppareil(cible: Cible) {
+    this.lot = null; this.cible = cible; this.texteRapportAppareil = "";
+    this.aller("rapport_appareil");
+    this.debut("Lecture de l'appareil");
+    try {
+      await this.attendreRecherche();
+      if (!this.travail.actif) return; // retour à l'accueil pendant l'attente
+      this.texteRapportAppareil = await api.rapportAppareil(cible, this.sur);
+      this.fin(); this.succes++;
+    } catch (e) { this.echec(e, () => void this.rapportAppareil(cible)); }
   }
 
   // ---- État des lieux ----
@@ -357,7 +378,7 @@ class Zen {
     const choisies = this.propositions.filter((p) => ips.includes(p.ip));
     const cible = (p: Proposition): Cible => (p.id === undefined ? { ip: p.ip } : { id: p.id });
     if (!choisies.length) return;
-    if (choisies.length < 2) return void this.connecter(cible(choisies[0]));
+    if (choisies.length < 2 || this.famille === "autre") return void this.connecter(cible(choisies[0]));
     this.lot = choisies.map((p) => ({ cible: cible(p), nom: p.nom, ip: p.ip, message: "", etat: "attente" as const }));
     this.lotPasse = 0;
     await this.attendreRecherche();
