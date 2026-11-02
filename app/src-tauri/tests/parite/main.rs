@@ -35,7 +35,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicU32, Ordering};
 
-use zen_home_lib::moteur::appareils::MIBOX4;
+use zen_home_lib::moteur::appareils::{Appareil, MIBOX4};
 use zen_home_lib::moteur::connexion::Politique;
 use zen_home_lib::moteur::fake_box::{EtatBox, FakeBox, PaquetFake, WifiFake};
 use zen_home_lib::moteur::installation::{Parametres, installer};
@@ -330,10 +330,10 @@ fn parite(s: Scenario) {
     let ok_rust = match &s.action {
         Action::Installer { params } => {
             let p = Parametres { apk: apk.clone(), lat: params.lat.clone(), lon: params.lon.clone(), ville: params.ville.clone(), jeton: params.jeton.clone() };
-            installer(&f, &MIBOX4, &pol, &mut Silencieux, &p, &Reprise::default()).map(|_| true).unwrap_or(false)
+            installer(&f, &Appareil::depuis(&MIBOX4), &pol, &mut Silencieux, &p, &Reprise::default()).map(|_| true).unwrap_or(false)
         }
-        Action::Reparer => verifier(&f, &MIBOX4, &pol, &mut Silencieux, true, Some(&apk), &Reprise::default()).expect("vérification").ok,
-        Action::Restaurer => restaurer(&f, &MIBOX4, &pol, &mut Silencieux, &Reprise::default(), None).map(|_| true).unwrap_or(false),
+        Action::Reparer => verifier(&f, &Appareil::depuis(&MIBOX4), &pol, &mut Silencieux, true, Some(&apk), &Reprise::default()).expect("vérification").ok,
+        Action::Restaurer => restaurer(&f, &Appareil::depuis(&MIBOX4), &pol, &mut Silencieux, &Reprise::default(), None).map(|_| true).unwrap_or(false),
     };
     let mut rust = suite_rust(&f);
 

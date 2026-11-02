@@ -234,7 +234,7 @@ pub fn rapport_application(r: &RapportChoix) -> RapportApplication {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::moteur::appareils::{MIBOX4, TCL_G08};
+    use crate::moteur::appareils::{Appareil, MIBOX4, TCL_G08};
     use crate::moteur::fake_box::FakeBox;
     use crate::moteur::inventaire::{AppUtilisateur, inventaire};
     use crate::moteur::transport::Transport;
@@ -242,14 +242,14 @@ mod tests {
     #[test]
     fn aucun_paquet_protege_n_est_propose_a_la_desinstallation() {
         for (f, app, proteges) in [
-            (FakeBox::tcl_g08(), &TCL_G08, &["com.tcl.tv", "com.tcl.micmanager", "com.tcl.framework.custom", "com.tcl.suspension"][..]),
-            (FakeBox::mibox4(), &MIBOX4, &["com.google.android.tvlauncher"][..]),
+            (FakeBox::tcl_g08(), Appareil::depuis(&TCL_G08), &["com.tcl.tv", "com.tcl.micmanager", "com.tcl.framework.custom", "com.tcl.suspension"][..]),
+            (FakeBox::mibox4(), Appareil::depuis(&MIBOX4), &["com.google.android.tvlauncher"][..]),
         ] {
             f.connecter().unwrap();
             let d = std::env::temp_dir().join(format!("zenhome-types-{}-{}", app.id, std::process::id()));
             let mut inv = inventaire(&f, &d.join("sauvegarde"), "2026-10-31 10:00").unwrap();
             inv.applis.extend(proteges.iter().map(|p| AppUtilisateur { paquet: (*p).into(), octets: None, derniere_utilisation: None }));
-            let ui = inventaire_ui(app, &inv, &HashMap::new());
+            let ui = inventaire_ui(&app, &inv, &HashMap::new());
             assert!(!ui.applis_utilisateur.is_empty());
             assert!(ui.applis_utilisateur.iter().all(|a| !proteges.contains(&a.paquet.as_str())), "{}", app.id);
             let _ = std::fs::remove_dir_all(d);

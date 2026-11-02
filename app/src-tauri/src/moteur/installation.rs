@@ -185,7 +185,7 @@ pub fn installer(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::moteur::appareils::{MIBOX4, TCL_G08};
+    use crate::moteur::appareils::{Appareil, MIBOX4, TCL_G08};
     use crate::moteur::fake_box::FakeBox;
     use crate::moteur::session::{Evenement, Silencieux};
     use crate::moteur::transport::Transport;
@@ -207,7 +207,7 @@ mod tests {
     #[test]
     fn installation_a_neuf() {
         let f = connectee();
-        let r = installer(&f, &MIBOX4, &Politique::default(), &mut Silencieux, &params(), &Reprise::default()).unwrap();
+        let r = installer(&f, &Appareil::depuis(&MIBOX4), &Politique::default(), &mut Silencieux, &params(), &Reprise::default()).unwrap();
         let e = f.instantane();
         assert!(e.paquets.contains_key(PKG));
         assert_eq!(e.accueil_prefere.as_deref(), Some(ACCUEIL_ZEN));
@@ -224,7 +224,7 @@ mod tests {
         let f = connectee();
         let mut p = params();
         p.jeton = Some("SECRET.jeton-123".into());
-        installer(&f, &MIBOX4, &Politique::default(), &mut Silencieux, &p, &Reprise::default()).unwrap();
+        installer(&f, &Appareil::depuis(&MIBOX4), &Politique::default(), &mut Silencieux, &p, &Reprise::default()).unwrap();
         let journal = f.journal().join("\n");
         assert!(!journal.contains("SECRET"), "{journal}");
         assert!(journal.contains("stdin: am broadcast -a tv.zenhome.CONFIG -n tv.zenhome/.ConfigReceiver --es tmdb_token ***"));
@@ -239,12 +239,12 @@ mod tests {
         let f = connectee();
         let mut p = params();
         p.lat = Some("48.8; reboot".into());
-        let r = installer(&f, &MIBOX4, &Politique::default(), &mut Silencieux, &p, &Reprise::default());
+        let r = installer(&f, &Appareil::depuis(&MIBOX4), &Politique::default(), &mut Silencieux, &p, &Reprise::default());
         assert!(matches!(r, Err(Arret::Echec(ErreurAction::Transport(ErreurTransport::Refusee(_))))));
         assert!(f.journal().iter().all(|l| l == "connect"), "{:?}", f.journal());
         p.lat = Some("48.86".into());
         p.jeton = Some("a b'c".into());
-        assert!(installer(&f, &MIBOX4, &Politique::default(), &mut Silencieux, &p, &Reprise::default()).is_err());
+        assert!(installer(&f, &Appareil::depuis(&MIBOX4), &Politique::default(), &mut Silencieux, &p, &Reprise::default()).is_err());
         assert_eq!(f.journal(), ["connect"]);
     }
 
@@ -254,13 +254,13 @@ mod tests {
         let mut p = params();
         p.apk = PathBuf::from("/inexistant/ZenHome.apk");
         assert!(matches!(
-            installer(&f, &MIBOX4, &Politique::default(), &mut Silencieux, &p, &Reprise::default()),
+            installer(&f, &Appareil::depuis(&MIBOX4), &Politique::default(), &mut Silencieux, &p, &Reprise::default()),
             Err(Arret::Echec(ErreurAction::ApkAbsent(_)))
         ));
         f.install(&apk()).unwrap();
         f.signature_incompatible(true);
         assert_eq!(
-            installer(&f, &MIBOX4, &Politique::default(), &mut Silencieux, &params(), &Reprise::default()),
+            installer(&f, &Appareil::depuis(&MIBOX4), &Politique::default(), &mut Silencieux, &params(), &Reprise::default()),
             Err(Arret::Echec(ErreurAction::SignatureIncompatible))
         );
         assert!(!f.journal().iter().any(|l| l.starts_with("uninstall")), "rien n'est désinstallé automatiquement");
@@ -272,7 +272,7 @@ mod tests {
         f.modifier(|e| {
             e.secure.insert("enabled_accessibility_services".into(), KEYSVC_FULL.into());
         });
-        installer(&f, &MIBOX4, &Politique::default(), &mut Silencieux, &params(), &Reprise::default()).unwrap();
+        installer(&f, &Appareil::depuis(&MIBOX4), &Politique::default(), &mut Silencieux, &params(), &Reprise::default()).unwrap();
         let put: Vec<String> =
             f.journal().into_iter().filter(|l| l.contains("enabled_accessibility_services") && l.contains("put")).collect();
         assert_eq!(
@@ -293,7 +293,7 @@ mod tests {
         let f = connectee();
         // 1 commande passe (le getprop SDK ou la configuration), la suivante est coupée une fois
         f.couper_apres(3, 1);
-        installer(&f, &MIBOX4, &Politique::default(), &mut Silencieux, &params(), &Reprise::default()).unwrap();
+        installer(&f, &Appareil::depuis(&MIBOX4), &Politique::default(), &mut Silencieux, &params(), &Reprise::default()).unwrap();
         let journal = f.journal();
         assert_eq!(journal.iter().filter(|l| l.starts_with("install:")).count(), 1, "pas de réinstallation");
         assert_eq!(f.instantane().secure["enabled_accessibility_services"], KEYSVC_FULL);
@@ -312,12 +312,12 @@ mod tests {
     #[test]
     fn pause_puis_reprise_a_l_etape_interrompue() {
         let f = connectee();
-        let r = installer(&f, &MIBOX4, &Politique::default(), &mut Coupeur(&f, 3), &params(), &Reprise::default());
+        let r = installer(&f, &Appareil::depuis(&MIBOX4), &Politique::default(), &mut Coupeur(&f, 3), &params(), &Reprise::default());
         let Err(Arret::EnPause(pause)) = r else { panic!("attendu : pause, obtenu {r:?}") };
         assert_eq!((pause.action.as_str(), pause.etape.as_str(), pause.reprise.etape), ("installation", "Permissions", 2));
         assert_eq!(f.journal().iter().filter(|l| l.starts_with("install:")).count(), 1);
         f.perdre_lien(0);
-        installer(&f, &MIBOX4, &Politique::default(), &mut Silencieux, &params(), &pause.reprise).unwrap();
+        installer(&f, &Appareil::depuis(&MIBOX4), &Politique::default(), &mut Silencieux, &params(), &pause.reprise).unwrap();
         assert_eq!(f.journal().iter().filter(|l| l.starts_with("install:")).count(), 1, "l'étape 0 n'est pas rejouée");
         assert_eq!(f.instantane().accueil_prefere.as_deref(), Some(ACCUEIL_ZEN));
     }
@@ -343,7 +343,7 @@ mod tests {
         f.couper_apres(2, 1);
         let mut p = params();
         p.jeton = Some("SECRET.jeton-123".into());
-        let e = installer(&f, &MIBOX4, &Politique::default(), &mut Echange(&f, None), &p, &Reprise::default()).unwrap_err();
+        let e = installer(&f, &Appareil::depuis(&MIBOX4), &Politique::default(), &mut Echange(&f, None), &p, &Reprise::default()).unwrap_err();
         assert!(e.to_string().contains("plus la même box"), "{e}");
         assert!(f.journal().iter().all(|l| !l.contains("tmdb_token")), "{:?}", f.journal());
     }
@@ -354,13 +354,13 @@ mod tests {
         let mut p = params();
         p.jeton = Some("SECRET.jeton-123".into());
         // la box est remplacée au début de l'étape « Configuration » : la position part encore, pas le jeton
-        let e = installer(&f, &MIBOX4, &Politique::default(), &mut Echange(&f, Some(2)), &p, &Reprise::default()).unwrap_err();
+        let e = installer(&f, &Appareil::depuis(&MIBOX4), &Politique::default(), &mut Echange(&f, Some(2)), &p, &Reprise::default()).unwrap_err();
         assert!(e.to_string().contains("plus la même box"), "{e}");
         assert!(f.journal().iter().all(|l| !l.contains("tmdb_token")), "{:?}", f.journal());
         // numéro de série illisible (réponses vides) : rien n'est envoyé non plus, APK compris
         let g = connectee();
         g.serie_illisible(true);
-        let e = installer(&g, &MIBOX4, &Politique::default(), &mut Silencieux, &p, &Reprise::default()).unwrap_err();
+        let e = installer(&g, &Appareil::depuis(&MIBOX4), &Politique::default(), &mut Silencieux, &p, &Reprise::default()).unwrap_err();
         assert!(e.to_string().contains("plus la même box"), "{e}");
         assert!(g.journal().iter().all(|l| !l.starts_with("install:") && !l.contains("tmdb_token")), "{:?}", g.journal());
     }
@@ -370,7 +370,7 @@ mod tests {
         for (sdk, media, ext) in [("33", true, false), ("32", false, true), ("28", false, true), ("", false, false)] {
             let f = connectee();
             f.modifier(|e| e.sdk = sdk.into());
-            installer(&f, &MIBOX4, &Politique::default(), &mut Silencieux, &params(), &Reprise::default()).unwrap();
+            installer(&f, &Appareil::depuis(&MIBOX4), &Politique::default(), &mut Silencieux, &params(), &Reprise::default()).unwrap();
             let j = f.journal().join("\n");
             assert_eq!(j.contains("READ_MEDIA_IMAGES"), media, "sdk {sdk}");
             assert_eq!(j.contains("READ_EXTERNAL_STORAGE"), ext, "sdk {sdk}");
@@ -381,7 +381,7 @@ mod tests {
     fn installation_sur_la_tcl_donne_le_role_home_puis_l_accueil_prefere() {
         let f = FakeBox::tcl_g08();
         f.connecter().unwrap();
-        installer(&f, &TCL_G08, &Politique::default(), &mut Silencieux, &params(), &Reprise::default()).unwrap();
+        installer(&f, &Appareil::depuis(&TCL_G08), &Politique::default(), &mut Silencieux, &params(), &Reprise::default()).unwrap();
         let e = f.instantane();
         assert_eq!(e.role_home.as_deref(), Some(PKG));
         assert_eq!(e.accueil_prefere.as_deref(), Some(ACCUEIL_ZEN));
@@ -395,7 +395,7 @@ mod tests {
     #[test]
     fn la_mibox_n_a_pas_de_commande_de_role() {
         let f = connectee();
-        installer(&f, &MIBOX4, &Politique::default(), &mut Silencieux, &params(), &Reprise::default()).unwrap();
+        installer(&f, &Appareil::depuis(&MIBOX4), &Politique::default(), &mut Silencieux, &params(), &Reprise::default()).unwrap();
         assert!(f.journal().iter().all(|l| !l.contains("cmd role")));
     }
 }

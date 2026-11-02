@@ -2,7 +2,8 @@
 //! la recherche sonde d'abord ces IP, sans attendre le mDNS (lent sur une box en Wi-Fi économe).
 //!
 //! Le fichier est lu comme non fiable : taille, nombre et forme des entrées sont revalidés (série, IP locale,
-//! nom déjà nettoyé) ; une entrée invalide fait ignorer tout le fichier. La connexion revérifie toujours modèle et série.
+//! nom déjà nettoyé) ; une entrée invalide fait ignorer tout le fichier, sauf un appareil inconnu (écrit par une
+//! autre version) qui n'écarte que son entrée. La connexion revérifie toujours modèle et série.
 
 use std::path::Path;
 
@@ -16,6 +17,9 @@ use super::persistance::{ecrire_atomique, serie_valide};
 const FICHIER: &str = "boxes.json";
 const TAILLE_MAX: u64 = 64 * 1024;
 const BOXES_MAX: usize = 16;
+/// Identifiant réservé aux Android TV non répertoriées, et son nom par défaut.
+const GENERIQUE: &str = "generique";
+const NOM_GENERIQUE: &str = "TV Android";
 
 #[derive(Serialize, Deserialize)]
 struct Memorisee {
@@ -33,11 +37,13 @@ fn charger(racine: &Path) -> Vec<Memorisee> {
         return vec![];
     }
     let Ok(entrees) = serde_json::from_reader::<_, Vec<Memorisee>>(f) else { return vec![] };
-    let valide = entrees.len() <= BOXES_MAX
-        && entrees.iter().enumerate().all(|(i, m)| {
+    if entrees.len() > BOXES_MAX {
+        return vec![];
+    }
+    let entrees: Vec<_> = entrees.into_iter().filter(|m| m.appareil.as_deref().is_none_or(|a| a == GENERIQUE || par_id(a).is_some())).collect();
+    let valide = entrees.iter().enumerate().all(|(i, m)| {
             serie_valide(&m.serie)
                 && zh_reseau::valider_ipv4(&m.ip).is_some_and(|ip| ip.to_string() == m.ip)
-                && m.appareil.as_deref().is_none_or(|a| par_id(a).is_some())
                 && !m.nom.is_empty()
                 && zh_reseau::nettoyer_nom(&m.nom) == m.nom
                 && entrees[..i].iter().all(|q| q.serie != m.serie && q.ip != m.ip)
@@ -52,7 +58,7 @@ pub fn lire(racine: &Path) -> Vec<BoxTrouvee> {
 
 /// Nom par défaut de l'appareil (la Mi Box pour les anciennes entrées).
 fn par_defaut(appareil: Option<&str>) -> &'static str {
-    appareil.and_then(par_id).unwrap_or(&MIBOX4).nom_defaut
+    if appareil == Some(GENERIQUE) { NOM_GENERIQUE } else { appareil.and_then(par_id).unwrap_or(&MIBOX4).nom_defaut }
 }
 
 /// Nom de la box une fois sa série lue : celui mémorisé pour CETTE série, sinon `propose` (nom mDNS) s'il ne vient pas
@@ -60,7 +66,7 @@ fn par_defaut(appareil: Option<&str>) -> &'static str {
 /// remplacée) n'est jamais repris.
 pub fn nom_pour(racine: &Path, serie: &str, ip: &str, propose: &str, defaut: &str) -> String {
     let connues = charger(racine);
-    let reel = |n: &str| !n.is_empty() && !TOUS.iter().any(|a| a.nom_defaut == n) && n != "Appareil à vérifier";
+    let reel = |n: &str| !n.is_empty() && !TOUS.iter().any(|a| a.nom_defaut == n) && n != NOM_GENERIQUE && n != "Appareil à vérifier";
     if let Some(m) = connues.iter().find(|m| m.serie == serie && reel(&m.nom)) {
         return m.nom.clone();
     }
@@ -126,6 +132,31 @@ mod tests {
         let l = lire(&d);
         assert_eq!(l.len(), BOXES_MAX);
         assert_eq!(l[0].ip, "10.0.0.4", "les plus anciennes ont sauté");
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn appareil_generique_relu_avec_son_nom() {
+        let d = dossier("generique");
+        memoriser(&d, "A", "Appareil à vérifier", "10.0.0.1", Some(GENERIQUE)).unwrap();
+        memoriser(&d, "B", "SALON", "10.0.0.2", Some(GENERIQUE)).unwrap();
+        let l: Vec<_> = lire(&d).into_iter().map(|b| (b.nom, b.libelle, b.appareil)).collect();
+        assert_eq!(l[0], (NOM_GENERIQUE.into(), NOM_GENERIQUE.into(), Some(GENERIQUE.into())));
+        assert_eq!(l[1].0, "SALON");
+        assert_eq!(nom_pour(&d, "C", "10.0.0.3", NOM_GENERIQUE, "x"), "x", "nom par défaut non repris comme nom choisi");
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn appareil_inconnu_ignore_seul() {
+        let d = dossier("inconnu");
+        std::fs::create_dir_all(&d).unwrap();
+        let bon = r#"{"serie":"A","nom":"Salon","ip":"192.168.1.20","appareil":"mibox4"}"#;
+        let autre = r#"{"serie":"B","nom":"Futur","ip":"192.168.1.21","appareil":"inconnu-xyz"}"#;
+        std::fs::write(d.join(FICHIER), format!("[{bon},{autre}]")).unwrap();
+        let l = lire(&d);
+        assert_eq!(l.len(), 1);
+        assert_eq!(l[0].nom, "Salon");
         let _ = std::fs::remove_dir_all(&d);
     }
 

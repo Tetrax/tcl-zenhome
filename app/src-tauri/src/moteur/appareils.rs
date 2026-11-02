@@ -29,8 +29,9 @@ pub enum ModeAccueil {
     AccueilPrefere,
 }
 
+/// Fiche figée d'un appareil vérifié.
 #[derive(Debug)]
-pub struct Appareil {
+pub struct Profil {
     /// PROFIL du kit.
     pub id: &'static str,
     /// Modèle affiché.
@@ -62,7 +63,7 @@ pub struct Appareil {
     liste: &'static str,
 }
 
-pub static MIBOX4: Appareil = Appareil {
+pub static MIBOX4: Profil = Profil {
     id: "mibox4",
     nom: "Xiaomi Mi Box 4",
     nom_defaut: "Mi Box",
@@ -81,7 +82,7 @@ pub static MIBOX4: Appareil = Appareil {
     liste: include_str!("../../../../tv/debloat-mibox4.txt"),
 };
 
-pub static TCL_G08: Appareil = Appareil {
+pub static TCL_G08: Profil = Profil {
     id: "tcl-g08",
     nom: "TV TCL G08 (Google TV)",
     nom_defaut: "TV TCL",
@@ -100,9 +101,9 @@ pub static TCL_G08: Appareil = Appareil {
     liste: include_str!("../../../../tv/debloat-tcl-g08.txt"),
 };
 
-pub static TOUS: [&Appareil; 2] = [&MIBOX4, &TCL_G08];
+pub static TOUS: [&Profil; 2] = [&MIBOX4, &TCL_G08];
 
-pub fn par_id(id: &str) -> Option<&'static Appareil> {
+pub fn par_id(id: &str) -> Option<&'static Profil> {
     TOUS.iter().copied().find(|a| a.id == id)
 }
 
@@ -124,7 +125,7 @@ pub struct Inconnu {
     pub resume: String,
 }
 
-impl Appareil {
+impl Profil {
     /// Liste d'allègement annotée de l'appareil.
     pub fn liste(&self) -> Vec<Entree> {
         debloat::analyser(self.liste).unwrap_or_else(|_| panic!("tv/debloat-{}.txt est vide ou illisible", self.id))
@@ -135,17 +136,9 @@ impl Appareil {
         self.accueil.split('/').next().unwrap_or_default()
     }
 
-    pub fn est_protege(&self, paquet: &str) -> bool {
-        SOCLE.contains(&paquet) || paquet == self.launcher() || self.proteges.contains(&paquet)
-    }
-
     /// Indice pour la découverte mDNS (`zh_reseau::chercher_box`).
     pub fn indice(&self) -> zh_reseau::IndiceAppareil<'static> {
         zh_reseau::IndiceAppareil { id: self.id, libelle: self.nom_defaut, prefixes_md: self.prefixes_md, prefixes_instance: self.prefixes_instance }
-    }
-
-    pub fn plus_recent_que_teste(&self, sdk: u32) -> bool {
-        sdk > self.sdk_teste
     }
 
     fn reconnait(&self, p: &Proprietes, sdk: Option<u32>) -> bool {
@@ -156,8 +149,58 @@ impl Appareil {
     }
 }
 
+/// Appareil connecté, construit à la connexion (aujourd'hui copié d'un profil).
+#[derive(Debug, Clone)]
+pub struct Appareil {
+    pub id: String,
+    pub nom: String,
+    pub nom_defaut: String,
+    pub mot: String,
+    pub sdk_teste: u32,
+    pub mode_accueil: ModeAccueil,
+    pub accueil: String,
+    pub veille: String,
+    pub proteges: Vec<String>,
+    liste: &'static str,
+}
+
+impl Appareil {
+    pub fn depuis(p: &'static Profil) -> Self {
+        Self {
+            id: p.id.into(),
+            nom: p.nom.into(),
+            nom_defaut: p.nom_defaut.into(),
+            mot: p.mot.into(),
+            sdk_teste: p.sdk_teste,
+            mode_accueil: p.mode_accueil,
+            accueil: p.accueil.into(),
+            veille: p.veille.into(),
+            proteges: p.proteges.iter().map(|&s| s.into()).collect(),
+            liste: p.liste,
+        }
+    }
+
+    /// Liste d'allègement annotée de l'appareil.
+    pub fn liste(&self) -> Vec<Entree> {
+        debloat::analyser(self.liste).unwrap_or_else(|_| panic!("tv/debloat-{}.txt est vide ou illisible", self.id))
+    }
+
+    /// Paquet de l'accueil d'origine.
+    pub fn launcher(&self) -> &str {
+        self.accueil.split('/').next().unwrap_or_default()
+    }
+
+    pub fn est_protege(&self, paquet: &str) -> bool {
+        SOCLE.contains(&paquet) || paquet == self.launcher() || self.proteges.iter().any(|p| p == paquet)
+    }
+
+    pub fn plus_recent_que_teste(&self, sdk: u32) -> bool {
+        sdk > self.sdk_teste
+    }
+}
+
 /// Identification stricte : toutes les conditions de la fiche doivent être remplies.
-pub fn identifier(p: &Proprietes) -> Result<&'static Appareil, Inconnu> {
+pub fn identifier(p: &Proprietes) -> Result<&'static Profil, Inconnu> {
     let sdk = p.sdk.parse::<u32>().ok();
     TOUS.iter()
         .copied()
@@ -172,7 +215,7 @@ mod tests {
     use std::path::Path;
     use std::process::Command;
 
-    fn bonnes(a: &Appareil) -> Proprietes<'static> {
+    fn bonnes(a: &Profil) -> Proprietes<'static> {
         Proprietes { nom: a.produits[0], marque: a.marque, device: a.device.unwrap_or("x"), sdk: "40" }
     }
 
@@ -183,7 +226,8 @@ mod tests {
             let sdk_bas = (a.sdk_min - 1).to_string();
             assert_eq!(identifier(&Proprietes { sdk: &sdk_min, ..bonnes(a) }).map(|r| r.id), Ok(a.id));
             assert_eq!(identifier(&bonnes(a)).map(|r| r.id), Ok(a.id), "SDK au-delà du dernier testé : reconnu");
-            assert!(a.plus_recent_que_teste(40) && !a.plus_recent_que_teste(a.sdk_teste));
+            let app = Appareil::depuis(a);
+            assert!(app.plus_recent_que_teste(40) && !app.plus_recent_que_teste(a.sdk_teste));
             for (nom, p) in [
                 ("nom", Proprietes { nom: "autre", ..bonnes(a) }),
                 ("nom vide", Proprietes { nom: "", ..bonnes(a) }),
@@ -220,11 +264,12 @@ mod tests {
             assert_eq!(par_id(a.id).map(|b| b.id), Some(a.id));
             assert!(composant_valide(a.accueil) && composant_valide(a.veille), "{}", a.id);
             assert!(SOCLE.iter().chain(a.proteges).all(|p| paquet_valide(p)));
+            let app = Appareil::depuis(a);
             for e in a.liste() {
                 assert!(paquet_valide(&e.paquet), "{}", e.paquet);
-                assert!(!a.est_protege(&e.paquet), "{} : {} est protégé", a.id, e.paquet);
+                assert!(!app.est_protege(&e.paquet), "{} : {} est protégé", a.id, e.paquet);
             }
-            assert!(a.est_protege("tv.zenhome") && a.est_protege(a.launcher()) && !a.est_protege("com.exemple.lecteur"));
+            assert!(app.est_protege("tv.zenhome") && app.est_protege(a.launcher()) && !app.est_protege("com.exemple.lecteur"));
         }
         assert!(par_id("inconnu").is_none());
     }
