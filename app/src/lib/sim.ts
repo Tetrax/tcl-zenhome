@@ -274,7 +274,7 @@ export const simulation: Api = {
     ];
     const gardes = new Set(choixFait?.garder ?? ["com.google.android.katniss", "com.xiaomi.mitv.updateservice", "com.mitv.download.service"]);
     for (const a of sysBox()) {
-      if (gardes.has(a.paquet)) lignes.push({ etat: "avert", controle: `Désactivé : ${a.paquet}`, detail: "gardé actif (votre choix)" });
+      if (gardes.has(a.paquet)) lignes.push({ etat: "ok", controle: `Gardé (votre choix) : ${a.paquet}`, detail: "" });
       else lignes.push({ etat: "ok", controle: `Désactivé : ${a.paquet}`, detail: "" });
     }
     lignes.push(

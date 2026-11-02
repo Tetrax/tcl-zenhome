@@ -33,3 +33,6 @@ export const FICHES: Record<Exclude<Famille, "autre">, FicheAppareil> = {
 
 /** Fiche de l'appareil choisi, ou null pour « Autre appareil ». */
 export const fiche = (f: Famille): FicheAppareil | null => (f === "autre" ? null : FICHES[f]);
+
+/** Mot pour l'appareil connecté (`BoxConnectee.appareil`) dans les textes : « TV » pour une TV, « box » sinon. */
+export const motConnecte = (appareil?: string | null): string => (appareil === "tcl-g08" ? "TV" : "box");

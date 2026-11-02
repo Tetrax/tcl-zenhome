@@ -30,9 +30,12 @@ export function humaniser(l: LigneVerif, noms: Map<string, string>): LigneHumain
     libelle = PAQUETS[p];
     if (!libelle) { libelle = `${noms.get(p) ?? p} est désactivée`; appli = true; }
   }
+  if (!libelle && l.controle.startsWith("Gardé (votre choix) : ")) {
+    const p = l.controle.slice("Gardé (votre choix) : ".length);
+    libelle = `${noms.get(p) ?? p} reste active, comme vous l'avez choisi`; appli = true;
+  }
   let detail = l.detail;
-  if (detail.startsWith("gardé actif (votre choix)")) detail = "Gardée active, comme vous l'avez choisi";
-  else if (detail === "absent") detail = "Absent de la box";
+  if (detail === "absent") detail = "Absent de la box";
   else if (detail.startsWith("version ")) detail = "Version " + detail.slice(8);
   return { etat: l.etat, libelle: libelle ?? l.controle, detail, brut, appli };
 }
