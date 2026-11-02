@@ -86,10 +86,9 @@ pub static TCL_G08: Appareil = Appareil {
     nom: "TV TCL G08 (Google TV)",
     nom_defaut: "TV TCL",
     mot: "TV",
-    // À confirmer sur la vraie TV (voir le rapport) : marque exacte, ro.product.device.
     marque: "TCL",
     produits: &["G08_4K_GB"],
-    device: None,
+    device: Some("G08"),
     sdk_min: 34,
     sdk_teste: 34,
     prefixes_md: &["Smart TV Pro"],
