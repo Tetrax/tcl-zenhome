@@ -1,0 +1,15 @@
+# Android TV / Google TV non vérifiée (mode générique) : liste prudente, limitée aux paquets communs à toutes les TV Google.
+# Tout est DÉSACTIVÉ (pm disable-user), rien n'est désinstallé. Annulation : pm enable <paquet>.
+# Jamais d'accueil, de setupwraith, de TalkBack / synthèse vocale / Katniss, de Play Store ni de services Google ici.
+#
+# Format (lu par l'appli, textes affichés aux utilisateurs) :
+#   paquet  # [balise] Libellé : explication
+# Sans balise : à désactiver. [option] : à désactiver, mais utile à certains. [option:garder] : à garder.
+# Pas de « | » ni de saut de ligne dans les textes.
+
+# Google (commun)
+com.google.android.feedback             # Rapports Google : envoie des rapports d'utilisation à Google.
+com.android.tv.feedbackconsent         # Consentement aux rapports : demande l'autorisation d'envoyer des rapports à Google.
+android.autoinstalls.config.google.gtvpai  # Installations automatiques : installe des applis partenaires sans vous demander.
+com.google.android.youtube.tvmusic     # [option:garder] YouTube Music : désactivez-la si vous n'écoutez pas de musique avec.
+com.google.android.play.games          # [option:garder] Play Jeux : l'appli de jeux Google. Désactivez-la si vous ne jouez pas sur la TV.

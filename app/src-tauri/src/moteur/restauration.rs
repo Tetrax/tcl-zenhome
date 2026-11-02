@@ -1,13 +1,13 @@
 //! Retour à l'état d'origine : équivalent de `tv/restaurer-tv.sh`, suivi de la suppression de
 //! `zenhome_garder` que fait le kit. Un échec n'arrête pas la restauration (comme `adb_essayer`).
 
-use super::appareils::{Appareil, ModeAccueil};
+use super::appareils::{Appareil, ID_GENERIQUE, ModeAccueil};
 use super::connexion::Politique;
 use super::installation::PKG;
 use super::origine::{Origine, Reglage};
 use super::session::{Arret, Observateur, Reprise, Session};
 use super::transport::{Commande, Espace, ErreurTransport, OptionPm, Transport, paquet_valide};
-use super::verification::SPOTIFY;
+use super::verification::{SPOTIFY, WRAITH};
 
 /// Réglages globaux du kit, supprimés à la restauration (`zenhome_garder` en dernier, comme le kit).
 const REGLAGES_KIT: [&str; 7] =
@@ -53,7 +53,8 @@ fn fixer_accueil(s: &mut Session<'_>, app: &Appareil, accueil: &str) -> Result<b
     if app.mode_accueil == ModeAccueil::RoleHome && paquet != PKG {
         s.essayer(&Commande::role_home_ajouter(paquet)?)?;
     }
-    if !s.essayer(&Commande::set_home_activity(accueil)?)? {
+    // Appareil générique en RoleHome : le composant peut être un repli, le paquet résolu ci-dessous fait foi.
+    if !s.essayer(&Commande::set_home_activity(accueil)?)? && !(app.id == ID_GENERIQUE && app.mode_accueil == ModeAccueil::RoleHome) {
         return Ok(false);
     }
     let sortie = s.lire(&Commande::resoudre_accueil())?;
@@ -61,7 +62,8 @@ fn fixer_accueil(s: &mut Session<'_>, app: &Appareil, accueil: &str) -> Result<b
     Ok(resolu == paquet && paquet != PKG)
 }
 
-/// `origine` : sauvegarde faite avant Zen Home. Sans elle, restauration générique (tout réactiver, valeurs par défaut).
+/// `origine` : sauvegarde faite avant Zen Home. Sans elle, restauration générique (tout réactiver, valeurs par défaut) ;
+/// pour l'appareil générique, seulement sa liste d'allègement, son accueil et setupwraith (jamais ce que le fabricant a désactivé).
 pub fn restaurer(
     t: &dyn Transport,
     app: &Appareil,
@@ -77,9 +79,11 @@ pub fn restaurer(
     if s.etape(0, "Réactivation des applis désactivées") {
         // Liste relue à chaque passage (reprise) : seuls les noms valides sont utilisés.
         // Celles qui l'étaient déjà avant Zen Home le restent.
+        let bornee: Option<Vec<String>> = (origine.is_none() && app.id == ID_GENERIQUE).then(|| a_rendre_sans_origine(app));
         let noms: Vec<String> = noms_valides(&s.lire(&Commande::pm_list(&[OptionPm::Desactives]))?)
             .into_iter()
             .filter(|p| !origine.is_some_and(|o| o.desactives.contains(p)))
+            .filter(|p| bornee.as_ref().is_none_or(|b| b.contains(p)))
             .collect();
         for (i, p) in noms.iter().enumerate() {
             s.progression(i, noms.len(), p);
@@ -90,7 +94,7 @@ pub fn restaurer(
     }
     if s.etape(1, "Écran de veille, animations et Spotify") {
         let inconnu = Reglage::Inconnu;
-        remettre(&mut s, Espace::Secure, "screensaver_components", origine.map_or(&inconnu, |o| &o.veille), Some(&app.veille))?;
+        remettre(&mut s, Espace::Secure, "screensaver_components", origine.map_or(&inconnu, |o| &o.veille), app.veille.as_deref())?;
         for (i, (k, defaut)) in [("window_animation_scale", Some("1.0")), ("transition_animation_scale", Some("1.0")), ("animator_duration_scale", None)].into_iter().enumerate() {
             remettre(&mut s, Espace::Global, k, origine.map_or(&inconnu, |o| &o.animations[i]), defaut)?;
         }
@@ -163,6 +167,11 @@ pub fn restaurer(
     Ok(RapportRestauration { incomplete, reactives, avertissements: s.avertissements })
 }
 
+/// Sans origine, l'appareil générique ne rend que ce que Zen Home a pu désactiver : liste d'allègement, accueil, setupwraith.
+fn a_rendre_sans_origine(app: &Appareil) -> Vec<String> {
+    app.liste().into_iter().map(|e| e.paquet).chain([app.launcher().to_string(), WRAITH.to_string()]).collect()
+}
+
 fn noms_valides(sortie: &str) -> Vec<String> {
     super::inventaire::noms_paquets(sortie).into_iter().filter(|p| paquet_valide(p)).collect()
 }
@@ -171,7 +180,7 @@ fn noms_valides(sortie: &str) -> Vec<String> {
 mod tests {
     use super::*;
     use crate::moteur::appareils::{Appareil, MIBOX4, TCL_G08};
-    use crate::moteur::fake_box::FakeBox;
+    use crate::moteur::fake_box::{FakeBox, PaquetFake};
     use crate::moteur::origine::tests::{TOUS, dossier_temp, sauvegarde};
     use crate::moteur::origine::origine;
     use crate::moteur::session::Silencieux;
@@ -457,5 +466,75 @@ mod tests {
         assert_eq!(e.role_home.as_deref(), Some(TCL_G08.launcher()));
         assert!(!e.paquets.contains_key(PKG) && e.paquets.values().all(|p| !p.desactive));
         let _ = std::fs::remove_dir_all(d);
+    }
+
+    /// Chromecast Google TV de test : TCL en rôle HOME rebaptisée, liste générique et lanceur éteints (Zen Home installé),
+    /// `tv.samba.ssm.ui` désactivée en usine.
+    fn installee_generique() -> (FakeBox, Appareil) {
+        use crate::moteur::classification::{Lecture, classer};
+        use crate::moteur::appareils::{Proprietes, ReglagesLus};
+        let f = FakeBox::tcl_g08();
+        f.connecter().unwrap();
+        f.install(std::path::Path::new("ZenHome.apk")).unwrap();
+        let systeme = std::collections::BTreeSet::from([TCL_G08.launcher().to_string()]);
+        let resolution = format!("priority=0\n{}\n", TCL_G08.accueil);
+        let l = Lecture {
+            proprietes: Proprietes { nom: "sabrina", marque: "google", device: "sabrina", sdk: "34" },
+            fabricant: "Google",
+            release: "14",
+            caracteristiques: "tv",
+            features: "",
+            systeme: &systeme,
+            resolution: &resolution,
+            role: TCL_G08.launcher(),
+        };
+        let app = Appareil::generique(&l, &classer(&l), &ReglagesLus { veille: "null", clavier: "null", accessibilite: "null" }).unwrap();
+        f.modifier(|e| {
+            let modele = e.paquets["com.tcl.logkit"].clone();
+            e.paquets.insert("tv.samba.ssm.ui".into(), PaquetFake { desactive: true, ..modele });
+            for p in app.liste().iter().map(|x| x.paquet.as_str()).chain([TCL_G08.launcher(), "com.google.android.tungsten.setupwraith"]) {
+                let mut m = e.paquets["com.tcl.logkit"].clone();
+                m.desactive = true;
+                e.paquets.insert(p.into(), m);
+            }
+            e.accueil_prefere = Some("tv.zenhome/.Home".into());
+            e.role_home = Some(PKG.into());
+            e.secure.insert("screensaver_components".into(), "tv.zenhome/tv.zenhome.ZenDream".into());
+        });
+        (f, app)
+    }
+
+    #[test]
+    fn generique_sans_origine_ne_reactive_que_sa_liste_son_accueil_et_setupwraith() {
+        let (f, app) = installee_generique();
+        let r = restaurer(&f, &app, &Politique::default(), &mut Silencieux, &Reprise::default(), None).unwrap();
+        let e = f.instantane();
+        assert!(e.paquets["tv.samba.ssm.ui"].desactive, "désactivée en usine : elle le reste");
+        assert!(!e.paquets["com.tcl.logkit"].desactive, "elle n'était pas désactivée");
+        for p in app.liste().iter().map(|x| x.paquet.as_str()).chain([TCL_G08.launcher(), "com.google.android.tungsten.setupwraith"]) {
+            assert!(!e.paquets[p].desactive, "{p}");
+        }
+        assert_eq!(r.reactives.len(), app.liste().len() + 2, "{:?}", r.reactives);
+        assert!(!e.secure.contains_key("screensaver_components"), "veille inconnue : réglage supprimé");
+        assert_eq!(e.role_home.as_deref(), Some(TCL_G08.launcher()));
+        assert!(!e.paquets.contains_key(PKG) && !r.incomplete, "{:?}", r.avertissements);
+        assert!(r.avertissements.is_empty(), "{:?}", r.avertissements);
+    }
+
+    #[test]
+    fn generique_composant_de_repli_refuse_n_empeche_pas_la_restauration_en_role_home() {
+        let (f, mut app) = installee_generique();
+        app.accueil = format!("{}/.Inconnue", TCL_G08.launcher());
+        let r = restaurer(&f, &app, &Politique::default(), &mut Silencieux, &Reprise::default(), None).unwrap();
+        assert!(!r.incomplete && !f.instantane().paquets.contains_key(PKG), "{:?}", r.avertissements);
+        assert_eq!(f.instantane().role_home.as_deref(), Some(TCL_G08.launcher()));
+    }
+
+    #[test]
+    fn profil_sans_origine_reactive_tout() {
+        let f = installee_tcl();
+        f.modifier(|e| e.paquets.get_mut("com.tcl.usercenter").unwrap().desactive = true);
+        let r = restaurer(&f, &Appareil::depuis(&TCL_G08), &Politique::default(), &mut Silencieux, &Reprise::default(), None).unwrap();
+        assert!(!f.instantane().paquets["com.tcl.usercenter"].desactive && r.reactives.contains(&"com.tcl.usercenter".to_string()));
     }
 }

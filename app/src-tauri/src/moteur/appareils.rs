@@ -1,8 +1,15 @@
 //! Table des appareils pris en charge : identification stricte, accueil et veille d'origine, liste d'allègement,
 //! paquets protégés. Référence : `charger_profil` de tv/lib.sh (l'`id` est le PROFIL du kit).
 
+use super::classification::{Classification, Lecture};
 use super::connexion::nettoyer_modele;
 use super::debloat::{self, Entree};
+use super::transport::{composant_valide, paquet_valide};
+
+/// Id de l'appareil générique (Android TV non vérifiée), construit par `Appareil::generique`.
+pub const ID_GENERIQUE: &str = "generique";
+/// Nom de l'appareil générique tant que l'utilisateur n'en a pas donné un (même texte que `commandes::memoire`).
+pub const NOM_DEFAUT_GENERIQUE: &str = "TV Android";
 
 /// Paquets que Zen Home ne désactive ni ne désinstalle jamais, sur tous les appareils.
 pub const SOCLE: [&str; 13] = [
@@ -159,10 +166,24 @@ pub struct Appareil {
     pub sdk_teste: u32,
     pub mode_accueil: ModeAccueil,
     pub accueil: String,
-    pub veille: String,
+    /// Écran de veille d'origine ; `None` : aucun connu, le réglage est supprimé à la restauration.
+    pub veille: Option<String>,
     pub proteges: Vec<String>,
     liste: &'static str,
 }
+
+/// Réglages `secure` bruts lus sur un appareil inconnu (sorties de `settings get`, non assainies).
+pub struct ReglagesLus<'a> {
+    /// `screensaver_components`
+    pub veille: &'a str,
+    /// `default_input_method`
+    pub clavier: &'a str,
+    /// `enabled_accessibility_services`
+    pub accessibilite: &'a str,
+}
+
+/// Liste d'allègement prudente de l'appareil générique.
+const LISTE_GENERIQUE: &str = include_str!("../../../../tv/debloat-generique.txt");
 
 impl Appareil {
     pub fn depuis(p: &'static Profil) -> Self {
@@ -174,10 +195,49 @@ impl Appareil {
             sdk_teste: p.sdk_teste,
             mode_accueil: p.mode_accueil,
             accueil: p.accueil.into(),
-            veille: p.veille.into(),
+            veille: Some(p.veille.into()),
             proteges: p.proteges.iter().map(|&s| s.into()).collect(),
             liste: p.liste,
         }
+    }
+
+    /// Appareil générique (Android TV non vérifiée) ; `None` si la classification n'est pas « compatible probable »
+    /// ou si le SDK est illisible. Pur : tout vient des sorties déjà lues.
+    /// Accueil d'origine : le composant de la dernière ligne de la résolution HOME si c'est bien le paquet d'origine ; sinon
+    /// (rôle HOME tenu par un paquet que la résolution ne montre pas) `paquet/.MainActivity`. En mode RoleHome, la
+    /// restauration rend le rôle au PAQUET (`fixer_accueil`) et ne vérifie que le paquet résolu : un composant de repli
+    /// erroné est donc sans effet (voir `restaurer`).
+    /// Veille : le réglage courant s'il est un composant valide qui n'est pas de Zen Home, sinon aucune.
+    pub fn generique(l: &Lecture, c: &Classification, r: &ReglagesLus) -> Option<Self> {
+        let Classification::CompatibleProbable { mode_accueil, accueil_origine } = c else { return None };
+        let sdk = l.proprietes.sdk.parse::<u32>().ok()?;
+        let accueil = l
+            .resolution
+            .lines()
+            .map(str::trim)
+            .rfind(|x| !x.is_empty())
+            .filter(|x| composant_valide(x) && x.split('/').next() == Some(accueil_origine))
+            .map_or_else(|| format!("{accueil_origine}/.MainActivity"), String::from);
+        let veille = Some(r.veille.trim()).filter(|v| composant_valide(v) && !v.starts_with("tv.zenhome/")).map(String::from);
+        let mut proteges: Vec<String> = Vec::new();
+        let paquets = r.clavier.trim().split('/').take(1).chain(r.accessibilite.trim().split(':').filter_map(|e| e.split('/').next()));
+        for p in paquets {
+            if paquet_valide(p) && p != "tv.zenhome" && !proteges.iter().any(|x| x == p) {
+                proteges.push(p.into());
+            }
+        }
+        Some(Self {
+            id: ID_GENERIQUE.into(),
+            nom: "TV Android (non vérifiée)".into(),
+            nom_defaut: NOM_DEFAUT_GENERIQUE.into(),
+            mot: "TV".into(),
+            sdk_teste: sdk,
+            mode_accueil: *mode_accueil,
+            accueil,
+            veille,
+            proteges,
+            liste: LISTE_GENERIQUE,
+        })
     }
 
     /// Liste d'allègement annotée de l'appareil.
@@ -211,7 +271,7 @@ pub fn identifier(p: &Proprietes) -> Result<&'static Profil, Inconnu> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::moteur::transport::{composant_valide, paquet_valide};
+    use crate::moteur::classification::classer;
     use std::path::Path;
     use std::process::Command;
 
@@ -272,6 +332,114 @@ mod tests {
             assert!(app.est_protege("tv.zenhome") && app.est_protege(a.launcher()) && !app.est_protege("com.exemple.lecteur"));
         }
         assert!(par_id("inconnu").is_none());
+    }
+
+    const LAUNCHERX: &str = "com.google.android.apps.tv.launcherx";
+    const COMPOSANT_X: &str = "com.google.android.apps.tv.launcherx/.home.HomeActivity";
+
+    /// Chromecast Google TV : rôle HOME, composant donné par la résolution.
+    fn generique_avec(sdk: &str, role: &str, resolution: &str, r: &ReglagesLus) -> Option<Appareil> {
+        let systeme = std::collections::BTreeSet::from([LAUNCHERX.to_string(), "com.google.android.tvlauncher".to_string()]);
+        let l = Lecture {
+            proprietes: Proprietes { nom: "sabrina", marque: "google", device: "sabrina", sdk },
+            fabricant: "Google",
+            release: "14",
+            caracteristiques: "tv",
+            features: "feature:android.software.leanback\n",
+            systeme: &systeme,
+            resolution,
+            role,
+        };
+        Appareil::generique(&l, &classer(&l), r)
+    }
+
+    const AUCUN: ReglagesLus = ReglagesLus { veille: "null", clavier: "null", accessibilite: "null" };
+
+    #[test]
+    fn generique_chromecast_role_home() {
+        let resolution = format!("priority=0 preferredOrder=0\n{COMPOSANT_X}\n");
+        let a = generique_avec("34", "com.google.android.apps.tv.launcherx\n", &resolution, &AUCUN).unwrap();
+        assert_eq!((a.id.as_str(), a.nom_defaut.as_str(), a.mot.as_str()), ("generique", "TV Android", "TV"));
+        assert_eq!((a.mode_accueil, a.accueil.as_str(), a.launcher()), (ModeAccueil::RoleHome, COMPOSANT_X, LAUNCHERX));
+        assert!(composant_valide(&a.accueil));
+        assert_eq!(a.sdk_teste, 34);
+        assert!(!a.plus_recent_que_teste(34));
+        assert_eq!(a.veille, None);
+    }
+
+    #[test]
+    fn generique_role_tenu_par_un_paquet_absent_de_la_resolution_prend_le_composant_de_repli() {
+        let a = generique_avec("34", "com.google.android.apps.tv.launcherx\n", "com.google.android.tvlauncher/.MainActivity\n", &AUCUN).unwrap();
+        assert_eq!(a.accueil, format!("{LAUNCHERX}/.MainActivity"));
+        assert!(composant_valide(&a.accueil));
+    }
+
+    #[test]
+    fn generique_box_android_9_accueil_prefere() {
+        let a = generique_avec("28", "", "priority=0\ncom.google.android.tvlauncher/.MainActivity\n", &AUCUN).unwrap();
+        assert_eq!((a.mode_accueil, a.accueil.as_str()), (ModeAccueil::AccueilPrefere, "com.google.android.tvlauncher/.MainActivity"));
+        assert_eq!(a.sdk_teste, 28);
+    }
+
+    #[test]
+    fn generique_refuse_ce_qui_n_est_pas_compatible_probable() {
+        let l = Lecture {
+            proprietes: Proprietes { nom: "oneday", marque: "Xiaomi", device: "oneday", sdk: "28" },
+            fabricant: "",
+            release: "",
+            caracteristiques: "",
+            features: "",
+            systeme: &Default::default(),
+            resolution: "",
+            role: "",
+        };
+        assert!(Appareil::generique(&l, &classer(&l), &AUCUN).is_none());
+    }
+
+    #[test]
+    fn generique_veille_d_origine() {
+        let veille = |v: &str| generique_avec("34", "", "com.google.android.tvlauncher/.MainActivity\n", &ReglagesLus { veille: v, ..AUCUN }).map(|a| a.veille);
+        let v = |s: &str| Some(Some(s.to_string()));
+        assert_eq!(veille(""), Some(None));
+        assert_eq!(veille("null"), Some(None));
+        assert_eq!(veille("tv.zenhome/tv.zenhome.ZenDream"), Some(None));
+        assert_eq!(veille("a.b/.C;reboot"), Some(None));
+        assert_eq!(veille("com.google.android.apps.tv.dreamx/.service.Backdrop\n"), v("com.google.android.apps.tv.dreamx/.service.Backdrop"));
+    }
+
+    #[test]
+    fn generique_protege_clavier_et_accessibilite() {
+        let r = ReglagesLus {
+            veille: "null",
+            clavier: "com.google.android.tv.remote.service/.Ime\n",
+            accessibilite: "com.google.android.marvin.talkback/.TalkBackService:tv.zenhome/tv.zenhome.KeyService:pas valide/.X:$(reboot)/.Y:com.autre/.S",
+        };
+        let a = generique_avec("34", "", "com.google.android.tvlauncher/.MainActivity\n", &r).unwrap();
+        assert_eq!(a.proteges, ["com.google.android.tv.remote.service", "com.google.android.marvin.talkback", "com.autre"]);
+        assert!(a.est_protege("com.autre") && a.est_protege(a.launcher()) && a.est_protege("tv.zenhome") && !a.est_protege("com.exemple.lecteur"));
+        let a = generique_avec("34", "", "com.google.android.tvlauncher/.MainActivity\n", &ReglagesLus { clavier: "rm -rf/x", ..AUCUN }).unwrap();
+        assert!(a.proteges.is_empty());
+    }
+
+    #[test]
+    fn generique_liste_prudente() {
+        let a = generique_avec("34", "", "com.google.android.tvlauncher/.MainActivity\n", &AUCUN).unwrap();
+        let liste = a.liste();
+        assert!(!liste.is_empty());
+        for e in &liste {
+            assert!(paquet_valide(&e.paquet), "{}", e.paquet);
+            assert!(!a.est_protege(&e.paquet), "{} est protégé", e.paquet);
+            for interdit in ["launcherx", "tvlauncher", "setupwraith", "talkback", "tts", "katniss"] {
+                assert!(!e.paquet.contains(interdit), "{}", e.paquet);
+            }
+            assert!(!["com.android.vending", "com.google.android.gms"].contains(&e.paquet.as_str()));
+        }
+    }
+
+    #[test]
+    fn generique_n_est_pas_dans_la_table_des_profils() {
+        // le test de parité avec le kit itère sur TOUS : il ne voit que les profils
+        assert!(par_id(ID_GENERIQUE).is_none() && TOUS.iter().all(|p| p.id != ID_GENERIQUE));
     }
 
     /// Parité avec le kit : le vrai `charger_profil` de tv/lib.sh, exécuté par bash.
