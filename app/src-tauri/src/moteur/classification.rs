@@ -37,6 +37,9 @@ pub struct Lecture<'a> {
 /// Accueils qui ne sont jamais un accueil d'origine (sélecteur, repli, assistant d'installation).
 const ECARTES: [&str; 3] = ["android", "com.android.settings", "com.google.android.tungsten.setupwraith"];
 
+/// Raison du refus quand Zen Home tient déjà l'accueil (la connexion peut alors repartir d'une sauvegarde d'origine).
+pub const RAISON_ZEN_HOME: &str = "Zen Home déjà installé : accueil d'origine inconnu";
+
 fn non(raison: impl Into<String>) -> Classification {
     Classification::NonSupporte(raison.into())
 }
@@ -70,7 +73,7 @@ pub fn classer(l: &Lecture) -> Classification {
     });
     let Some(paquet) = candidat else { return non("accueil d'origine introuvable") };
     if paquet == "tv.zenhome" {
-        return non("Zen Home déjà installé : accueil d'origine inconnu");
+        return non(RAISON_ZEN_HOME);
     }
     if ECARTES.contains(&paquet) || !paquet_valide(paquet) || !l.systeme.contains(paquet) {
         return non("accueil d'origine introuvable");

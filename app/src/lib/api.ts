@@ -11,7 +11,7 @@ export interface Api {
   connecter(cible: Cible, sur: SurEvenement): Promise<BoxConnectee>;
   chercherVilles(saisie: string): Promise<Ville[]>;
   inventaire(sur: SurEvenement): Promise<Inventaire>;
-  installer(villeId: number | null, jeton: string | null, sur: SurEvenement): Promise<void>;
+  installer(villeId: number | null, jeton: string | null, sur: SurEvenement, risquesAcceptes?: boolean): Promise<void>;
   appliquer(choix: Choix, sur: SurEvenement): Promise<RapportApplication>;
   verifier(reparer: boolean, sur: SurEvenement): Promise<Verification>;
   restaurer(sur: SurEvenement): Promise<RapportRestauration>;
@@ -49,8 +49,8 @@ async function tauri(): Promise<Api> {
     connecter: (cible, sur) => invoke("connecter", { cible, canal: canal(sur) }),
     chercherVilles: (saisie) => invoke("chercher_villes", { saisie }),
     inventaire: (sur) => invoke("inventaire", { canal: canal(sur) }),
-    installer: (villeId, jeton, sur) => invoke("installer", { villeId, jeton, canal: canal(sur) }),
-    appliquer: (choix, sur) => invoke("appliquer", { choix, canal: canal(sur) }),
+    installer: (villeId, jeton, sur, risquesAcceptes = false) => invoke("installer", { villeId, jeton, risquesAcceptes, canal: canal(sur) }),
+    appliquer: (choix, sur) => invoke("appliquer", { choix: { risques_acceptes: false, ...choix }, canal: canal(sur) }),
     verifier: (reparer, sur) => invoke("verifier", { reparer, canal: canal(sur) }),
     restaurer: (sur) => invoke("restaurer", { canal: canal(sur) }),
     decider: (demande, decision) => invoke("decider", { demande, decision }),

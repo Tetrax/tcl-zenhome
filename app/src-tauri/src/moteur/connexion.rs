@@ -3,8 +3,11 @@
 
 use std::time::Duration;
 
-use super::appareils::{Appareil, Proprietes, identifier};
-use super::transport::{Commande, ErreurTransport, EtatLien, Transport};
+use super::appareils::{Appareil, ModeAccueil, Proprietes, ReglagesLus, identifier};
+use super::classification::{Classification, Lecture, RAISON_ZEN_HOME, classer};
+use super::origine::{Origine, Reglage};
+use super::rapport_appareil::{Lu, lire, lire_appareil};
+use super::transport::{Commande, Espace, ErreurTransport, EtatLien, Transport};
 
 #[derive(Debug, Clone)]
 pub struct Politique {
@@ -123,6 +126,52 @@ pub fn connecter_box(t: &dyn Transport, pol: &Politique) -> Result<Connecte, Ech
         }
         Err(inconnu) => Err(EchecConnexion::ModeleDifferent(inconnu.resume)),
     }
+}
+
+/// Appareil déjà équipé de Zen Home : le générique est reconstruit depuis la sauvegarde d'origine de cette série (accueil
+/// et veille d'avant Zen Home). Mode d'accueil : rôle HOME si Android 10+ et que `cmd role` répond, sinon accueil préféré.
+fn depuis_origine(t: &dyn Transport, l: &Lecture, r: &ReglagesLus, origines: &dyn Fn(&str) -> Option<Origine>) -> Option<Appareil> {
+    let o = origines(&lire_serie(t).ok()?)?;
+    let accueil = o.accueil?;
+    let sdk = l.proprietes.sdk.parse::<u32>().ok()?;
+    let mode_accueil = if sdk >= 29 && !l.role.trim().is_empty() { ModeAccueil::RoleHome } else { ModeAccueil::AccueilPrefere };
+    let c = Classification::CompatibleProbable { mode_accueil, accueil_origine: accueil.split('/').next()?.to_string() };
+    let mut a = Appareil::generique(l, &c, r)?;
+    a.accueil = accueil;
+    a.veille = match o.veille {
+        Reglage::Valeur(v) => Some(v),
+        _ => None,
+    };
+    Some(a)
+}
+
+/// Comme `connecter_box`, mais un appareil que la fiche ne reconnaît pas est lu (lectures seules) puis classé : « compatible
+/// probable » donne un appareil générique ; sinon refus (`ModeleDifferent`) dont le résumé porte la raison.
+/// `origines` : sauvegarde d'origine de ce Mac pour une série (appareil déjà équipé de Zen Home).
+pub fn connecter_appareil(t: &dyn Transport, pol: &Politique, origines: &dyn Fn(&str) -> Option<Origine>) -> Result<Connecte, EchecConnexion> {
+    let resume = match connecter_box(t, pol) {
+        Err(EchecConnexion::ModeleDifferent(r)) => r,
+        autre => return autre,
+    };
+    let refus = |raison: &str| EchecConnexion::ModeleDifferent(format!("{resume} : {}", raison.chars().take(120).collect::<String>()));
+    let echec = |e: ErreurTransport| match e {
+        ErreurTransport::NonAutorise => EchecConnexion::NonAutorise,
+        e => EchecConnexion::Injoignable(e.to_string()),
+    };
+    let lu: Lu = lire_appareil(t).map_err(echec)?;
+    let secure = |cle: &str| lire(t, &Commande::settings_get(Espace::Secure, cle).expect("clé constante valide")).map_err(echec);
+    let (clavier, accessibilite) = (secure("default_input_method")?, secure("enabled_accessibility_services")?);
+    let reglages = ReglagesLus { veille: &lu.veille, clavier: &clavier, accessibilite: &accessibilite };
+    let lecture = lu.lecture();
+    let classe = classer(&lecture);
+    let appareil = match &classe {
+        Classification::CompatibleProbable { .. } => Appareil::generique(&lecture, &classe, &reglages).ok_or_else(|| refus("version d'Android illisible"))?,
+        Classification::NonSupporte(r) if r == RAISON_ZEN_HOME => depuis_origine(t, &lecture, &reglages, origines)
+            .ok_or_else(|| refus("Zen Home déjà installé par un autre moyen : accueil d'origine inconnu"))?,
+        Classification::NonSupporte(r) => return Err(refus(r)),
+        Classification::Verifie(_) => return Err(refus("appareil non reconnu")),
+    };
+    Ok(Connecte { appareil, sdk_recent: false })
 }
 
 /// Vérifie le lien et le rétablit si la box a décroché : jusqu'à `pol.reconnexions` cycles déconnexion + connexion.

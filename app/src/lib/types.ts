@@ -11,8 +11,8 @@ export interface BoxMemorisee { nom: string; ip: string }
 /** `appareil` : appareil supposé d'après l'annonce réseau (simple indice, la connexion vérifie), null si inconnu ; `libelle` : son nom court. */
 export interface BoxTrouvee { id: number; nom: string; ip: string; appareil?: string | null; libelle?: string }
 export type Cible = { id: number } | { ip: string };
-/** `appareil` : identifiant de l'appareil reconnu (« mibox4 », « tcl-g08 »). */
-export interface BoxConnectee { nom: string; ip: string; modele: string; appareil: string }
+/** `appareil` : identifiant de l'appareil reconnu (« mibox4 », « tcl-g08 », « generique ») ; `verifie` : faux pour un appareil générique (non vérifié). */
+export interface BoxConnectee { nom: string; ip: string; modele: string; appareil: string; verifie: boolean }
 export interface Ville { id: number; nom: string; region?: string; pays?: string }
 
 export interface AppliSysteme {
@@ -32,7 +32,8 @@ export interface Inventaire {
   applis_utilisateur: AppliUtilisateur[];
   resume: { modele: string; android: string; nb_applis: number; nb_desactivees: number };
 }
-export interface Choix { garder: string[]; desactiver: string[]; desinstaller: string[] }
+/** `risques_acceptes` : exigé par le cœur pour un appareil générique seulement (faux si absent). */
+export interface Choix { garder: string[]; desactiver: string[]; desinstaller: string[]; risques_acceptes?: boolean }
 export interface RapportApplication { desactivees: number; gardees: number; desinstallees: string[]; echecs: string[] }
 export type EtatLigne = "ok" | "ko" | "avert";
 export interface LigneVerif { etat: EtatLigne; controle: string; detail: string }

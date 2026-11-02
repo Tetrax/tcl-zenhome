@@ -183,7 +183,7 @@ pub struct ReglagesLus<'a> {
 }
 
 /// Liste d'allègement prudente de l'appareil générique.
-const LISTE_GENERIQUE: &str = include_str!("../../../../tv/debloat-generique.txt");
+pub const LISTE_GENERIQUE: &str = include_str!("../../../../tv/debloat-generique.txt");
 
 impl Appareil {
     pub fn depuis(p: &'static Profil) -> Self {
@@ -238,6 +238,11 @@ impl Appareil {
             proteges,
             liste: LISTE_GENERIQUE,
         })
+    }
+
+    /// Appareil non vérifié (construit à la connexion depuis ce que l'appareil a répondu).
+    pub fn est_generique(&self) -> bool {
+        self.id == ID_GENERIQUE
     }
 
     /// Liste d'allègement annotée de l'appareil.

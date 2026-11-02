@@ -175,7 +175,7 @@ export const simulation: Api = {
     if (q.has("autremodele") || choisie?.appareil === "inconnu") throw erreur("autre_modele", "Cet appareil n'est pas encore pris en charge. Rien n'a été modifié.");
     await progresser(sur, "Lecture du modèle de la box", 700, 0.4, 1);
     box = choisie ?? BOXES[0];
-    return { nom: box.nom, ip, modele: box.modele, appareil: box.appareil };
+    return { nom: box.nom, ip, modele: box.modele, appareil: box.appareil, verifie: true };
   }),
 
   async chercherVilles(saisie): Promise<Ville[]> {
