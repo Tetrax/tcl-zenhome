@@ -4,6 +4,7 @@
 
 pub mod appareils;
 pub mod choix;
+pub mod classification;
 pub mod connexion;
 pub mod debloat;
 pub mod fake_box;
