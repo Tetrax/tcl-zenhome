@@ -4,6 +4,8 @@
 
 use std::collections::BTreeSet;
 
+use super::appareils::Proprietes;
+use super::classification::{self, Lecture};
 use super::transport::{Commande, Espace, ErreurTransport, OptionPm, Transport, assainir};
 
 /// Propriétés lues (valeurs courtes, sans donnée personnelle).
@@ -53,34 +55,55 @@ fn liste(titre: &str, noms: &BTreeSet<String>) -> String {
 
 /// Lit l'appareil connecté et rend le texte du rapport (sans en-tête : version et système sont ajoutés par l'appelant).
 pub fn composer(t: &dyn Transport) -> Result<String, ErreurTransport> {
-    let mut s = String::from("Rapport d'appareil\n\n");
+    let mut s = String::from("Rapport d'appareil\n");
     let mut sdk = None;
+    let mut lues = Vec::new();
+    let mut corps = String::new();
     for cle in PROPRIETES {
-        let v = valeur(&lire(t, &Commande::getprop(cle)?)?);
+        let brut = assainir(&lire(t, &Commande::getprop(cle)?)?);
+        let v = valeur(&brut);
         if cle == "ro.build.version.sdk" {
             sdk = v.parse::<u32>().ok();
         }
-        s.push_str(&format!("{cle} : {v}\n"));
+        corps.push_str(&format!("{cle} : {v}\n"));
+        lues.push(brut);
     }
+    let features = lire(t, &Commande::pm_features())?;
     // le numéro de série n'est jamais recopié : on note seulement si la box le donne
     let serie = super::connexion::lire_serie(t);
-    s.push_str(&format!("numéro de série : {}\n", if serie.is_ok() { "lisible" } else { "illisible" }));
+    corps.push_str(&format!("numéro de série : {}\n", if serie.is_ok() { "lisible" } else { "illisible" }));
 
     let systeme = paquets(&lire(t, &Commande::pm_list(&[OptionPm::Systeme]))?);
     // « désactivés » : seulement ceux du système (un paquet de l'utilisateur désactivé ne figure pas au rapport)
     let desactives: BTreeSet<String> = paquets(&lire(t, &Commande::pm_list(&[OptionPm::Desactives]))?).intersection(&systeme).cloned().collect();
     let tiers = paquets(&lire(t, &Commande::pm_list(&[OptionPm::Tiers]))?);
-    s.push_str(&format!("applis de l'utilisateur : {}\n", tiers.len()));
+    corps.push_str(&format!("applis de l'utilisateur : {}\n", tiers.len()));
     // un accueil, un rôle HOME ou un écran de veille peut être une appli de l'utilisateur : son nom n'est pas recopié
     let anonyme = |v: String| if tiers.iter().any(|p| v.contains(p.as_str())) { "(appli de l'utilisateur)".to_string() } else { v };
 
     let accueil = lire(t, &Commande::resoudre_accueil())?;
-    s.push_str(&format!("accueil résolu : {}\n", anonyme(valeur(accueil.lines().rev().find(|l| !l.trim().is_empty()).unwrap_or("")))));
+    corps.push_str(&format!("accueil résolu : {}\n", anonyme(valeur(accueil.lines().rev().find(|l| !l.trim().is_empty()).unwrap_or("")))));
+    let mut role = String::new();
     if sdk.is_some_and(|v| v >= 29) {
-        s.push_str(&format!("détenteur du rôle HOME : {}\n", anonyme(valeur(&lire(t, &Commande::role_home_detenteur())?))));
+        role = lire(t, &Commande::role_home_detenteur())?;
+        corps.push_str(&format!("détenteur du rôle HOME : {}\n", anonyme(valeur(&role))));
     }
     let veille = lire(t, &Commande::settings_get(Espace::Secure, "screensaver_components")?)?;
-    s.push_str(&format!("screensaver_components : {}\n\n", anonyme(valeur(&veille))));
+    corps.push_str(&format!("screensaver_components : {}\n\n", anonyme(valeur(&veille))));
+
+    let p = |cle: &str| PROPRIETES.iter().position(|c| *c == cle).map_or("", |i| lues[i].as_str());
+    let classe = classification::classer(&Lecture {
+        proprietes: Proprietes { nom: p("ro.product.name"), marque: p("ro.product.brand"), device: p("ro.product.device"), sdk: p("ro.build.version.sdk") },
+        fabricant: p("ro.product.manufacturer"),
+        release: p("ro.build.version.release"),
+        caracteristiques: p("ro.build.characteristics"),
+        features: &features,
+        systeme: &systeme,
+        resolution: &accueil,
+        role: &role,
+    });
+    s.push_str(&format!("classification : {}\n\n", classe.libelle()));
+    s.push_str(&corps);
 
     s.push_str(&liste("Paquets système", &systeme));
     s.push('\n');
@@ -108,7 +131,7 @@ mod tests {
             assert!(!shell.is_empty());
             for c in &shell {
                 assert!(
-                    ["getprop ro.", "pm list packages", "settings get secure screensaver_components", "cmd package resolve-activity", "cmd role get-role-holders"]
+                    ["getprop ro.", "pm list packages", "pm list features", "settings get secure screensaver_components", "cmd package resolve-activity", "cmd role get-role-holders"]
                         .iter()
                         .any(|p| c.starts_with(p)),
                     "commande hors liste blanche : {c}"
@@ -176,6 +199,25 @@ mod tests {
         assert!(texte.chars().count() <= TEXTE_MAX && !texte.contains('\u{7}'));
         assert!(texte.lines().filter(|l| l.starts_with("com.exemple.paquet")).count() <= PAQUETS_MAX);
         assert!(texte.lines().all(|l| l.chars().count() <= 340), "ligne trop longue");
+    }
+
+    #[test]
+    fn classification_en_tete_du_rapport() {
+        let texte = composer(&connectee(FakeBox::mibox4())).unwrap();
+        assert!(texte.starts_with("Rapport d'appareil\nclassification : vérifié (mibox4)\n\nro.product.name"), "{texte}");
+
+        let f = connectee(FakeBox::tcl_g08());
+        f.modifier(|e| {
+            e.produit = "inconnu".into();
+            e.marque = "Marque".into();
+        });
+        let texte = composer(&f).unwrap();
+        let attendu = "classification : compatible probable (rôle HOME, accueil d'origine : com.google.android.apps.tv.launcherx)";
+        assert!(texte.starts_with(&format!("Rapport d'appareil\n{attendu}\n")), "{texte}");
+        assert!(!texte.contains("feature:"), "les features ne sont pas recopiées");
+
+        f.modifier(|e| e.features.clear());
+        assert!(composer(&f).unwrap().contains("classification : non supporté : pas une TV Android"));
     }
 
     #[test]

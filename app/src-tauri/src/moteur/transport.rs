@@ -347,6 +347,11 @@ impl Commande {
         Self::simple(t)
     }
 
+    /// Fonctions déclarées par l'appareil (lecture).
+    pub fn pm_features() -> Self {
+        Self::simple("pm list features")
+    }
+
     pub fn settings_list(espace: Espace) -> Self {
         Self::simple(format!("settings list {}", espace.nom()))
     }
@@ -773,6 +778,7 @@ mod tests {
     fn constructeurs_produisent_les_commandes_du_kit() {
         assert_eq!(Commande::pm_list(&[OptionPm::Desactives]).texte(), "pm list packages -d");
         assert_eq!(Commande::pm_list(&[OptionPm::Chemins]).texte(), "pm list packages -f");
+        assert_eq!(Commande::pm_features().texte(), "pm list features");
         assert_eq!(Commande::pm_disable("com.mitv.tvhome.atv").unwrap().texte(), "pm disable-user --user 0 com.mitv.tvhome.atv");
         assert_eq!(
             Commande::settings_put(Espace::Global, "zenhome_garder", "a.b,c.d").unwrap().texte(),

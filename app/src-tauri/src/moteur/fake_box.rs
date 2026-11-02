@@ -52,6 +52,8 @@ pub struct EtatBox {
     /// `ro.build.version.sdk`.
     pub sdk: String,
     pub serie: String,
+    /// Sortie de `pm list features` (une ligne `feature:...` par fonction).
+    pub features: String,
     pub paquets: BTreeMap<String, PaquetFake>,
     pub global: BTreeMap<String, String>,
     pub secure: BTreeMap<String, String>,
@@ -167,6 +169,7 @@ impl EtatBox {
             android: if role { "14" } else { "9" }.into(),
             sdk: if role { "34" } else { "28" }.into(),
             serie: "TESTSERIAL0001".into(),
+            features: "feature:android.hardware.wifi\nfeature:android.software.leanback\n".into(),
             paquets,
             global: BTreeMap::from([("device_name".to_string(), "BOX-TEST".to_string())]),
             secure,
@@ -296,6 +299,7 @@ impl Interne {
                         .collect::<String>(),
                 )
             }
+            ["pm", "list", "features"] => sortie(e.features.clone()),
             ["pm", "disable-user", "--user", "0", p] => match e.paquets.get_mut(*p) {
                 Some(x) => {
                     x.desactive = true;
