@@ -79,8 +79,9 @@ pub fn restaurer(
     if s.etape(0, "Réactivation des applis désactivées") {
         // Liste relue à chaque passage (reprise) : seuls les noms valides sont utilisés.
         // Celles qui l'étaient déjà avant Zen Home le restent.
-        let bornee: Option<Vec<String>> = (origine.is_none() && app.id == ID_GENERIQUE).then(|| a_rendre_sans_origine(app));
-        let noms: Vec<String> = noms_valides(&s.lire(&Commande::pm_list(&[OptionPm::Desactives]))?)
+        let eteints = noms_valides(&s.lire(&Commande::pm_list(&[OptionPm::Desactives]))?);
+        let bornee: Option<Vec<String>> = (origine.is_none() && app.id == ID_GENERIQUE).then(|| a_rendre_sans_origine(app, depuis, &eteints));
+        let noms: Vec<String> = eteints
             .into_iter()
             .filter(|p| !origine.is_some_and(|o| o.desactives.contains(p)))
             .filter(|p| bornee.as_ref().is_none_or(|b| b.contains(p)))
@@ -167,9 +168,17 @@ pub fn restaurer(
     Ok(RapportRestauration { incomplete, reactives, avertissements: s.avertissements })
 }
 
-/// Sans origine, l'appareil générique ne rend que ce que Zen Home a pu désactiver : liste d'allègement, accueil, setupwraith.
-fn a_rendre_sans_origine(app: &Appareil) -> Vec<String> {
-    app.liste().into_iter().map(|e| e.paquet).chain([app.launcher().to_string(), WRAITH.to_string()]).collect()
+/// Sans origine, l'appareil générique ne rend que ce que Zen Home a pu désactiver : liste d'allègement, accueil, paquets notés
+/// dans la reprise (`depuis.desactives` : désactivés par Zen Home) et setupwraith seulement si la reprise le note OU si
+/// l'accueil d'origine est désactivé (signe que `corriger` est passé : il désactive les deux ensemble). Un setupwraith
+/// désactivé par le fabricant, accueil actif, n'est donc pas réactivé.
+fn a_rendre_sans_origine(app: &Appareil, depuis: &Reprise, eteints: &[String]) -> Vec<String> {
+    let mut v: Vec<String> = app.liste().into_iter().map(|e| e.paquet).chain([app.launcher().to_string()]).collect();
+    v.extend(depuis.desactives.iter().cloned());
+    if eteints.iter().any(|p| p == app.launcher()) {
+        v.push(WRAITH.to_string());
+    }
+    v
 }
 
 fn noms_valides(sortie: &str) -> Vec<String> {
@@ -519,6 +528,24 @@ mod tests {
         assert_eq!(e.role_home.as_deref(), Some(TCL_G08.launcher()));
         assert!(!e.paquets.contains_key(PKG) && !r.incomplete, "{:?}", r.avertissements);
         assert!(r.avertissements.is_empty(), "{:?}", r.avertissements);
+    }
+
+    #[test]
+    fn generique_sans_origine_laisse_setupwraith_desactive_par_le_fabricant() {
+        let (f, app) = installee_generique();
+        // accueil actif, setupwraith et une appli étrangère désactivés avant Zen Home : rien ne les désigne comme l'oeuvre de Zen Home
+        f.modifier(|e| {
+            e.paquets.get_mut(TCL_G08.launcher()).unwrap().desactive = false;
+            e.paquets.get_mut("com.tcl.logkit").unwrap().desactive = true;
+        });
+        restaurer(&f, &app, &Politique::default(), &mut Silencieux, &Reprise::default(), None).unwrap();
+        let e = f.instantane();
+        assert!(e.paquets["com.google.android.tungsten.setupwraith"].desactive && e.paquets["com.tcl.logkit"].desactive);
+        // la reprise note ce que Zen Home a désactivé : seulement ces paquets-là sont rendus en plus
+        let depuis = Reprise { desactives: vec!["com.google.android.tungsten.setupwraith".into(), "com.tcl.logkit".into()], ..Reprise::default() };
+        restaurer(&f, &app, &Politique::default(), &mut Silencieux, &depuis, None).unwrap();
+        let e = f.instantane();
+        assert!(!e.paquets["com.google.android.tungsten.setupwraith"].desactive && !e.paquets["com.tcl.logkit"].desactive);
     }
 
     #[test]

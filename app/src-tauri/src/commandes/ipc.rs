@@ -91,9 +91,9 @@ pub async fn appliquer(coeur: Etat<'_>, choix: ChoixUi, canal: Channel<Evenement
 }
 
 #[tauri::command]
-pub async fn verifier(coeur: Etat<'_>, reparer: bool, canal: Channel<EvenementUi>) -> Result<VerificationUi, ErreurCommande> {
+pub async fn verifier(coeur: Etat<'_>, reparer: bool, risques_acceptes: Option<bool>, canal: Channel<EvenementUi>) -> Result<VerificationUi, ErreurCommande> {
     let c = coeur.inner().clone();
-    bloquant(move || c.verifier(reparer, &emetteur(canal))).await
+    bloquant(move || c.verifier(reparer, risques_acceptes.unwrap_or(false), &emetteur(canal))).await
 }
 
 #[tauri::command]

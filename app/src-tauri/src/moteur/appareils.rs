@@ -169,6 +169,8 @@ pub struct Appareil {
     /// Écran de veille d'origine ; `None` : aucun connu, le réglage est supprimé à la restauration.
     pub veille: Option<String>,
     pub proteges: Vec<String>,
+    /// Vrai seulement pour un générique reconstruit depuis une sauvegarde d'origine (Zen Home déjà installé, origine connue).
+    pub depuis_origine: bool,
     liste: &'static str,
 }
 
@@ -197,6 +199,7 @@ impl Appareil {
             accueil: p.accueil.into(),
             veille: Some(p.veille.into()),
             proteges: p.proteges.iter().map(|&s| s.into()).collect(),
+            depuis_origine: false,
             liste: p.liste,
         }
     }
@@ -236,6 +239,7 @@ impl Appareil {
             accueil,
             veille,
             proteges,
+            depuis_origine: false,
             liste: LISTE_GENERIQUE,
         })
     }

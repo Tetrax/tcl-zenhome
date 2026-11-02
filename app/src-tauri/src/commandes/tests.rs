@@ -123,7 +123,7 @@ fn une_seule_action_a_la_fois() {
     assert_eq!(code(c.connecter(&Cible::Ip { ip: IP.into() }, &rien)), "occupe");
     assert_eq!(code(c.inventaire(&rien)), "occupe");
     assert_eq!(code(c.installer(None, None, false, &rien)), "occupe");
-    assert_eq!(code(c.verifier(false, &rien)), "occupe");
+    assert_eq!(code(c.verifier(false, false, &rien)), "occupe");
     assert_eq!(code(c.restaurer(&rien)), "occupe");
     assert_eq!(code(c.installer_adb(true, &rien)), "occupe");
     assert_eq!(code(c.desinstaller_mac(true, &d, &d, None)), "occupe");
@@ -150,7 +150,7 @@ fn annuler_arrete_l_action_entre_deux_operations() {
 
     // action du moteur (Session) : mise en pause propre avant l'opération suivante
     let avant = f.journal().len();
-    let r = c.verifier(false, &|e| {
+    let r = c.verifier(false, false, &|e| {
         if matches!(e, EvenementUi::Etape { .. }) {
             c.annuler();
         }
@@ -159,7 +159,7 @@ fn annuler_arrete_l_action_entre_deux_operations() {
     assert_eq!(f.journal().len(), avant);
 
     // l'annulation ne reste pas armée pour l'action suivante
-    assert!(c.verifier(false, &rien).is_ok());
+    assert!(c.verifier(false, false, &rien).is_ok());
 }
 
 #[test]
@@ -337,7 +337,7 @@ fn apk_a_l_empreinte_fausse_refuse_avant_toute_installation() {
     assert!(!d.join("apk-verifie").exists() || std::fs::read_dir(d.join("apk-verifie")).unwrap().next().is_none());
     // la vérification ne bloque pas le contrôle : l'APK refusé devient un avertissement
     let (recu, enregistre) = enregistreur();
-    c.verifier(true, &enregistre).unwrap();
+    c.verifier(true, false, &enregistre).unwrap();
     assert!(recu.lock().unwrap().iter().any(|e| matches!(e, EvenementUi::Avertissement { texte } if texte.contains("empreinte"))));
     assert!(f.journal().iter().all(|l| !l.starts_with("install:")), "{:?}", f.journal());
 }
@@ -375,7 +375,7 @@ fn reprise_persistee_pendant_la_verification_puis_effacee() {
     let v = vue.clone();
     let dd = d.clone();
     let rapport = c
-        .verifier(true, &move |e| {
+        .verifier(true, false, &move |e| {
             if matches!(&e, EvenementUi::Etape { nom } if nom == "Nouveau contrôle") {
                 *v.lock().unwrap() = persistance::lire(&dd, SERIE);
             }
@@ -457,7 +457,7 @@ fn parcours_demo_complet() {
     assert_eq!(rapport.desinstallees, ["org.videolan.vlc"]);
     assert!(rapport.echecs.is_empty());
 
-    let verif = c.verifier(true, &rien).unwrap();
+    let verif = c.verifier(true, false, &rien).unwrap();
     assert_eq!(verif.ko, 0, "{:?}", verif.lignes.iter().map(|l| (&l.controle, &l.detail)).collect::<Vec<_>>());
     assert!(verif.lignes.iter().all(|l| ["ok", "ko", "avert"].contains(&l.etat)));
 
@@ -593,7 +593,7 @@ fn reprise_gardee_par_serie_entre_deux_box() {
     let inv = inventaire(&c);
     c.installer(None, None, false, &rien).unwrap();
     c.appliquer(&choix_recommande(&inv), &rien).unwrap();
-    let r = c.verifier(true, &|e| {
+    let r = c.verifier(true, false, &|e| {
         if matches!(&e, EvenementUi::Etape { nom } if nom == "Nouveau contrôle") {
             c.annuler();
         }
@@ -607,7 +607,7 @@ fn reprise_gardee_par_serie_entre_deux_box() {
     let inv = inventaire(&c);
     c.installer(None, None, false, &rien).unwrap();
     c.appliquer(&choix_recommande(&inv), &rien).unwrap();
-    assert_eq!(c.verifier(true, &rien).unwrap().ko, 0);
+    assert_eq!(c.verifier(true, false, &rien).unwrap().ko, 0);
     assert_eq!(persistance::lire(&d, SERIE), Some(reprise_a.clone()));
     assert_eq!(persistance::lire(&d, SERIE_B), None);
     assert!(c.etat_initial().reprise_en_attente);
@@ -615,7 +615,7 @@ fn reprise_gardee_par_serie_entre_deux_box() {
     // en reconnectant A, la reprise revient ; sa vérification l'efface sans toucher aux autres
     connecter_ip(&c, IP);
     assert_eq!(c.reprise_session().unwrap().desactives, reprise_a.desactives);
-    assert_eq!(c.verifier(true, &rien).unwrap().ko, 0);
+    assert_eq!(c.verifier(true, false, &rien).unwrap().ko, 0);
     assert!(!c.etat_initial().reprise_en_attente);
 }
 
@@ -758,7 +758,7 @@ fn parcours_demo_a_deux_box() {
         let inv = inventaire(&c);
         let choix = ChoixUi { desinstaller: vec![propre.into()], ..choix_recommande(&inv) };
         assert_eq!(c.appliquer(&choix, &rien).unwrap().desinstallees, [propre]);
-        assert_eq!(c.verifier(true, &rien).unwrap().ko, 0);
+        assert_eq!(c.verifier(true, false, &rien).unwrap().ko, 0);
     }
 
     // l'état de chaque box est resté le sien
@@ -830,7 +830,7 @@ fn equiper(c: &Coeur) {
     let inv = inventaire(c);
     c.installer(None, None, true, &rien).unwrap();
     c.appliquer(&choix_accepte(&inv), &rien).unwrap();
-    let v = c.verifier(true, &rien).unwrap();
+    let v = c.verifier(true, true, &rien).unwrap();
     assert_eq!(v.ko, 0, "{:?}", v.lignes.iter().filter(|l| l.etat == "ko").map(|l| (&l.controle, &l.detail)).collect::<Vec<_>>());
 }
 
@@ -878,6 +878,25 @@ fn generique_refuse_sans_risques_acceptes_ni_sauvegarde() {
 }
 
 #[test]
+fn generique_neuf_ne_se_repare_pas_sans_les_garde_fous() {
+    let (c, f, _d) = pret_chromecast("generique-reparer");
+    c.connecter(&Cible::Ip { ip: IP.into() }, &rien).unwrap();
+    // « Réparer » sur une box neuve installerait Zen Home sans sauvegarde d'origine
+    let err = c.verifier(true, false, &rien).err().unwrap();
+    assert_eq!(err.code, "risques_non_acceptes");
+    assert!(err.message.contains("Commencer"), "{}", err.message);
+    assert_eq!(code(c.verifier(true, true, &rien)), "lecture", "état de la box pas encore sauvegardé");
+    // la vérification en lecture seule reste libre
+    c.verifier(false, false, &rien).unwrap();
+    assert_eq!(ecritures(&f), 0, "aucune écriture sur la box");
+    assert!(!f.instantane().paquets.contains_key("tv.zenhome"));
+    // après lecture de l'état et risques acceptés, la réparation est permise
+    inventaire(&c);
+    assert_eq!(code(c.verifier(true, false, &rien)), "risques_non_acceptes");
+    c.verifier(true, true, &rien).unwrap();
+}
+
+#[test]
 fn profils_inchanges_sans_risques_acceptes() {
     let (c, f, _d) = pret("profil-sans-risques");
     let connexion = c.connecter(&Cible::Ip { ip: IP.into() }, &rien).unwrap();
@@ -917,6 +936,8 @@ fn generique_deja_equipe_repart_de_la_sauvegarde_d_origine() {
     let c2 = Coeur::nouveau(cfg);
     let connexion = c2.connecter(&Cible::Ip { ip: IP.into() }, &rien).unwrap();
     assert_eq!((connexion.appareil.as_str(), connexion.verifie), ("generique", false));
+    // construit depuis la sauvegarde d'origine : « Réparer » est permis sans les garde-fous de « Commencer »
+    c2.verifier(true, false, &rien).unwrap();
     let r = c2.restaurer(&rien).unwrap();
     assert!(!r.incomplete && r.depuis_sauvegarde.is_some(), "{:?}", r.avertissements);
     assert_eq!(etat_restaurable(&f), depart, "l'accueil et la veille d'origine sont rendus");
@@ -932,5 +953,5 @@ fn generique_deja_equipe_repart_de_la_sauvegarde_d_origine() {
     };
     let err = c3.connecter(&Cible::Ip { ip: IP.into() }, &rien).err().unwrap();
     assert_eq!(err.code, "autre_modele");
-    assert!(err.message.contains("par un autre moyen : accueil d'origine inconnu"), "{}", err.message);
+    assert!(err.message.contains("pas de sauvegarde d'origine de cet appareil : accueil d'origine inconnu."), "{}", err.message);
 }
