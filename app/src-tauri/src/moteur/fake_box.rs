@@ -6,7 +6,8 @@ use std::collections::BTreeMap;
 use std::path::Path;
 use std::sync::{Mutex, MutexGuard};
 
-use super::appareils::{MIBOX4, ModeAccueil, Profil, TCL_G08, TOUS};
+use super::appareils::{LISTE_GENERIQUE, MIBOX4, ModeAccueil, Profil, TCL_G08, TOUS};
+use super::debloat;
 use super::transport::{Commande, ErreurTransport, EtatLien, Sortie, Transport, decouper_shell, paquet_valide};
 
 pub const ZEN_HOME: &str = "tv.zenhome";
@@ -134,6 +135,32 @@ impl EtatBox {
     /// TV TCL G08 d'origine (Android 14, rôle HOME au lanceur d'origine).
     pub fn tcl_g08() -> Self {
         Self::pour(&TCL_G08)
+    }
+
+    /// Google TV inconnue des fiches (Android 14, rôle HOME au lanceur Google) : paquets de la liste générique, `samba`
+    /// désactivé en usine, un clavier et un service d'accessibilité tiers.
+    pub fn chromecast() -> Self {
+        let mut e = Self::pour(&TCL_G08);
+        e.produit = "sabrina".into();
+        e.marque = "google".into();
+        e.device = "sabrina".into();
+        e.modele = "Chromecast".into();
+        e.paquets.retain(|_, p| !p.systeme);
+        let generique = debloat::analyser(LISTE_GENERIQUE).expect("liste générique valide");
+        let systeme = generique.into_iter().map(|x| x.paquet).chain(
+            [TCL_G08.launcher(), SETUPWRAITH, "com.android.vending", "com.android.tv.settings", "com.google.android.gms", "tv.samba.ssm.ui"].map(String::from),
+        );
+        for p in systeme {
+            e.paquets.insert(p.clone(), paquet_systeme("priv-app", &p));
+        }
+        e.paquets.get_mut("tv.samba.ssm.ui").unwrap().desactive = true;
+        e.paquets.insert("com.exemple.clavier".into(), paquet_tiers("com.exemple.clavier", 8, "2026-10-20 10:00:00", "Clavier"));
+        e.paquets.insert("com.exemple.acces".into(), paquet_tiers("com.exemple.acces", 4, "2026-10-20 10:00:00", "Accès"));
+        e.secure.insert("default_input_method".into(), "com.exemple.clavier/.Service".into());
+        e.secure.insert("enabled_accessibility_services".into(), "com.exemple.acces/.Acces".into());
+        e.secure.insert("accessibility_enabled".into(), "1".into());
+        e.secure.insert("screensaver_components".into(), "com.google.android.apps.tv.dreamx/.Dream".into());
+        e
     }
 
     fn pour(app: &Profil) -> Self {
@@ -463,6 +490,11 @@ impl FakeBox {
     /// TV TCL G08 (Android 14, rôle HOME).
     pub fn tcl_g08() -> Self {
         Self::avec(EtatBox::tcl_g08())
+    }
+
+    /// Google TV inconnue des fiches (Android 14, rôle HOME).
+    pub fn chromecast() -> Self {
+        Self::avec(EtatBox::chromecast())
     }
 
     fn avec(etat: EtatBox) -> Self {

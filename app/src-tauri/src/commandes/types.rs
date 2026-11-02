@@ -77,6 +77,8 @@ pub struct Connexion {
     pub modele: String,
     /// Identifiant de l'appareil reconnu (PROFIL du kit : « mibox4 », « tcl-g08 »).
     pub appareil: String,
+    /// Faux pour un appareil générique (non vérifié) : l'interface affichera un badge.
+    pub verifie: bool,
 }
 
 #[derive(Serialize)]
@@ -120,6 +122,9 @@ pub struct ChoixUi {
     pub garder: Vec<String>,
     pub desactiver: Vec<String>,
     pub desinstaller: Vec<String>,
+    /// L'utilisateur a accepté les risques d'un appareil non vérifié (exigé par le cœur pour le générique seulement).
+    #[serde(default)]
+    pub risques_acceptes: bool,
 }
 
 #[derive(Serialize)]

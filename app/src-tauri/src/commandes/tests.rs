@@ -111,7 +111,7 @@ fn inventaire(c: &Coeur) -> InventaireUi {
 /// Choix qui suit les recommandations de la liste.
 fn choix_recommande(inv: &InventaireUi) -> ChoixUi {
     let par = |r: &str| inv.applis_systeme.iter().filter(|a| a.recommande == r).map(|a| a.paquet.clone()).collect();
-    ChoixUi { garder: par("garder"), desactiver: par("desactiver"), desinstaller: vec![] }
+    ChoixUi { garder: par("garder"), desactiver: par("desactiver"), desinstaller: vec![], risques_acceptes: false }
 }
 
 #[test]
@@ -122,8 +122,8 @@ fn une_seule_action_a_la_fois() {
     assert_eq!(code(c.chercher_box()), "occupe");
     assert_eq!(code(c.connecter(&Cible::Ip { ip: IP.into() }, &rien)), "occupe");
     assert_eq!(code(c.inventaire(&rien)), "occupe");
-    assert_eq!(code(c.installer(None, None, &rien)), "occupe");
-    assert_eq!(code(c.verifier(false, &rien)), "occupe");
+    assert_eq!(code(c.installer(None, None, false, &rien)), "occupe");
+    assert_eq!(code(c.verifier(false, false, &rien)), "occupe");
     assert_eq!(code(c.restaurer(&rien)), "occupe");
     assert_eq!(code(c.installer_adb(true, &rien)), "occupe");
     assert_eq!(code(c.desinstaller_mac(true, &d, &d, None)), "occupe");
@@ -150,7 +150,7 @@ fn annuler_arrete_l_action_entre_deux_operations() {
 
     // action du moteur (Session) : mise en pause propre avant l'opération suivante
     let avant = f.journal().len();
-    let r = c.verifier(false, &|e| {
+    let r = c.verifier(false, false, &|e| {
         if matches!(e, EvenementUi::Etape { .. }) {
             c.annuler();
         }
@@ -159,7 +159,7 @@ fn annuler_arrete_l_action_entre_deux_operations() {
     assert_eq!(f.journal().len(), avant);
 
     // l'annulation ne reste pas armée pour l'action suivante
-    assert!(c.verifier(false, &rien).is_ok());
+    assert!(c.verifier(false, false, &rien).is_ok());
 }
 
 #[test]
@@ -238,20 +238,20 @@ fn ip_publique_ou_inconnue_refusee_sans_toucher_au_reseau() {
 #[test]
 fn appliquer_refuse_les_paquets_non_autorises() {
     let (c, f, _d) = pret("choix");
-    assert_eq!(code(c.appliquer(&ChoixUi { garder: vec![], desactiver: vec![], desinstaller: vec![] }, &rien)), "injoignable");
+    assert_eq!(code(c.appliquer(&ChoixUi { garder: vec![], desactiver: vec![], desinstaller: vec![], risques_acceptes: false }, &rien)), "injoignable");
     connecter(&c);
-    let vide = ChoixUi { garder: vec![], desactiver: vec![], desinstaller: vec![] };
+    let vide = ChoixUi { garder: vec![], desactiver: vec![], desinstaller: vec![], risques_acceptes: false };
     assert_eq!(code(c.appliquer(&vide, &rien)), "lecture", "pas d'inventaire lu : rien n'est appliqué");
     let inv = inventaire(&c);
     let avant = f.journal().len();
     let un = |p: &str| vec![p.to_string()];
     for choix in [
-        ChoixUi { desinstaller: un("com.google.android.tvlauncher"), ..ChoixUi { garder: vec![], desactiver: vec![], desinstaller: vec![] } },
-        ChoixUi { desinstaller: un("tv.zenhome"), ..ChoixUi { garder: vec![], desactiver: vec![], desinstaller: vec![] } },
-        ChoixUi { desactiver: un("com.android.vending"), ..ChoixUi { garder: vec![], desactiver: vec![], desinstaller: vec![] } },
-        ChoixUi { garder: un("com.exemple.inconnu"), ..ChoixUi { garder: vec![], desactiver: vec![], desinstaller: vec![] } },
-        ChoixUi { desinstaller: un("fr.tf1.mytf1; reboot"), ..ChoixUi { garder: vec![], desactiver: vec![], desinstaller: vec![] } },
-        ChoixUi { desinstaller: un("com.android.tv.settings"), ..ChoixUi { garder: vec![], desactiver: vec![], desinstaller: vec![] } },
+        ChoixUi { desinstaller: un("com.google.android.tvlauncher"), ..ChoixUi { garder: vec![], desactiver: vec![], desinstaller: vec![], risques_acceptes: false } },
+        ChoixUi { desinstaller: un("tv.zenhome"), ..ChoixUi { garder: vec![], desactiver: vec![], desinstaller: vec![], risques_acceptes: false } },
+        ChoixUi { desactiver: un("com.android.vending"), ..ChoixUi { garder: vec![], desactiver: vec![], desinstaller: vec![], risques_acceptes: false } },
+        ChoixUi { garder: un("com.exemple.inconnu"), ..ChoixUi { garder: vec![], desactiver: vec![], desinstaller: vec![], risques_acceptes: false } },
+        ChoixUi { desinstaller: un("fr.tf1.mytf1; reboot"), ..ChoixUi { garder: vec![], desactiver: vec![], desinstaller: vec![], risques_acceptes: false } },
+        ChoixUi { desinstaller: un("com.android.tv.settings"), ..ChoixUi { garder: vec![], desactiver: vec![], desinstaller: vec![], risques_acceptes: false } },
     ] {
         assert_eq!(code(c.appliquer(&choix, &rien)), "choix_invalide", "{choix:?}");
     }
@@ -270,20 +270,20 @@ fn le_jeton_n_apparait_ni_dans_les_evenements_ni_dans_les_erreurs_ni_sur_la_box(
     let (c, f, _d) = pret("jeton");
     connecter(&c);
     let (recu, enregistre) = enregistreur();
-    c.installer(None, Some(JETON.into()), &enregistre).unwrap();
+    c.installer(None, Some(JETON.into()), false, &enregistre).unwrap();
     // Zen Home est installée : une signature incompatible fait échouer la seconde installation
     f.signature_incompatible(true);
-    let err = c.installer(None, Some(JETON.into()), &enregistre).err().unwrap();
+    let err = c.installer(None, Some(JETON.into()), false, &enregistre).err().unwrap();
     assert_eq!(err.code, "interne");
     let tout = format!("{:?}{:?}{}{}", recu.lock().unwrap(), err, serde_json::to_string(&err).unwrap(), f.journal().join("\n"));
     assert!(!tout.contains("SECRET"), "{tout}");
     // jeton au format refusé : l'erreur ne le répète pas
-    let err = c.installer(None, Some("mauvais jeton\n; id".into()), &enregistre).err().unwrap();
+    let err = c.installer(None, Some("mauvais jeton\n; id".into()), false, &enregistre).err().unwrap();
     assert_eq!(err.code, "choix_invalide");
     assert!(!err.message.contains("mauvais jeton"));
     // jeton vide : traité comme absent
     f.signature_incompatible(false);
-    assert!(c.installer(None, Some("   ".into()), &enregistre).is_ok());
+    assert!(c.installer(None, Some("   ".into()), false, &enregistre).is_ok());
 }
 
 #[test]
@@ -302,22 +302,22 @@ fn jeton_du_projet_pour_les_films_et_jeton_perso_prioritaire() {
     // sans jeton projet : comportement actuel (aucun jeton envoyé, films_inclus faux)
     let (c, f) = avec("jp-sans", None);
     assert!(!c.etat_initial().films_inclus);
-    c.installer(None, None, &rien).unwrap();
+    c.installer(None, None, false, &rien).unwrap();
     assert!(!f.journal().join("\n").contains("tmdb_token"));
     // jeton vide : celui du projet est envoyé à la box, sans jamais apparaître dans les événements ni le journal
     let (c, f2) = avec("jp-vide", Some(PROJET));
     assert!(c.etat_initial().films_inclus);
     let (recu, enregistre) = enregistreur();
-    c.installer(None, Some("  ".into()), &enregistre).unwrap();
+    c.installer(None, Some("  ".into()), false, &enregistre).unwrap();
     assert!(f2.journal().join("\n").contains("tmdb_token ***"), "le jeton du projet est envoyé");
     let tout = format!("{:?}{}", recu.lock().unwrap(), f2.journal().join("\n"));
     assert!(!tout.contains("PROJET") && !tout.contains("jeton TMDB absent"), "{tout}");
     // jeton perso : prioritaire, et un jeton refusé ne retombe pas sur celui du projet
     let (c, f3) = avec("jp-perso", Some(PROJET));
-    c.installer(None, Some(PERSO.into()), &enregistre).unwrap();
+    c.installer(None, Some(PERSO.into()), false, &enregistre).unwrap();
     assert!(f3.journal().join("\n").contains("tmdb_token ***"));
     assert!(!format!("{:?}{}", recu.lock().unwrap(), f3.journal().join("\n")).contains("PERSO"));
-    let err = c.installer(None, Some("mauvais;jeton".into()), &enregistre).err().unwrap();
+    let err = c.installer(None, Some("mauvais;jeton".into()), false, &enregistre).err().unwrap();
     assert_eq!(err.code, "choix_invalide");
     assert!(!err.message.contains(PROJET));
 }
@@ -330,14 +330,14 @@ fn apk_a_l_empreinte_fausse_refuse_avant_toute_installation() {
     let c = Coeur::nouveau(cfg);
     connecter(&c);
     let avant = f.journal().len();
-    let err = c.installer(None, None, &rien).err().unwrap();
+    let err = c.installer(None, None, false, &rien).err().unwrap();
     assert_eq!(err.code, "interne");
     assert!(err.message.contains("empreinte"), "{}", err.message);
     assert_eq!(f.journal().len(), avant, "rien n'a été envoyé à la box");
     assert!(!d.join("apk-verifie").exists() || std::fs::read_dir(d.join("apk-verifie")).unwrap().next().is_none());
     // la vérification ne bloque pas le contrôle : l'APK refusé devient un avertissement
     let (recu, enregistre) = enregistreur();
-    c.verifier(true, &enregistre).unwrap();
+    c.verifier(true, false, &enregistre).unwrap();
     assert!(recu.lock().unwrap().iter().any(|e| matches!(e, EvenementUi::Avertissement { texte } if texte.contains("empreinte"))));
     assert!(f.journal().iter().all(|l| !l.starts_with("install:")), "{:?}", f.journal());
 }
@@ -349,12 +349,12 @@ fn apk_absent_au_build_ou_correct() {
     avec_apk(&mut cfg, b"", "");
     let c = Coeur::nouveau(cfg);
     connecter(&c);
-    let err = c.installer(None, None, &rien).err().unwrap();
+    let err = c.installer(None, None, false, &rien).err().unwrap();
     assert!(err.message.contains("ne contient pas Zen Home"), "{}", err.message);
 
     let (c, f, d) = pret("apk-ok");
     connecter(&c);
-    c.installer(None, None, &rien).unwrap();
+    c.installer(None, None, false, &rien).unwrap();
     let installs: Vec<_> = f.journal().into_iter().filter(|l| l.starts_with("install:")).collect();
     assert_eq!(installs.len(), 1);
     assert!(installs[0].contains("apk-verifie"), "installé depuis la copie vérifiée : {installs:?}");
@@ -366,7 +366,7 @@ fn reprise_persistee_pendant_la_verification_puis_effacee() {
     let (c, _f, d) = pret("reprise");
     connecter(&c);
     let inv = inventaire(&c);
-    c.installer(None, None, &rien).unwrap();
+    c.installer(None, None, false, &rien).unwrap();
     c.appliquer(&choix_recommande(&inv), &rien).unwrap();
     assert!(!c.etat_initial().reprise_en_attente);
 
@@ -375,7 +375,7 @@ fn reprise_persistee_pendant_la_verification_puis_effacee() {
     let v = vue.clone();
     let dd = d.clone();
     let rapport = c
-        .verifier(true, &move |e| {
+        .verifier(true, false, &move |e| {
             if matches!(&e, EvenementUi::Etape { nom } if nom == "Nouveau contrôle") {
                 *v.lock().unwrap() = persistance::lire(&dd, SERIE);
             }
@@ -448,7 +448,7 @@ fn parcours_demo_complet() {
     assert!(inv.applis_systeme.iter().all(|a| a.etat == "actif"));
     assert!(d.join("demo/sauvegardes").is_dir());
 
-    c.installer(Some(villes[0].id), Some("jeton-demo.ABC".into()), &rien).unwrap();
+    c.installer(Some(villes[0].id), Some("jeton-demo.ABC".into()), false, &rien).unwrap();
     let inv = inventaire(&c);
     assert!(inv.applis_utilisateur.iter().any(|a| a.libelle == "Netflix"), "libellés fournis par Zen Home une fois installée");
 
@@ -457,7 +457,7 @@ fn parcours_demo_complet() {
     assert_eq!(rapport.desinstallees, ["org.videolan.vlc"]);
     assert!(rapport.echecs.is_empty());
 
-    let verif = c.verifier(true, &rien).unwrap();
+    let verif = c.verifier(true, false, &rien).unwrap();
     assert_eq!(verif.ko, 0, "{:?}", verif.lignes.iter().map(|l| (&l.controle, &l.detail)).collect::<Vec<_>>());
     assert!(verif.lignes.iter().all(|l| ["ok", "ko", "avert"].contains(&l.etat)));
 
@@ -591,9 +591,9 @@ fn reprise_gardee_par_serie_entre_deux_box() {
     // vérification de A interrompue après la désactivation des applis
     connecter_ip(&c, IP);
     let inv = inventaire(&c);
-    c.installer(None, None, &rien).unwrap();
+    c.installer(None, None, false, &rien).unwrap();
     c.appliquer(&choix_recommande(&inv), &rien).unwrap();
-    let r = c.verifier(true, &|e| {
+    let r = c.verifier(true, false, &|e| {
         if matches!(&e, EvenementUi::Etape { nom } if nom == "Nouveau contrôle") {
             c.annuler();
         }
@@ -605,9 +605,9 @@ fn reprise_gardee_par_serie_entre_deux_box() {
     connecter_ip(&c, IP_B);
     assert!(c.reprise_session().unwrap().desactives.is_empty(), "B ne reprend pas les paquets de A");
     let inv = inventaire(&c);
-    c.installer(None, None, &rien).unwrap();
+    c.installer(None, None, false, &rien).unwrap();
     c.appliquer(&choix_recommande(&inv), &rien).unwrap();
-    assert_eq!(c.verifier(true, &rien).unwrap().ko, 0);
+    assert_eq!(c.verifier(true, false, &rien).unwrap().ko, 0);
     assert_eq!(persistance::lire(&d, SERIE), Some(reprise_a.clone()));
     assert_eq!(persistance::lire(&d, SERIE_B), None);
     assert!(c.etat_initial().reprise_en_attente);
@@ -615,7 +615,7 @@ fn reprise_gardee_par_serie_entre_deux_box() {
     // en reconnectant A, la reprise revient ; sa vérification l'efface sans toucher aux autres
     connecter_ip(&c, IP);
     assert_eq!(c.reprise_session().unwrap().desactives, reprise_a.desactives);
-    assert_eq!(c.verifier(true, &rien).unwrap().ko, 0);
+    assert_eq!(c.verifier(true, false, &rien).unwrap().ko, 0);
     assert!(!c.etat_initial().reprise_en_attente);
 }
 
@@ -745,7 +745,7 @@ fn parcours_demo_a_deux_box() {
     for b in boxes {
         c.connecter(&Cible::Id { id: b.id }, &rien).unwrap();
         inventaire(&c);
-        c.installer(Some(villes[0].id), None, &rien).unwrap();
+        c.installer(Some(villes[0].id), None, false, &rien).unwrap();
         let inv = inventaire(&c);
         applis.push(inv.applis_utilisateur.iter().map(|a| a.paquet.clone()).collect::<Vec<_>>());
     }
@@ -758,7 +758,7 @@ fn parcours_demo_a_deux_box() {
         let inv = inventaire(&c);
         let choix = ChoixUi { desinstaller: vec![propre.into()], ..choix_recommande(&inv) };
         assert_eq!(c.appliquer(&choix, &rien).unwrap().desinstallees, [propre]);
-        assert_eq!(c.verifier(true, &rien).unwrap().ko, 0);
+        assert_eq!(c.verifier(true, false, &rien).unwrap().ko, 0);
     }
 
     // l'état de chaque box est resté le sien
@@ -795,4 +795,163 @@ fn demo_appareil_inconnu_refuse_puis_rapport() {
     assert!(texte.starts_with("Zen Home 0.0.0-test") && texte.contains("ro.product.brand : Acme") && texte.contains("ro.build.version.sdk : 31"), "{texte}");
     assert!(!texte.contains("ZH-DEMO-0003") && !texte.contains("192.168.50.16"));
     assert_eq!(code(c.rapport_appareil(&Cible::Ip { ip: "8.8.8.8".into() }, &rien)), "injoignable");
+}
+
+// ---------------------------------------------------------------------- appareil générique
+
+fn pret_chromecast(nom: &str) -> (Coeur, Arc<FakeBox>, PathBuf) {
+    let (f, d) = (Arc::new(FakeBox::chromecast()), dossier(nom));
+    let mut cfg = config(d.clone(), &f);
+    avec_apk(&mut cfg, b"apk de test", &sha(b"apk de test"));
+    (Coeur::nouveau(cfg), f, d)
+}
+
+/// Nombre de commandes du journal qui écrivent sur la box.
+fn ecritures(f: &FakeBox) -> usize {
+    const MOTS: [&str; 8] = ["disable-user", "pm enable", "settings put", "settings delete", "add-role-holder", "set-home-activity", "appops set", "pm grant"];
+    f.journal().iter().filter(|l| l.starts_with("install:") || l.starts_with("uninstall:") || MOTS.iter().any(|m| l.contains(m))).count()
+}
+
+type Restaurable = (Vec<(String, bool)>, Option<String>, std::collections::BTreeMap<String, String>);
+
+/// Ce que la restauration doit rendre : paquets (sans Zen Home) et leur état, rôle HOME, réglages secure.
+fn etat_restaurable(f: &FakeBox) -> Restaurable {
+    let e = f.instantane();
+    let paquets = e.paquets.iter().filter(|(n, _)| n.as_str() != "tv.zenhome").map(|(n, p)| (n.clone(), p.desactive)).collect();
+    (paquets, e.role_home, e.secure)
+}
+
+fn choix_accepte(inv: &InventaireUi) -> ChoixUi {
+    ChoixUi { risques_acceptes: true, ..choix_recommande(inv) }
+}
+
+/// Lecture, installation, application et vérification d'un générique (risques acceptés).
+fn equiper(c: &Coeur) {
+    let inv = inventaire(c);
+    c.installer(None, None, true, &rien).unwrap();
+    c.appliquer(&choix_accepte(&inv), &rien).unwrap();
+    let v = c.verifier(true, true, &rien).unwrap();
+    assert_eq!(v.ko, 0, "{:?}", v.lignes.iter().filter(|l| l.etat == "ko").map(|l| (&l.controle, &l.detail)).collect::<Vec<_>>());
+}
+
+#[test]
+fn generique_cycle_complet_puis_restauration() {
+    let (c, f, d) = pret_chromecast("generique");
+    let depart = etat_restaurable(&f);
+    let connexion = c.connecter(&Cible::Ip { ip: IP.into() }, &rien).unwrap();
+    assert_eq!((connexion.appareil.as_str(), connexion.verifie), ("generique", false));
+    assert_eq!(ecritures(&f), 0, "la connexion ne fait que lire {:?}", f.journal());
+    assert_eq!(std::fs::read_to_string(d.join("boxes.json")).unwrap().matches("\"generique\"").count(), 1, "mémorisée comme générique");
+
+    equiper(&c);
+    let e = f.instantane();
+    assert_eq!(e.role_home.as_deref(), Some("tv.zenhome"));
+    assert!(e.paquets["com.google.android.apps.tv.launcherx"].desactive, "accueil d'origine désactivé comme sur un profil");
+    for p in ["com.google.android.feedback", "com.android.tv.feedbackconsent", "android.autoinstalls.config.google.gtvpai"] {
+        assert!(e.paquets[p].desactive, "{p}");
+    }
+    assert!(!e.paquets["com.google.android.play.games"].desactive, "[option:garder]");
+    assert!(e.paquets["tv.samba.ssm.ui"].desactive, "désactivé en usine : le reste");
+    assert_eq!(e.secure["default_input_method"], "com.exemple.clavier/.Service");
+    assert!(e.secure["enabled_accessibility_services"].starts_with("com.exemple.acces/.Acces"), "service tiers conservé");
+    assert!(!e.paquets["com.exemple.clavier"].desactive && !e.paquets["com.exemple.acces"].desactive);
+
+    let r = c.restaurer(&rien).unwrap();
+    assert!(!r.incomplete, "{:?}", r.avertissements);
+    assert_eq!(etat_restaurable(&f), depart, "état final = état de départ");
+    assert!(!f.instantane().paquets.contains_key("tv.zenhome"), "Zen Home désinstallée");
+}
+
+#[test]
+fn generique_refuse_sans_risques_acceptes_ni_sauvegarde() {
+    let (c, f, _d) = pret_chromecast("generique-garde");
+    c.connecter(&Cible::Ip { ip: IP.into() }, &rien).unwrap();
+    // pas encore de lecture de l'état : rien n'est sauvegardé
+    assert_eq!(code(c.installer(None, None, true, &rien)), "lecture");
+    let vide = ChoixUi { garder: vec![], desactiver: vec![], desinstaller: vec![], risques_acceptes: true };
+    assert_eq!(code(c.appliquer(&vide, &rien)), "lecture");
+    let inv = inventaire(&c);
+    assert_eq!(code(c.installer(None, None, false, &rien)), "risques_non_acceptes");
+    assert_eq!(code(c.appliquer(&choix_recommande(&inv), &rien)), "risques_non_acceptes");
+    assert_eq!(ecritures(&f), 0, "aucune écriture sur la box");
+    assert!(!f.instantane().paquets.contains_key("tv.zenhome"));
+}
+
+#[test]
+fn generique_neuf_ne_se_repare_pas_sans_les_garde_fous() {
+    let (c, f, _d) = pret_chromecast("generique-reparer");
+    c.connecter(&Cible::Ip { ip: IP.into() }, &rien).unwrap();
+    // « Réparer » sur une box neuve installerait Zen Home sans sauvegarde d'origine
+    let err = c.verifier(true, false, &rien).err().unwrap();
+    assert_eq!(err.code, "risques_non_acceptes");
+    assert!(err.message.contains("Commencer"), "{}", err.message);
+    assert_eq!(code(c.verifier(true, true, &rien)), "lecture", "état de la box pas encore sauvegardé");
+    // la vérification en lecture seule reste libre
+    c.verifier(false, false, &rien).unwrap();
+    assert_eq!(ecritures(&f), 0, "aucune écriture sur la box");
+    assert!(!f.instantane().paquets.contains_key("tv.zenhome"));
+    // après lecture de l'état et risques acceptés, la réparation est permise
+    inventaire(&c);
+    assert_eq!(code(c.verifier(true, false, &rien)), "risques_non_acceptes");
+    c.verifier(true, true, &rien).unwrap();
+}
+
+#[test]
+fn profils_inchanges_sans_risques_acceptes() {
+    let (c, f, _d) = pret("profil-sans-risques");
+    let connexion = c.connecter(&Cible::Ip { ip: IP.into() }, &rien).unwrap();
+    assert_eq!((connexion.appareil.as_str(), connexion.verifie), ("mibox4", true));
+    let inv = inventaire(&c);
+    c.installer(None, None, false, &rien).unwrap();
+    c.appliquer(&choix_recommande(&inv), &rien).unwrap();
+    assert!(f.instantane().paquets.contains_key("tv.zenhome"));
+}
+
+#[test]
+fn telephone_et_fire_tv_restent_refuses_avec_la_raison() {
+    for (cas, raison) in [("telephone", "pas une TV Android"), ("fire", "Fire TV")] {
+        let (c, f, _d) = pret_chromecast(cas);
+        f.modifier(|e| match cas {
+            "telephone" => e.features.clear(),
+            _ => e.marque = "Amazon".into(),
+        });
+        let err = c.connecter(&Cible::Ip { ip: IP.into() }, &rien).err().unwrap();
+        assert_eq!(err.code, "autre_modele");
+        assert!(err.message.contains(raison), "{cas} : {}", err.message);
+        assert_eq!(ecritures(&f), 0);
+        assert_eq!(code(c.inventaire(&rien)), "injoignable", "aucune session ouverte");
+    }
+}
+
+#[test]
+fn generique_deja_equipe_repart_de_la_sauvegarde_d_origine() {
+    let (c, f, d) = pret_chromecast("generique-equipe");
+    let depart = etat_restaurable(&f);
+    c.connecter(&Cible::Ip { ip: IP.into() }, &rien).unwrap();
+    equiper(&c);
+
+    // nouvelle session (autre lancement de l'appli) : Zen Home tient déjà l'accueil
+    let mut cfg = config(d.clone(), &f);
+    avec_apk(&mut cfg, b"apk de test", &sha(b"apk de test"));
+    let c2 = Coeur::nouveau(cfg);
+    let connexion = c2.connecter(&Cible::Ip { ip: IP.into() }, &rien).unwrap();
+    assert_eq!((connexion.appareil.as_str(), connexion.verifie), ("generique", false));
+    // construit depuis la sauvegarde d'origine : « Réparer » est permis sans les garde-fous de « Commencer »
+    c2.verifier(true, false, &rien).unwrap();
+    let r = c2.restaurer(&rien).unwrap();
+    assert!(!r.incomplete && r.depuis_sauvegarde.is_some(), "{:?}", r.avertissements);
+    assert_eq!(etat_restaurable(&f), depart, "l'accueil et la veille d'origine sont rendus");
+
+    // sans sauvegarde d'origine sur ce Mac : refus
+    f.modifier(|e| {
+        e.role_home = Some("tv.zenhome".into());
+    });
+    let c3 = {
+        let mut cfg = config(dossier("generique-equipe-vide"), &f);
+        avec_apk(&mut cfg, b"apk de test", &sha(b"apk de test"));
+        Coeur::nouveau(cfg)
+    };
+    let err = c3.connecter(&Cible::Ip { ip: IP.into() }, &rien).err().unwrap();
+    assert_eq!(err.code, "autre_modele");
+    assert!(err.message.contains("pas de sauvegarde d'origine de cet appareil : accueil d'origine inconnu."), "{}", err.message);
 }

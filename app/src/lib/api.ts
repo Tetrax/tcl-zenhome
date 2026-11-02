@@ -11,9 +11,9 @@ export interface Api {
   connecter(cible: Cible, sur: SurEvenement): Promise<BoxConnectee>;
   chercherVilles(saisie: string): Promise<Ville[]>;
   inventaire(sur: SurEvenement): Promise<Inventaire>;
-  installer(villeId: number | null, jeton: string | null, sur: SurEvenement): Promise<void>;
+  installer(villeId: number | null, jeton: string | null, sur: SurEvenement, risquesAcceptes?: boolean): Promise<void>;
   appliquer(choix: Choix, sur: SurEvenement): Promise<RapportApplication>;
-  verifier(reparer: boolean, sur: SurEvenement): Promise<Verification>;
+  verifier(reparer: boolean, sur: SurEvenement, risquesAcceptes?: boolean): Promise<Verification>;
   restaurer(sur: SurEvenement): Promise<RapportRestauration>;
   decider(demande: number, decision: Decision): Promise<void>;
   annuler(): Promise<void>;
@@ -49,9 +49,9 @@ async function tauri(): Promise<Api> {
     connecter: (cible, sur) => invoke("connecter", { cible, canal: canal(sur) }),
     chercherVilles: (saisie) => invoke("chercher_villes", { saisie }),
     inventaire: (sur) => invoke("inventaire", { canal: canal(sur) }),
-    installer: (villeId, jeton, sur) => invoke("installer", { villeId, jeton, canal: canal(sur) }),
-    appliquer: (choix, sur) => invoke("appliquer", { choix, canal: canal(sur) }),
-    verifier: (reparer, sur) => invoke("verifier", { reparer, canal: canal(sur) }),
+    installer: (villeId, jeton, sur, risquesAcceptes = false) => invoke("installer", { villeId, jeton, risquesAcceptes, canal: canal(sur) }),
+    appliquer: (choix, sur) => invoke("appliquer", { choix: { risques_acceptes: false, ...choix }, canal: canal(sur) }),
+    verifier: (reparer, sur, risquesAcceptes = false) => invoke("verifier", { reparer, risquesAcceptes, canal: canal(sur) }),
     restaurer: (sur) => invoke("restaurer", { canal: canal(sur) }),
     decider: (demande, decision) => invoke("decider", { demande, decision }),
     annuler: () => invoke("annuler"),
@@ -85,7 +85,7 @@ export const api: Api = {
   inventaire: (s) => appeler("inventaire", s),
   installer: (v, j, s) => appeler("installer", v, j, s),
   appliquer: (c, s) => appeler("appliquer", c, s),
-  verifier: (r, s) => appeler("verifier", r, s),
+  verifier: (r, s, x) => appeler("verifier", r, s, x),
   restaurer: (s) => appeler("restaurer", s),
   decider: (d, x) => appeler("decider", d, x),
   annuler: () => appeler("annuler"),

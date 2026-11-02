@@ -10,7 +10,7 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 use zh_reseau::BoxTrouvee;
 
-use crate::moteur::appareils::{MIBOX4, TOUS, par_id};
+use crate::moteur::appareils::{MIBOX4, NOM_DEFAUT_GENERIQUE as NOM_GENERIQUE, TOUS, par_id};
 
 use super::persistance::{ecrire_atomique, serie_valide};
 
@@ -19,7 +19,6 @@ const TAILLE_MAX: u64 = 64 * 1024;
 const BOXES_MAX: usize = 16;
 /// Identifiant réservé aux Android TV non répertoriées, et son nom par défaut.
 const GENERIQUE: &str = "generique";
-const NOM_GENERIQUE: &str = "TV Android";
 
 #[derive(Serialize, Deserialize)]
 struct Memorisee {

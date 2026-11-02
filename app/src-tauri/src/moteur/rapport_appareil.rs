@@ -26,7 +26,7 @@ const PAQUETS_MAX: usize = 400;
 const TEXTE_MAX: usize = 16_000;
 
 /// Une lecture : une commande refusée par la box (code non nul) donne « rien », une coupure remonte.
-fn lire(t: &dyn Transport, c: &Commande) -> Result<String, ErreurTransport> {
+pub(super) fn lire(t: &dyn Transport, c: &Commande) -> Result<String, ErreurTransport> {
     match t.shell(c) {
         Ok(s) => Ok(s.stdout),
         Err(ErreurTransport::Commande { .. }) => Ok(String::new()),
@@ -53,59 +53,93 @@ fn liste(titre: &str, noms: &BTreeSet<String>) -> String {
     s
 }
 
+/// Lectures communes au rapport et à la connexion d'un appareil inconnu (la seule liste blanche de commandes de lecture).
+pub(super) struct Lu {
+    /// Valeurs assainies, dans l'ordre de `PROPRIETES`.
+    props: Vec<String>,
+    features: String,
+    systeme: BTreeSet<String>,
+    /// Résolution HOME brute.
+    resolution: String,
+    /// Détenteur du rôle HOME (vide avant Android 10).
+    role: String,
+    /// `screensaver_components`
+    pub(super) veille: String,
+}
+
+impl Lu {
+    fn prop(&self, cle: &str) -> &str {
+        PROPRIETES.iter().position(|c| *c == cle).map_or("", |i| self.props[i].as_str())
+    }
+
+    fn sdk(&self) -> Option<u32> {
+        self.prop("ro.build.version.sdk").parse().ok()
+    }
+
+    pub(super) fn lecture(&self) -> Lecture<'_> {
+        Lecture {
+            proprietes: Proprietes {
+                nom: self.prop("ro.product.name"),
+                marque: self.prop("ro.product.brand"),
+                device: self.prop("ro.product.device"),
+                sdk: self.prop("ro.build.version.sdk"),
+            },
+            fabricant: self.prop("ro.product.manufacturer"),
+            release: self.prop("ro.build.version.release"),
+            caracteristiques: self.prop("ro.build.characteristics"),
+            features: &self.features,
+            systeme: &self.systeme,
+            resolution: &self.resolution,
+            role: &self.role,
+        }
+    }
+}
+
+/// Propriétés, features, paquets système, résolution HOME, rôle HOME (Android 10+) et écran de veille.
+pub(super) fn lire_appareil(t: &dyn Transport) -> Result<Lu, ErreurTransport> {
+    let props = PROPRIETES.iter().map(|cle| Ok(assainir(&lire(t, &Commande::getprop(cle)?)?))).collect::<Result<Vec<_>, ErreurTransport>>()?;
+    let features = lire(t, &Commande::pm_features())?;
+    let systeme = paquets(&lire(t, &Commande::pm_list(&[OptionPm::Systeme]))?);
+    let resolution = lire(t, &Commande::resoudre_accueil())?;
+    let mut lu = Lu { props, features, systeme, resolution, role: String::new(), veille: String::new() };
+    if lu.sdk().is_some_and(|v| v >= 29) {
+        lu.role = lire(t, &Commande::role_home_detenteur())?;
+    }
+    lu.veille = lire(t, &Commande::settings_get(Espace::Secure, "screensaver_components")?)?;
+    Ok(lu)
+}
+
 /// Lit l'appareil connecté et rend le texte du rapport (sans en-tête : version et système sont ajoutés par l'appelant).
 pub fn composer(t: &dyn Transport) -> Result<String, ErreurTransport> {
     let mut s = String::from("Rapport d'appareil\n");
-    let mut sdk = None;
-    let mut lues = Vec::new();
+    let lu = lire_appareil(t)?;
     let mut corps = String::new();
     for cle in PROPRIETES {
-        let brut = assainir(&lire(t, &Commande::getprop(cle)?)?);
-        let v = valeur(&brut);
-        if cle == "ro.build.version.sdk" {
-            sdk = v.parse::<u32>().ok();
-        }
-        corps.push_str(&format!("{cle} : {v}\n"));
-        lues.push(brut);
+        corps.push_str(&format!("{cle} : {}\n", valeur(lu.prop(cle))));
     }
-    let features = lire(t, &Commande::pm_features())?;
     // le numéro de série n'est jamais recopié : on note seulement si la box le donne
     let serie = super::connexion::lire_serie(t);
     corps.push_str(&format!("numéro de série : {}\n", if serie.is_ok() { "lisible" } else { "illisible" }));
 
-    let systeme = paquets(&lire(t, &Commande::pm_list(&[OptionPm::Systeme]))?);
+    let systeme = &lu.systeme;
     // « désactivés » : seulement ceux du système (un paquet de l'utilisateur désactivé ne figure pas au rapport)
-    let desactives: BTreeSet<String> = paquets(&lire(t, &Commande::pm_list(&[OptionPm::Desactives]))?).intersection(&systeme).cloned().collect();
+    let desactives: BTreeSet<String> = paquets(&lire(t, &Commande::pm_list(&[OptionPm::Desactives]))?).intersection(systeme).cloned().collect();
     let tiers = paquets(&lire(t, &Commande::pm_list(&[OptionPm::Tiers]))?);
     corps.push_str(&format!("applis de l'utilisateur : {}\n", tiers.len()));
     // un accueil, un rôle HOME ou un écran de veille peut être une appli de l'utilisateur : son nom n'est pas recopié
     let anonyme = |v: String| if tiers.iter().any(|p| v.contains(p.as_str())) { "(appli de l'utilisateur)".to_string() } else { v };
 
-    let accueil = lire(t, &Commande::resoudre_accueil())?;
-    corps.push_str(&format!("accueil résolu : {}\n", anonyme(valeur(accueil.lines().rev().find(|l| !l.trim().is_empty()).unwrap_or("")))));
-    let mut role = String::new();
-    if sdk.is_some_and(|v| v >= 29) {
-        role = lire(t, &Commande::role_home_detenteur())?;
-        corps.push_str(&format!("détenteur du rôle HOME : {}\n", anonyme(valeur(&role))));
+    corps.push_str(&format!("accueil résolu : {}\n", anonyme(valeur(lu.resolution.lines().rev().find(|l| !l.trim().is_empty()).unwrap_or("")))));
+    if lu.sdk().is_some_and(|v| v >= 29) {
+        corps.push_str(&format!("détenteur du rôle HOME : {}\n", anonyme(valeur(&lu.role))));
     }
-    let veille = lire(t, &Commande::settings_get(Espace::Secure, "screensaver_components")?)?;
-    corps.push_str(&format!("screensaver_components : {}\n\n", anonyme(valeur(&veille))));
+    corps.push_str(&format!("screensaver_components : {}\n\n", anonyme(valeur(&lu.veille))));
 
-    let p = |cle: &str| PROPRIETES.iter().position(|c| *c == cle).map_or("", |i| lues[i].as_str());
-    let classe = classification::classer(&Lecture {
-        proprietes: Proprietes { nom: p("ro.product.name"), marque: p("ro.product.brand"), device: p("ro.product.device"), sdk: p("ro.build.version.sdk") },
-        fabricant: p("ro.product.manufacturer"),
-        release: p("ro.build.version.release"),
-        caracteristiques: p("ro.build.characteristics"),
-        features: &features,
-        systeme: &systeme,
-        resolution: &accueil,
-        role: &role,
-    });
+    let classe = classification::classer(&lu.lecture());
     s.push_str(&format!("classification : {}\n\n", classe.libelle()));
     s.push_str(&corps);
 
-    s.push_str(&liste("Paquets système", &systeme));
+    s.push_str(&liste("Paquets système", systeme));
     s.push('\n');
     s.push_str(&liste("Paquets système désactivés", &desactives));
     Ok(s.chars().take(TEXTE_MAX).collect())

@@ -79,9 +79,9 @@ pub async fn inventaire(coeur: Etat<'_>, canal: Channel<EvenementUi>) -> Result<
 }
 
 #[tauri::command]
-pub async fn installer(coeur: Etat<'_>, ville_id: Option<u32>, jeton: Option<String>, canal: Channel<EvenementUi>) -> Result<(), ErreurCommande> {
+pub async fn installer(coeur: Etat<'_>, ville_id: Option<u32>, jeton: Option<String>, risques_acceptes: Option<bool>, canal: Channel<EvenementUi>) -> Result<(), ErreurCommande> {
     let c = coeur.inner().clone();
-    bloquant(move || c.installer(ville_id, jeton, &emetteur(canal))).await
+    bloquant(move || c.installer(ville_id, jeton, risques_acceptes.unwrap_or(false), &emetteur(canal))).await
 }
 
 #[tauri::command]
@@ -91,9 +91,9 @@ pub async fn appliquer(coeur: Etat<'_>, choix: ChoixUi, canal: Channel<Evenement
 }
 
 #[tauri::command]
-pub async fn verifier(coeur: Etat<'_>, reparer: bool, canal: Channel<EvenementUi>) -> Result<VerificationUi, ErreurCommande> {
+pub async fn verifier(coeur: Etat<'_>, reparer: bool, risques_acceptes: Option<bool>, canal: Channel<EvenementUi>) -> Result<VerificationUi, ErreurCommande> {
     let c = coeur.inner().clone();
-    bloquant(move || c.verifier(reparer, &emetteur(canal))).await
+    bloquant(move || c.verifier(reparer, risques_acceptes.unwrap_or(false), &emetteur(canal))).await
 }
 
 #[tauri::command]

@@ -112,7 +112,9 @@ impl From<EchecConnexion> for ErreurCommande {
             EchecConnexion::LectureModele => {
                 Self::nouvelle("lecture", "La box ne répond pas correctement : redémarrez-la (débranchez-la quelques secondes) puis réessayez.")
             }
-            EchecConnexion::ModeleDifferent(_) => Self::nouvelle("autre_modele", "Cet appareil n'est pas encore pris en charge. Rien n'a été modifié."),
+            EchecConnexion::ModeleDifferent(r) => {
+                Self::nouvelle("autre_modele", format!("Cet appareil n'est pas encore pris en charge ({r}). Rien n'a été modifié."))
+            }
         }
     }
 }

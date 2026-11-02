@@ -24,7 +24,7 @@ use super::surveillance::{Attente, Interruption, Occupation, Surveillance, Surve
 use super::types::*;
 use crate::moteur::appareils::{self, Appareil};
 use crate::moteur::choix::{self, Choix};
-use crate::moteur::connexion::{Connecte, EchecConnexion, Politique, connecter_box, lire_serie};
+use crate::moteur::connexion::{Connecte, EchecConnexion, Politique, connecter_appareil, lire_serie};
 use crate::moteur::installation::{self, Parametres};
 use crate::moteur::inventaire::{self, ErreurInventaire, Inventaire, libelles_broadcast};
 use crate::moteur::origine;
@@ -560,7 +560,7 @@ impl Coeur {
                     nom = memoire::nom_pour(&self.cfg.donnees, serie, &ip.to_string(), &nom, &appareil.nom_defaut);
                     let _ = memoire::memoriser(&self.cfg.donnees, serie, &nom, &ip.to_string(), Some(&appareil.id));
                 }
-                let connexion = Connexion { nom, ip: ip.to_string(), modele: appareil.nom.clone(), appareil: appareil.id.clone() };
+                let connexion = Connexion { nom, ip: ip.to_string(), modele: appareil.nom.clone(), appareil: appareil.id.clone(), verifie: !appareil.est_generique() };
                 self.etat().session = Some(SessionBox { t, appareil, reprise, inventaire: None });
                 Ok(connexion)
             }
@@ -577,8 +577,10 @@ impl Coeur {
         let pol = &self.cfg.politique;
         let conserver = |_: &Reprise| Ok(());
         let obs = ObservateurUi { emettre, attente: &self.attente, surveillance, delai_decision: self.cfg.delai_decision, conserver: &conserver };
+        let sauvegardes = self.cfg.donnees.join("sauvegardes");
+        let origines = |serie: &str| origine::origine(&sauvegardes, &nom_serie(&Reprise::pour_box(serie.into())));
         let Connecte { appareil, sdk_recent } = loop {
-            match connecter_box(&w, pol) {
+            match connecter_appareil(&w, pol, &origines) {
                 Ok(c) => break c,
                 Err(e @ (EchecConnexion::NonAutorise | EchecConnexion::Injoignable(_))) => {
                     if let Some(i) = interruption(surveillance) {
@@ -708,8 +710,26 @@ impl Coeur {
         Ok(apk)
     }
 
-    pub fn installer(&self, ville_id: Option<u32>, jeton: Option<String>, emettre: Emetteur) -> Result<(), ErreurCommande> {
+    /// Garde-fous d'un appareil générique avant toute écriture : risques acceptés, état de la box déjà lu et sauvegardé.
+    fn garde_generique(c: &Contexte, risques_acceptes: bool) -> Result<(), ErreurCommande> {
+        if !c.appareil.est_generique() {
+            return Ok(());
+        }
+        if !risques_acceptes {
+            return Err(ErreurCommande::nouvelle(
+                "risques_non_acceptes",
+                "Cet appareil n'est pas vérifié par Zen Home : acceptez d'abord les risques pour continuer. Rien n'a été modifié.",
+            ));
+        }
+        if c.inventaire.is_none() {
+            return Err(ErreurCommande::nouvelle("lecture", "Lisez d'abord l'état de la box (il est sauvegardé) avant de modifier cet appareil."));
+        }
+        Ok(())
+    }
+
+    pub fn installer(&self, ville_id: Option<u32>, jeton: Option<String>, risques_acceptes: bool, emettre: Emetteur) -> Result<(), ErreurCommande> {
         self.agir(emettre, |c| {
+            Self::garde_generique(c, risques_acceptes)?;
             let ville = match ville_id {
                 Some(id) => Some(
                     self.etat()
@@ -735,6 +755,7 @@ impl Coeur {
 
     pub fn appliquer(&self, choix: &ChoixUi, emettre: Emetteur) -> Result<RapportApplication, ErreurCommande> {
         self.agir(emettre, |c| {
+            Self::garde_generique(c, choix.risques_acceptes)?;
             let inv = c.inventaire.as_ref().ok_or_else(|| ErreurCommande::nouvelle("lecture", "Lisez d'abord l'état de la box avant d'appliquer vos choix."))?;
             let demande = Choix { garder: choix.garder.clone(), desactiver: choix.desactiver.clone(), desinstaller: choix.desinstaller.clone() };
             let r = choix::appliquer(&c.transport(), &c.appareil, &self.cfg.politique, &mut c.observateur(), inv, &demande, &c.reprise);
@@ -751,8 +772,17 @@ impl Coeur {
         })
     }
 
-    pub fn verifier(&self, reparer: bool, emettre: Emetteur) -> Result<VerificationUi, ErreurCommande> {
+    /// `reparer` écrit sur la box (installe, désactive...) : pour un générique, seulement s'il a été reconstruit depuis une
+    /// sauvegarde d'origine, ou si les garde-fous de `Commencer` sont remplis (risques acceptés, état de la box sauvegardé).
+    /// Sans réparation, la vérification est en lecture seule et reste libre.
+    pub fn verifier(&self, reparer: bool, risques_acceptes: bool, emettre: Emetteur) -> Result<VerificationUi, ErreurCommande> {
         self.agir(emettre, |c| {
+            if reparer && !c.appareil.depuis_origine {
+                Self::garde_generique(c, risques_acceptes).map_err(|mut e| {
+                    e.message.push_str(" Pour équiper cet appareil, utilisez « Commencer ».");
+                    e
+                })?;
+            }
             // L'APK ne sert qu'à réinstaller Zen Home s'il manque ; un APK refusé n'empêche pas le reste de la réparation.
             let apk = if reparer {
                 self.apk_verifie()
