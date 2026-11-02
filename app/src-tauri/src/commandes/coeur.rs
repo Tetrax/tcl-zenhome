@@ -772,8 +772,17 @@ impl Coeur {
         })
     }
 
-    pub fn verifier(&self, reparer: bool, emettre: Emetteur) -> Result<VerificationUi, ErreurCommande> {
+    /// `reparer` écrit sur la box (installe, désactive...) : pour un générique, seulement s'il a été reconstruit depuis une
+    /// sauvegarde d'origine, ou si les garde-fous de `Commencer` sont remplis (risques acceptés, état de la box sauvegardé).
+    /// Sans réparation, la vérification est en lecture seule et reste libre.
+    pub fn verifier(&self, reparer: bool, risques_acceptes: bool, emettre: Emetteur) -> Result<VerificationUi, ErreurCommande> {
         self.agir(emettre, |c| {
+            if reparer && !c.appareil.depuis_origine {
+                Self::garde_generique(c, risques_acceptes).map_err(|mut e| {
+                    e.message.push_str(" Pour équiper cet appareil, utilisez « Commencer ».");
+                    e
+                })?;
+            }
             // L'APK ne sert qu'à réinstaller Zen Home s'il manque ; un APK refusé n'empêche pas le reste de la réparation.
             let apk = if reparer {
                 self.apk_verifie()
