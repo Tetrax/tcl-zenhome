@@ -42,7 +42,7 @@ export interface RapportRestauration { incomplete: boolean; avertissements: stri
 
 export type CodeErreur =
   | "occupe" | "annule" | "adb_absent" | "refus_licence" | "injoignable" | "non_autorise"
-  | "autre_modele" | "autre_box" | "lecture" | "choix_invalide" | "reseau" | "interne";
+  | "autre_modele" | "risques_non_acceptes" | "autre_box" | "lecture" | "choix_invalide" | "reseau" | "interne";
 export interface ErreurZen { code: CodeErreur; message: string }
 
 export type Evenement =

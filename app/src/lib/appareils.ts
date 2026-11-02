@@ -1,8 +1,8 @@
 // Les appareils proposés à l'écran « Quel appareil ? ». Ce choix ne sert QU'À afficher les bonnes consignes d'activation
 // du débogage : la sécurité repose sur le contrôle du modèle fait par le cœur à la connexion.
-// TOUS les textes de consignes sont ici, à corriger au même endroit. À CONFIRMER sur une vraie TV : tout ce qui concerne Google TV.
+// TOUS les textes de consignes sont ici, à corriger au même endroit. À CONFIRMER sur une vraie TV : tout ce qui concerne Google TV et la fiche « Autre Android TV » (menus variables selon le fabricant).
 
-export type Famille = "mibox" | "googletv" | "autre";
+export type Famille = "mibox" | "googletv" | "androidtv" | "autre";
 
 export interface FicheAppareil {
   titre: string;
@@ -29,10 +29,19 @@ export const FICHES: Record<Exclude<Famille, "autre">, FicheAppareil> = {
     debogage: "Paramètres > Système > Options pour les développeurs > Débogage USB",
     adresseIp: "Paramètres > Réseau et Internet, puis votre réseau Wi-Fi",
   },
+  androidtv: {
+    titre: "Autre Android TV ou Google TV", mot: "appareil",
+    debloquer: "Paramètres > Système (ou Préférences de l'appareil) > À propos", build: "Build » (ou « Build de l'OS Android TV",
+    debogage: "Options pour les développeurs > Débogage USB (sur Nvidia Shield : « Débogage réseau »)",
+    adresseIp: "Paramètres > Réseau et Internet",
+  },
 };
 
-/** Fiche de l'appareil choisi, ou null pour « Autre appareil ». */
+/** Fiche de l'appareil choisi, ou null pour « Autre appareil (ni Android TV ni Google TV) ». */
 export const fiche = (f: Famille): FicheAppareil | null => (f === "autre" ? null : FICHES[f]);
 
-/** Mot pour l'appareil connecté (`BoxConnectee.appareil`) dans les textes : « TV » pour une TV, « box » sinon. */
-export const motConnecte = (appareil?: string | null): string => (appareil === "tcl-g08" ? "TV" : "box");
+/** Mot pour l'appareil connecté (`BoxConnectee.appareil`) dans les textes : « TV » pour une TV, « appareil » pour un générique, « box » sinon. */
+export const motConnecte = (appareil?: string | null): string => (appareil === "tcl-g08" ? "TV" : appareil === "generique" ? "appareil" : "box");
+
+/** Mot avec son article défini : « la box », « la TV », « l'appareil ». */
+export const defini = (mot: string): string => (mot === "appareil" ? "l'appareil" : `la ${mot}`);

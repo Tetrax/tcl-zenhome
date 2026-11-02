@@ -1,7 +1,7 @@
 // Simulation du cœur Rust pour un navigateur (hors Tauri) : mêmes réponses, mêmes événements, avec des délais.
 // Réglages par l'URL :
 //   ?aucune          aucune box trouvée (saisie manuelle de l'adresse)
-//   ?plusieurs       (par défaut il y a trois appareils : SALON 192.168.50.14 (Mi Box), CHAMBRE 192.168.50.15 (TV TCL) et BUREAU 192.168.50.16 (inconnu))
+//   ?plusieurs       (par défaut il y a quatre appareils : SALON 192.168.50.14 (Mi Box), CHAMBRE 192.168.50.15 (TV TCL), BUREAU 192.168.50.16 (inconnu) et CHROMECAST 192.168.50.17 (générique, non vérifié : case « J'ai compris »))
 //   ?coupure         coupure simulée : reconnexion pendant l'application, puis box injoignable pendant la vérification
 //   ?autorisation    la connexion attend l'autorisation sur la TV (Réessayer)
 //   ?refus           la première connexion échoue (non_autorise)
@@ -118,7 +118,7 @@ const UTIL: AppliUtilisateur[] = [
 interface BoxSim {
   id: number; nom: string; ip: string; origine: boolean;
   /** Appareil réel de la box simulée (« inconnu » : refusé à la connexion). */
-  appareil: "mibox4" | "tcl-g08" | "inconnu"; modele: string; android: string;
+  appareil: "mibox4" | "tcl-g08" | "generique" | "inconnu"; modele: string; android: string;
   sansSys: string[]; util: string[]; etats: Map<string, AppliSysteme["etat"]>; applis: number; desactivees: number;
 }
 const BOXES: BoxSim[] = [
@@ -129,6 +129,8 @@ const BOXES: BoxSim[] = [
     util: ["com.netflix.ninja", "com.google.android.youtube.tv", "com.spotify.tv.android", "com.king.candycrushsaga", "com.disney.disneyplus"],
     etats: new Map([["com.tcl.channelplus", "desactive"], ["com.tcl.ttvs", "garde"]]), applis: 58, desactivees: 2 },
   { id: 3, nom: "BUREAU", ip: "192.168.50.16", origine: false, appareil: "inconnu", modele: "Streamer X5", android: "Android 12", sansSys: [], util: [], etats: new Map(), applis: 40, desactivees: 0 },
+  { id: 4, nom: "CHROMECAST", ip: "192.168.50.17", origine: false, appareil: "generique", modele: "Chromecast avec Google TV", android: "Android 12", sansSys: [], util: ["com.netflix.ninja", "com.google.android.youtube.tv", "com.disney.disneyplus"],
+    etats: new Map(), applis: 44, desactivees: 0 },
 ];
 // La box simulée suit la box connectée.
 let box = BOXES[0];
@@ -157,7 +159,7 @@ export const simulation: Api = {
     return exclusive(async () => {
       await pause(3400);
       if (q.has("aucune")) return [];
-      return BOXES.map(({ id, nom, ip, appareil }) => ({ id, nom, ip, appareil: appareil === "inconnu" ? null : appareil, libelle: appareil === "mibox4" ? "Mi Box" : appareil === "tcl-g08" ? "TV TCL" : "Appareil à vérifier" }));
+      return BOXES.map(({ id, nom, ip, appareil }) => ({ id, nom, ip, appareil: appareil === "inconnu" || appareil === "generique" ? null : appareil, libelle: appareil === "mibox4" ? "Mi Box" : appareil === "tcl-g08" ? "TV TCL" : "Appareil à vérifier" }));
     });
   },
 
@@ -172,10 +174,10 @@ export const simulation: Api = {
       if ((await demander(sur, "autorisation")) === "arreter") throw erreur("annule", "Opération arrêtée. Rien n'a été modifié.");
       sur({ type: "reconnectee" });
     }
-    if (q.has("autremodele") || choisie?.appareil === "inconnu") throw erreur("autre_modele", "Cet appareil n'est pas encore pris en charge. Rien n'a été modifié.");
+    if (q.has("autremodele") || choisie?.appareil === "inconnu") throw erreur("autre_modele", "Cet appareil n'est pas pris en charge : son accueil n'est pas celui d'une Android TV ou d'une Google TV. Rien n'a été modifié.");
     await progresser(sur, "Lecture du modèle de la box", 700, 0.4, 1);
     box = choisie ?? BOXES[0];
-    return { nom: box.nom, ip, modele: box.modele, appareil: box.appareil, verifie: true };
+    return { nom: box.nom, ip, modele: box.modele, appareil: box.appareil, verifie: box.appareil !== "generique" };
   }),
 
   async chercherVilles(saisie): Promise<Ville[]> {
@@ -213,7 +215,8 @@ export const simulation: Api = {
     };
   }),
 
-  installer: (villeId, jeton, sur) => exclusive(async () => {
+  installer: (villeId, jeton, sur, risquesAcceptes = false) => exclusive(async () => {
+    if (box.appareil === "generique" && !risquesAcceptes) throw erreur("risques_non_acceptes", "Cet appareil n'a pas été testé : Zen Home ne l'installe qu'avec votre accord. Rien n'a été modifié.");
     if (jeton && !/^[A-Za-z0-9._~+/=-]+$/.test(jeton)) throw erreur("choix_invalide", "Ce texte ne ressemble pas à un jeton TMDB.");
     void villeId;
     await progresser(sur, "Envoi de Zen Home sur la box", 3200, 0, 0.7);
@@ -222,6 +225,7 @@ export const simulation: Api = {
   }),
 
   appliquer: (choix, sur) => exclusive(async (): Promise<RapportApplication> => {
+    if (box.appareil === "generique" && !choix.risques_acceptes) throw erreur("risques_non_acceptes", "Cet appareil n'a pas été testé : Zen Home ne l'installe qu'avec votre accord. Rien n'a été modifié.");
     const connus = new Set(sysBox().map((s) => s.paquet)), users = new Set(utilBox().map((u) => u.paquet));
     if (choix.garder.concat(choix.desactiver).some((p) => !connus.has(p)) || choix.desinstaller.some((p) => !users.has(p)))
       throw erreur("choix_invalide", "Un des choix ne correspond à aucune appli de la box. Recommencez depuis le début.");
