@@ -31,7 +31,7 @@ export const FICHES: Record<Exclude<Famille, "autre">, FicheAppareil> = {
   },
   androidtv: {
     titre: "Autre Android TV ou Google TV", mot: "appareil",
-    debloquer: "Paramètres > Système (ou Préférences de l'appareil) > À propos", build: "Build » (ou « Build de l'OS Android TV",
+    debloquer: "Paramètres > Système (ou Préférences de l'appareil) > À propos", build: "Build » ou « Build de l'OS Android TV",
     debogage: "Options pour les développeurs > Débogage USB (sur Nvidia Shield : « Débogage réseau »)",
     adresseIp: "Paramètres > Réseau et Internet",
   },
