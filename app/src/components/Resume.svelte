@@ -2,11 +2,13 @@
   import Panneau from "./Panneau.svelte";
   import Icone from "./Icone.svelte";
   import { zen } from "../lib/zen.svelte";
+  import { motConnecte } from "../lib/appareils";
   const r = $derived(zen.inventaire?.resume);
+  const mot = $derived(motConnecte(zen.box?.appareil));
 </script>
 
 {#if r && zen.box}
-  <Panneau titre="Voici votre box">
+  <Panneau titre={`Voici votre ${mot}`}>
     <p class="lead">Une sauvegarde de l'état actuel est enregistrée sur ce Mac. Rien n'a été modifié.</p>
     <dl class="grille">
       <div><dt>Modèle</dt><dd>{r.modele}</dd></div>
@@ -14,7 +16,7 @@
       <div><dt>Applis installées</dt><dd class="grand">{r.nb_applis}</dd></div>
       <div><dt>Déjà désactivées</dt><dd class="grand">{r.nb_desactivees}</dd></div>
     </dl>
-    <p class="petit">Nom de la box : « {zen.box.nom} » · {zen.box.ip}</p>
+    <p class="petit">Nom de la {mot} : « {zen.box.nom} » · {zen.box.ip}</p>
     {#snippet pied()}
       <button class="btn primary" type="button" onclick={() => zen.aller("meteo")}><span>Continuer</span><Icone nom="fleche" /></button>
     {/snippet}

@@ -2,10 +2,12 @@
   import Panneau from "./Panneau.svelte";
   import Icone from "./Icone.svelte";
   import { zen } from "../lib/zen.svelte";
+  import { motConnecte } from "../lib/appareils";
   import type { AppliSysteme } from "../lib/types";
 
   const liste = $derived(zen.inventaire?.applis_systeme ?? []);
   const total = $derived(liste.length);
+  const mot = $derived(zen.lot ? "box" : motConnecte(zen.box?.appareil));
   const n = $derived(liste.filter((a) => zen.desactiver[a.paquet]).length);
 
   // Groupes visuels : « pistage et publicité » / « au choix » (champ `groupe` du cœur) ; à défaut, selon la recommandation.
@@ -37,8 +39,8 @@
   function precedente() { zen.aller("profil"); }
 </script>
 
-<Panneau titre="Alléger votre box" large>
-  <p class="lead">{zen.lot ? "Ces box contiennent" : "La box contient"} {total} applis qui ne servent à rien avec Zen Home (publicité, pistage, rapports envoyés à Xiaomi ou Google) ou dont vous n'avez peut-être pas besoin. Elles sont <b>désactivées, pas supprimées</b> : « Revenir à avant Zen Home » les remet.</p>
+<Panneau titre={`Alléger votre ${mot}`} large>
+  <p class="lead">{zen.lot ? "Ces box contiennent" : `La ${mot} contient`} {total} applis qui ne servent à rien avec Zen Home (publicité, pistage, rapports envoyés au fabricant ou à Google) ou dont vous n'avez peut-être pas besoin. Elles sont <b>désactivées, pas supprimées</b> : « Revenir à avant Zen Home » les remet.</p>
   <div class="barre-liste">
     <span>
       <button class="lien" type="button" onclick={() => zen.recommande()}>Recommandé</button>

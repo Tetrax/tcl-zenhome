@@ -145,11 +145,11 @@ fn controler(s: &mut Session, app: &Appareil, liste: &[Entree]) -> Result<Contro
     let mut debloat_ko = Vec::new();
     for e in liste {
         let p = e.paquet.as_str();
-        let (mut etat, mut det) = (etat_pkg(p), "");
+        let (mut controle, mut etat) = (format!("Désactivé : {p}"), etat_pkg(p));
         if etat == Statut::Ko && (garder.iter().any(|g| g == p) || (aucun_choix && e.balise == Balise::Garder)) {
-            (etat, det) = (Statut::Avert, "gardé actif (votre choix)");
+            (controle, etat) = (format!("Gardé (votre choix) : {p}"), Statut::Ok);
         }
-        if tab.ajouter(format!("Désactivé : {p}"), etat, det) == Statut::Ko {
+        if tab.ajouter(controle, etat, "") == Statut::Ko {
             debloat_ko.push(p.to_string());
         }
     }
@@ -438,11 +438,11 @@ mod tests {
             e.global.insert("zenhome_garder".into(), "tv.alphonso.alphonso_eula,com.google.android.katniss,pas un nom".into());
         });
         let r = lancer(&f, true);
-        assert!(r.ok, "AVERT n'est pas KO : {}", r.final_().tableau());
+        assert!(r.ok, "{}", r.final_().tableau());
         let c = r.final_();
         for p in ["tv.alphonso.alphonso_eula", "com.google.android.katniss"] {
-            let l = ligne(c, &format!("Désactivé : {p}"));
-            assert_eq!((l.statut, l.detail.as_str()), (Statut::Avert, "gardé actif (votre choix)"));
+            let l = ligne(c, &format!("Gardé (votre choix) : {p}"));
+            assert_eq!((l.statut, l.detail.as_str()), (Statut::Ok, ""));
             assert!(!f.instantane().paquets[p].desactive);
         }
     }
@@ -583,7 +583,7 @@ mod tests {
             assert_eq!(e.paquets[&d.paquet].desactive, d.balise != Balise::Garder, "{}", d.paquet);
         }
         assert!(!e.paquets["com.tcl.ttvs"].desactive);
-        assert_eq!(ligne(r.final_(), "Désactivé : com.tcl.ttvs").statut, Statut::Avert);
+        assert_eq!(ligne(r.final_(), "Gardé (votre choix) : com.tcl.ttvs").statut, Statut::Ok);
         assert_eq!(e.premier_plan.as_deref(), Some("tv.zenhome/.Home"));
         assert_eq!(ligne(r.final_(), "Rôle HOME = tv.zenhome").statut, Statut::Ok);
         let j = f.journal();
