@@ -536,16 +536,16 @@ mod tests {
         // accueil actif, setupwraith et une appli étrangère désactivés avant Zen Home : rien ne les désigne comme l'oeuvre de Zen Home
         f.modifier(|e| {
             e.paquets.get_mut(TCL_G08.launcher()).unwrap().desactive = false;
-            e.paquets.get_mut("com.tcl.logkit").unwrap().desactive = true;
+            e.paquets.get_mut("com.tcl.hotelmenu").unwrap().desactive = true;
         });
         restaurer(&f, &app, &Politique::default(), &mut Silencieux, &Reprise::default(), None).unwrap();
         let e = f.instantane();
-        assert!(e.paquets["com.google.android.tungsten.setupwraith"].desactive && e.paquets["com.tcl.logkit"].desactive);
+        assert!(e.paquets["com.google.android.tungsten.setupwraith"].desactive && e.paquets["com.tcl.hotelmenu"].desactive);
         // la reprise note ce que Zen Home a désactivé : seulement ces paquets-là sont rendus en plus
-        let depuis = Reprise { desactives: vec!["com.google.android.tungsten.setupwraith".into(), "com.tcl.logkit".into()], ..Reprise::default() };
+        let depuis = Reprise { desactives: vec!["com.google.android.tungsten.setupwraith".into(), "com.tcl.hotelmenu".into()], ..Reprise::default() };
         restaurer(&f, &app, &Politique::default(), &mut Silencieux, &depuis, None).unwrap();
         let e = f.instantane();
-        assert!(!e.paquets["com.google.android.tungsten.setupwraith"].desactive && !e.paquets["com.tcl.logkit"].desactive);
+        assert!(!e.paquets["com.google.android.tungsten.setupwraith"].desactive && !e.paquets["com.tcl.hotelmenu"].desactive);
     }
 
     #[test]

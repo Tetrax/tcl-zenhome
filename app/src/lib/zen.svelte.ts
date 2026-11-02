@@ -354,7 +354,7 @@ class Zen {
         this.rapport = await api.appliquer(choix, this.sur);
       }
       this.jalon = 2; this.debut("Vérification et réglage final");
-      this.verification = await api.verifier(true, this.sur);
+      this.verification = await api.verifier(true, this.sur, this.risquesAcceptes);
       try { this.inventaire = await api.inventaire(this.sur); } catch { /* affichage seulement : on garde l'inventaire précédent */ }
       this.fin(); this.succes++;
       this.aller("resultat");
@@ -451,7 +451,7 @@ class Zen {
     if (!b.passe1) await this.passage1(b); // reprise d'une box en échec au passage 1
     this.pas("Lecture de la box"); const inv = await api.inventaire(this.sur); // inventaire propre à cette box
     this.pas("Application de vos choix"); b.rapport = await api.appliquer({ ...reduire(this.choix(), inv, b.ip, this.inventaire!), risques_acceptes: this.risquesAcceptes }, this.sur);
-    this.pas("Vérification et réglage final"); b.verification = await api.verifier(true, this.sur);
+    this.pas("Vérification et réglage final"); b.verification = await api.verifier(true, this.sur, this.risquesAcceptes);
   }
   async lancerTraitement(boxes: BoxLot[], passe: number) {
     this.lotPasse = passe;
