@@ -103,7 +103,7 @@ impl Config {
 struct SessionBox {
     t: TransportPartage,
     /// Appareil reconnu à la connexion : liste d'allègement, accueil, veille et paquets protégés en dépendent.
-    appareil: &'static Appareil,
+    appareil: Appareil,
     /// Numéro de série et paquets désactivés par un passage interrompu (l'étape repart toujours de zéro : toutes les
     /// opérations du moteur sont rejouables, et un nouveau choix ne doit jamais sauter la mémorisation).
     reprise: Reprise,
@@ -147,7 +147,7 @@ impl Drop for ApkVerifie {
 pub struct Contexte<'a> {
     coeur: &'a Coeur,
     t: TransportPartage,
-    appareil: &'static Appareil,
+    appareil: Appareil,
     reprise: Reprise,
     inventaire: Option<Inventaire>,
     surveillance: Surveillance,
@@ -235,7 +235,7 @@ impl Coeur {
         let (t, appareil, reprise, inventaire) = {
             let e = self.etat();
             let s = e.session.as_ref().ok_or_else(ErreurCommande::aucune_box)?;
-            (s.t.clone(), s.appareil, s.reprise.clone(), s.inventaire.clone())
+            (s.t.clone(), s.appareil.clone(), s.reprise.clone(), s.inventaire.clone())
         };
         let conserver = |r: &Reprise| self.conserver(r);
         f(&Contexte { coeur: self, t, appareil, reprise, inventaire, surveillance, emettre, conserver: &conserver, delai_decision })
@@ -557,11 +557,12 @@ impl Coeur {
                 }
                 let mut nom = if nom.is_empty() { appareil.nom_defaut.to_string() } else { nom };
                 if let (false, Some(serie)) = (self.cfg.demo, reprise.serie.as_deref()) {
-                    nom = memoire::nom_pour(&self.cfg.donnees, serie, &ip.to_string(), &nom, appareil.nom_defaut);
-                    let _ = memoire::memoriser(&self.cfg.donnees, serie, &nom, &ip.to_string(), Some(appareil.id));
+                    nom = memoire::nom_pour(&self.cfg.donnees, serie, &ip.to_string(), &nom, &appareil.nom_defaut);
+                    let _ = memoire::memoriser(&self.cfg.donnees, serie, &nom, &ip.to_string(), Some(&appareil.id));
                 }
+                let connexion = Connexion { nom, ip: ip.to_string(), modele: appareil.nom.clone(), appareil: appareil.id.clone() };
                 self.etat().session = Some(SessionBox { t, appareil, reprise, inventaire: None });
-                Ok(Connexion { nom, ip: ip.to_string(), modele: appareil.nom.into(), appareil: appareil.id.into() })
+                Ok(connexion)
             }
             Err(e) => {
                 clore(&*t);
@@ -571,7 +572,7 @@ impl Coeur {
     }
 
     /// Connexion + numéro de série (lu juste après, il identifie la box pour toute la session) + appareil reconnu.
-    fn etablir(&self, t: &TransportPartage, emettre: Emetteur, surveillance: &Surveillance) -> Result<(String, &'static Appareil), ErreurCommande> {
+    fn etablir(&self, t: &TransportPartage, emettre: Emetteur, surveillance: &Surveillance) -> Result<(String, Appareil), ErreurCommande> {
         let w = Surveille { t: &**t, surveillance };
         let pol = &self.cfg.politique;
         let conserver = |_: &Reprise| Ok(());
@@ -644,7 +645,7 @@ impl Coeur {
             }
             (c.emettre)(EvenementUi::Etape { nom: "Lecture des noms des applis".into() });
             let libelles = Self::libelles(&w);
-            let vue = inventaire_ui(c.appareil, &inv, &libelles);
+            let vue = inventaire_ui(&c.appareil, &inv, &libelles);
             if let Some(s) = self.etat().session.as_mut() {
                 s.inventaire = Some(inv);
             }
@@ -727,7 +728,7 @@ impl Coeur {
                 ville: ville.map(|v| v.nom),
                 jeton: jeton.map(|j| j.trim().to_string()).filter(|j| !j.is_empty()).or_else(|| self.cfg.jeton_projet.clone()),
             };
-            let r = installation::installer(&c.transport(), c.appareil, &self.cfg.politique, &mut c.observateur(), &p, &c.reprise);
+            let r = installation::installer(&c.transport(), &c.appareil, &self.cfg.politique, &mut c.observateur(), &p, &c.reprise);
             c.issue(r).map(|_| ())
         })
     }
@@ -736,7 +737,7 @@ impl Coeur {
         self.agir(emettre, |c| {
             let inv = c.inventaire.as_ref().ok_or_else(|| ErreurCommande::nouvelle("lecture", "Lisez d'abord l'état de la box avant d'appliquer vos choix."))?;
             let demande = Choix { garder: choix.garder.clone(), desactiver: choix.desactiver.clone(), desinstaller: choix.desinstaller.clone() };
-            let r = choix::appliquer(&c.transport(), c.appareil, &self.cfg.politique, &mut c.observateur(), inv, &demande, &c.reprise);
+            let r = choix::appliquer(&c.transport(), &c.appareil, &self.cfg.politique, &mut c.observateur(), inv, &demande, &c.reprise);
             let rapport = c.issue(r)?;
             // L'inventaire de la session suit ce qui vient d'être fait : une même désinstallation n'est pas rejouée.
             if let Some(i) = self.etat().session.as_mut().and_then(|s| s.inventaire.as_mut()) {
@@ -760,7 +761,7 @@ impl Coeur {
             } else {
                 None
             };
-            let r = verification::verifier(&c.transport(), c.appareil, &self.cfg.politique, &mut c.observateur(), reparer, apk.as_ref().map(|a| a.chemin.as_path()), &c.reprise);
+            let r = verification::verifier(&c.transport(), &c.appareil, &self.cfg.politique, &mut c.observateur(), reparer, apk.as_ref().map(|a| a.chemin.as_path()), &c.reprise);
             let rapport = c.issue(r)?;
             if reparer && rapport.ok {
                 self.oublier_reprise();
@@ -773,7 +774,7 @@ impl Coeur {
         self.agir(emettre, |c| {
             // Sauvegarde faite avant Zen Home pour cette box, s'il y en a une : sinon restauration générique.
             let origine = origine::origine(&self.cfg.donnees.join("sauvegardes"), &nom_serie(&c.reprise));
-            let r = restauration::restaurer(&c.transport(), c.appareil, &self.cfg.politique, &mut c.observateur(), &c.reprise, origine.as_ref());
+            let r = restauration::restaurer(&c.transport(), &c.appareil, &self.cfg.politique, &mut c.observateur(), &c.reprise, origine.as_ref());
             let rapport = c.issue(r)?;
             if !rapport.incomplete {
                 self.oublier_reprise();

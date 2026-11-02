@@ -38,9 +38,9 @@ pub enum EchecConnexion {
 }
 
 /// Appareil reconnu à la connexion.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct Connecte {
-    pub appareil: &'static Appareil,
+    pub appareil: Appareil,
     /// Android plus récent que le dernier SDK testé : à signaler, pas à refuser.
     pub sdk_recent: bool,
 }
@@ -117,7 +117,10 @@ pub fn connecter_box(t: &dyn Transport, pol: &Politique) -> Result<Connecte, Ech
     let device = lire_propriete(t, pol, "ro.product.device")?;
     let sdk = lire_propriete(t, pol, "ro.build.version.sdk")?;
     match identifier(&Proprietes { nom: &nom, marque: &marque, device: &device, sdk: &sdk }) {
-        Ok(appareil) => Ok(Connecte { appareil, sdk_recent: appareil.plus_recent_que_teste(sdk.parse().unwrap_or_default()) }),
+        Ok(profil) => {
+            let appareil = Appareil::depuis(profil);
+            Ok(Connecte { sdk_recent: appareil.plus_recent_que_teste(sdk.parse().unwrap_or_default()), appareil })
+        }
         Err(inconnu) => Err(EchecConnexion::ModeleDifferent(inconnu.resume)),
     }
 }
@@ -282,7 +285,7 @@ mod tests {
     fn la_tcl_est_reconnue_et_un_sdk_recent_est_signale() {
         let f = FakeBox::tcl_g08();
         let c = connecter_box(&f, &Politique::default()).unwrap();
-        assert_eq!((c.appareil.id, c.sdk_recent), ("tcl-g08", false));
+        assert_eq!((c.appareil.id.as_str(), c.sdk_recent), ("tcl-g08", false));
         f.modifier(|e| e.sdk = "35".into());
         let c = connecter_box(&f, &Politique::default()).unwrap();
         assert!(c.sdk_recent, "reconnue malgré un Android plus récent : simple avertissement");

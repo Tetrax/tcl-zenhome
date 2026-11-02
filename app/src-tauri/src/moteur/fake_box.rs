@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 use std::path::Path;
 use std::sync::{Mutex, MutexGuard};
 
-use super::appareils::{Appareil, MIBOX4, ModeAccueil, TCL_G08, TOUS};
+use super::appareils::{MIBOX4, ModeAccueil, Profil, TCL_G08, TOUS};
 use super::transport::{Commande, ErreurTransport, EtatLien, Sortie, Transport, decouper_shell, paquet_valide};
 
 pub const ZEN_HOME: &str = "tv.zenhome";
@@ -136,7 +136,7 @@ impl EtatBox {
         Self::pour(&TCL_G08)
     }
 
-    fn pour(app: &Appareil) -> Self {
+    fn pour(app: &Profil) -> Self {
         let role = app.mode_accueil == ModeAccueil::RoleHome;
         let mut paquets = BTreeMap::new();
         for e in app.liste() {

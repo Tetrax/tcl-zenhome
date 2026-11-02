@@ -372,7 +372,7 @@ pub fn verifier(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::moteur::appareils::{MIBOX4, TCL_G08};
+    use crate::moteur::appareils::{Appareil, MIBOX4, TCL_G08};
     use crate::moteur::debloat::Balise;
     use crate::moteur::fake_box::{FakeBox, WifiFake};
     use crate::moteur::session::Silencieux;
@@ -390,7 +390,7 @@ mod tests {
     }
 
     fn lancer(f: &FakeBox, reparer: bool) -> RapportVerification {
-        verifier(f, &MIBOX4, &Politique::default(), &mut Silencieux, reparer, Some(&apk()), &Reprise::default()).unwrap()
+        verifier(f, &Appareil::depuis(&MIBOX4), &Politique::default(), &mut Silencieux, reparer, Some(&apk()), &Reprise::default()).unwrap()
     }
 
     fn ligne<'a>(c: &'a Controle, nom: &str) -> &'a Ligne {
@@ -513,11 +513,11 @@ mod tests {
     fn coupure_juste_apres_pm_disable_puis_reprise_rend_l_accueil() {
         let f = connectee();
         f.zen_home_visible(false);
-        let r = verifier(&CoupeApresDisable(&f, LAUNCHERX), &MIBOX4, &Politique::default(), &mut Silencieux, true, Some(&apk()), &Reprise::default());
+        let r = verifier(&CoupeApresDisable(&f, LAUNCHERX), &Appareil::depuis(&MIBOX4), &Politique::default(), &mut Silencieux, true, Some(&apk()), &Reprise::default());
         let Err(Arret::EnPause(pause)) = r else { panic!("attendu : pause, obtenu {:?}", r.map(|_| ())) };
         assert!(f.instantane().paquets[LAUNCHERX].desactive, "la box a exécuté la désactivation, seule la réponse s'est perdue");
         f.perdre_lien(0);
-        let r = verifier(&f, &MIBOX4, &Politique::default(), &mut Silencieux, true, Some(&apk()), &pause.reprise).unwrap();
+        let r = verifier(&f, &Appareil::depuis(&MIBOX4), &Politique::default(), &mut Silencieux, true, Some(&apk()), &pause.reprise).unwrap();
         assert!(r.retour_arriere);
         assert!(!f.instantane().paquets[LAUNCHERX].desactive, "l'accueil d'origine est réactivé malgré la coupure");
     }
@@ -538,7 +538,7 @@ mod tests {
     fn jamais_de_desactivation_de_l_accueil_sans_zen_home() {
         let f = connectee();
         // pas d'APK : Zen Home reste absent, donc ni accueil d'origine ni setupwraith... sauf setupwraith (Wi-Fi libre)
-        let r = verifier(&f, &MIBOX4, &Politique::default(), &mut Silencieux, true, None, &Reprise::default()).unwrap();
+        let r = verifier(&f, &Appareil::depuis(&MIBOX4), &Politique::default(), &mut Silencieux, true, None, &Reprise::default()).unwrap();
         let e = f.instantane();
         assert!(!e.paquets[LAUNCHERX].desactive);
         assert!(!r.ok);
@@ -567,7 +567,7 @@ mod tests {
     }
 
     fn lancer_tcl(f: &FakeBox, reparer: bool, apk: Option<&Path>) -> RapportVerification {
-        verifier(f, &TCL_G08, &Politique::default(), &mut Silencieux, reparer, apk, &Reprise::default()).unwrap()
+        verifier(f, &Appareil::depuis(&TCL_G08), &Politique::default(), &mut Silencieux, reparer, apk, &Reprise::default()).unwrap()
     }
 
     #[test]
@@ -613,12 +613,12 @@ mod tests {
         f.zen_home_visible(false);
         // coupure juste après le pm disable de l'accueil d'origine (dernière action de la réparation)
         let coupe = CoupeApresDisable(&f, LAUNCHERX_TCL);
-        let r = verifier(&coupe, &TCL_G08, &Politique::default(), &mut Silencieux, true, Some(&apk()), &Reprise::default());
+        let r = verifier(&coupe, &Appareil::depuis(&TCL_G08), &Politique::default(), &mut Silencieux, true, Some(&apk()), &Reprise::default());
         let Err(Arret::EnPause(pause)) = r else { panic!("attendu : pause, obtenu {:?}", r.map(|_| ())) };
         assert!(f.instantane().paquets[LAUNCHERX_TCL].desactive);
         f.perdre_lien(0);
         // « Arrêter » : la reprise est conservée ; tout est OK au contrôle, sauf que Zen Home n'est pas au premier plan
-        let r = verifier(&f, &TCL_G08, &Politique::default(), &mut Silencieux, true, Some(&apk()), &pause.reprise).unwrap();
+        let r = verifier(&f, &Appareil::depuis(&TCL_G08), &Politique::default(), &mut Silencieux, true, Some(&apk()), &pause.reprise).unwrap();
         assert!(r.retour_arriere && r.apres.is_some());
         let e = f.instantane();
         assert!(!e.paquets[LAUNCHERX_TCL].desactive);
