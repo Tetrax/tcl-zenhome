@@ -447,7 +447,7 @@ mod tests {
     }
 
     /// Paquets critiques qui ne figurent dans AUCUNE liste (générique et profils).
-    const LISTE_NOIRE: [&str; 27] = [
+    const LISTE_NOIRE: [&str; 33] = [
         "com.google.android.tvlauncher",
         "com.google.android.apps.tv.launcherx",
         "com.google.android.leanbacklauncher",
@@ -475,14 +475,23 @@ mod tests {
         "com.android.shell",
         "android",
         "tv.zenhome",
+        // Cast, télécommande Google TV, clavier Leanback, TV en direct et entrées, Bluetooth (télécommandes)
+        "com.google.android.apps.mediashell",
+        "com.google.android.tv.remote.service",
+        "com.google.android.leanback.ime",
+        "com.android.tv",
+        "com.google.android.tv",
+        "com.android.bluetooth",
     ];
 
     /// Exceptions documentées de la liste noire : (profil, paquet). La liste Mi Box (non modifiée ici) désactive
-    /// talkback et tts (en [option:garder]) et PatchWall, l'accueil Xiaomi remplacé par Zen Home.
-    const EXCEPTIONS_PROFILS: [(&str, &str); 3] = [
+    /// talkback et tts (en [option:garder]), PatchWall, l'accueil Xiaomi remplacé par Zen Home, et les chaînes en direct
+    /// Google (validé sur la Mi Box, qui n'a pas de tuner).
+    const EXCEPTIONS_PROFILS: [(&str, &str); 4] = [
         ("mibox4", "com.google.android.marvin.talkback"),
         ("mibox4", "com.google.android.tts"),
         ("mibox4", "com.mitv.tvhome.atv"),
+        ("mibox4", "com.google.android.tv"),
     ];
 
     #[test]
