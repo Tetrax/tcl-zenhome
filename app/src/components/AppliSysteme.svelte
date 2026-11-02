@@ -2,7 +2,7 @@
   import Panneau from "./Panneau.svelte";
   import Icone from "./Icone.svelte";
   import { zen } from "../lib/zen.svelte";
-  import { motConnecte } from "../lib/appareils";
+  import { motConnecte, defini } from "../lib/appareils";
   import type { AppliSysteme } from "../lib/types";
 
   const liste = $derived(zen.inventaire?.applis_systeme ?? []);
@@ -40,7 +40,7 @@
 </script>
 
 <Panneau titre={`Alléger votre ${mot}`} large>
-  <p class="lead">{zen.lot ? "Ces box contiennent" : `La ${mot} contient`} {total} applis qui ne servent à rien avec Zen Home (publicité, pistage, rapports envoyés au fabricant ou à Google) ou dont vous n'avez peut-être pas besoin. Elles sont <b>désactivées, pas supprimées</b> : « Revenir à avant Zen Home » les remet.</p>
+  <p class="lead">{zen.lot ? "Ces box contiennent" : `${defini(mot).replace(/^./, (c) => c.toUpperCase())} contient`} {total} applis qui ne servent à rien avec Zen Home (publicité, pistage, rapports envoyés au fabricant ou à Google) ou dont vous n'avez peut-être pas besoin. Elles sont <b>désactivées, pas supprimées</b> : « Revenir à avant Zen Home » les remet.</p>
   <div class="barre-liste">
     <span>
       <button class="lien" type="button" onclick={() => zen.recommande()}>Recommandé</button>

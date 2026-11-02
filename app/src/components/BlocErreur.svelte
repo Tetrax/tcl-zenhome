@@ -16,10 +16,10 @@
   const TITRES: Record<CodeErreur, string> = {
     occupe: "Une opération est déjà en cours", annule: "Opération arrêtée", adb_absent: "L'outil adb est manquant",
     refus_licence: "Votre accord est nécessaire", injoignable: "La box ne répond pas", non_autorise: "La box attend votre autorisation",
-    autre_modele: "Appareil pas encore pris en charge", autre_box: "Ce n'est pas la même box", lecture: "La box n'a pas pu être lue",
+    autre_modele: "Appareil pas encore pris en charge", risques_non_acceptes: "Votre accord est nécessaire", autre_box: "Ce n'est pas la même box", lecture: "La box n'a pas pu être lue",
     choix_invalide: "Un choix n'a pas été accepté", reseau: "Problème de connexion Internet", interne: "Un problème est survenu",
   };
-  const sansReprise: CodeErreur[] = ["autre_modele", "autre_box", "refus_licence"];
+  const sansReprise: CodeErreur[] = ["autre_modele", "risques_non_acceptes", "autre_box", "refus_licence"];
   const peutReessayer = $derived(!!zen.reprise && !!e && !sansReprise.includes(e.code));
 </script>
 
@@ -41,6 +41,8 @@
       <p class="petit">Ce qui a déjà été fait est conservé : vous pouvez reprendre là où l'opération s'est arrêtée.</p>
     {:else if e.code === "autre_modele"}
       <p class="petit">Par sécurité, Zen Home n'a rien modifié sur cet appareil. Vous pouvez créer un rapport d'appareil (simple lecture, rien n'est modifié) et me l'envoyer : cela permet de l'ajouter à une prochaine version.</p>
+    {:else if e.code === "risques_non_acceptes"}
+      <p class="petit">Cet appareil n'a pas été testé : Zen Home ne l'installe qu'avec votre accord. Revenez en arrière, cochez la case « J'ai compris », puis recommencez. Rien n'a été modifié.</p>
     {/if}
     {#if !["annule", "occupe", "refus_licence"].includes(e.code)}<Rapport />{/if}
     {#snippet pied()}

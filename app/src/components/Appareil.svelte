@@ -3,14 +3,15 @@
   import Panneau from "./Panneau.svelte";
   import Icone from "./Icone.svelte";
   import { zen } from "../lib/zen.svelte";
-  import { FICHES, fiche, type Famille } from "../lib/appareils";
+  import { FICHES, fiche, defini, type Famille } from "../lib/appareils";
 
   let choix = $state<Famille | null>(null);
   const f = $derived(choix ? fiche(choix) : null);
   const cartes: { cle: Famille; titre: string; phrase: string }[] = [
     { cle: "mibox", titre: FICHES.mibox.titre, phrase: "Android TV 9" },
     { cle: "googletv", titre: FICHES.googletv.titre, phrase: "Google TV, Android 14" },
-    { cle: "autre", titre: "Autre appareil", phrase: "Une autre box ou TV Android / Google TV" },
+    { cle: "androidtv", titre: FICHES.androidtv.titre, phrase: "Sony, Philips, Hisense, Nvidia Shield, Chromecast…" },
+    { cle: "autre", titre: "Autre appareil (ni Android TV ni Google TV)", phrase: "Zen Home le lit seulement et prépare un rapport" },
   ];
 </script>
 
@@ -25,11 +26,11 @@
   </div>
   {#if f}
     <ol class="consignes">
-      <li>Sur la {f.mot}, débloquez les options cachées : <span class="chemin">{f.debloquer}</span>, descendez jusqu'à « {f.build} » et appuyez 7 fois sur OK, jusqu'au message « Vous êtes maintenant développeur ».</li>
+      <li>Sur {defini(f.mot)}, débloquez les options cachées : <span class="chemin">{f.debloquer}</span>, descendez jusqu'à « {f.build} » et appuyez 7 fois sur OK, jusqu'au message « Vous êtes maintenant développeur ».</li>
       <li>Revenez en arrière, puis activez le débogage : <span class="chemin">{f.debogage}</span>.</li>
     </ol>
   {:else if choix === "autre"}
-    <div class="note"><Icone nom="info" /><p>Cet appareil n'est peut-être pas encore pris en charge : par sécurité, Zen Home ne modifie que les appareils qu'il connaît. Il peut en revanche lire l'appareil et préparer un <b>rapport d'appareil</b> (sans aucune modification), que vous pouvez m'envoyer pour qu'il soit ajouté. Activez d'abord le débogage USB dans les options pour les développeurs de l'appareil, puis indiquez son adresse ou lancez la recherche.</p></div>
+    <div class="note"><Icone nom="info" /><p>Zen Home ne configure que les Android TV et Google TV. Pour un autre appareil, il peut en revanche lire l'appareil et préparer un <b>rapport d'appareil</b> (sans aucune modification), que vous pouvez m'envoyer pour qu'il soit étudié. Activez d'abord le débogage USB dans les options pour les développeurs de l'appareil, puis indiquez son adresse ou lancez la recherche.</p></div>
   {/if}
   {#snippet pied()}
     <button class="btn primary" type="button" disabled={!choix} onclick={() => choix && zen.choisirAppareil(choix)}>

@@ -1,6 +1,7 @@
 <script lang="ts">
   import Panneau from "./Panneau.svelte";
   import Icone from "./Icone.svelte";
+  import Risques from "./Risques.svelte";
   import { zen, jetonValide } from "../lib/zen.svelte";
 
   const inclus = $derived(zen.init?.films_inclus ?? false);
@@ -8,6 +9,7 @@
   let erreur = $state("");
   function suite(e: Event) {
     e.preventDefault();
+    if (zen.lot && zen.risquesRequis && !zen.risquesAcceptes) return;
     const j = zen.jeton.replace(/[\s]+/g, "");
     if (j && !jetonValide(j)) {
       erreur = "Ce texte ne ressemble pas à un jeton TMDB : il ne contient que des lettres, des chiffres et quelques signes (. _ - ~ + / =). Vérifiez ce que vous avez collé, ou laissez vide.";
@@ -49,8 +51,9 @@
     <p class="petit">Vous pouvez laisser vide : tout fonctionnera, sauf les films.</p>
   {/if}
   <p class="petit">Films fournis par TMDB. Ce produit utilise l'API TMDB mais n'est ni approuvé ni certifié par TMDB.</p>
+  {#if zen.lot}<Risques />{/if}
   {#snippet pied()}
-    <button class="btn primary" type="submit" form="form-films"><span>{zen.jeton.trim() || inclus ? "Continuer" : "Passer"}</span><Icone nom="fleche" /></button>
+    <button class="btn primary" type="submit" form="form-films" disabled={!!zen.lot && zen.risquesRequis && !zen.risquesAcceptes}><span>{zen.jeton.trim() || inclus ? "Continuer" : "Passer"}</span><Icone nom="fleche" /></button>
     <button class="lien" type="button" onclick={() => zen.aller("meteo")}>Retour</button>
   {/snippet}
 </Panneau>

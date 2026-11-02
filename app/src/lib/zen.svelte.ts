@@ -23,12 +23,14 @@ export interface BoxLot {
   inv?: Inventaire; passe1?: boolean;
   rapport?: RapportApplication; verification?: Verification; restauration?: RapportRestauration;
   debogage?: "oui" | "echec";
+  /** Vrai si la connexion a montré un appareil non vérifié (générique). */
+  nonVerifiee?: boolean;
   /** Vrai si la box n'a pas pris part aux questions communes (échec du passage 1) : aucune désinstallation pour elle. */
   horsChoix?: boolean;
 }
 
 /** Une box proposée dans la recherche : trouvée (avec `id`) ou seulement mémorisée (connexion par son adresse). */
-export interface Proposition { id?: number; nom: string; ip: string; recente: boolean; libelle?: string }
+export interface Proposition { id?: number; nom: string; ip: string; recente: boolean; libelle?: string; appareil?: string | null }
 
 /** Moment de la journée affiché derrière chaque écran. */
 export const MOMENT: Record<Ecran, Moment> = {
@@ -70,6 +72,15 @@ class Zen {
   forcerManuel = $state(false);
   cible = $state<Cible | null>(null);
   box = $state<BoxConnectee | null>(null);
+  /** Accord de l'utilisateur pour un appareil non vérifié (case « J'ai compris ») ; envoyé au cœur comme `risques_acceptes`. */
+  risquesAcceptes = $state(false);
+  /** Vrai si la case est à cocher : box non vérifiée, ou (lot) box dont l'annonce réseau ne désigne pas un modèle connu. */
+  get risquesRequis(): boolean {
+    const lot = this.lot;
+    if (!lot) return this.box?.verifie === false;
+    const connus = ["mibox4", "tcl-g08"];
+    return lot.some((b) => b.nonVerifiee || !connus.includes(this.propositions.find((p) => p.ip === b.ip)?.appareil ?? ""));
+  }
 
   // Plusieurs box : les adresses cochées dans la recherche, puis le lot (null = parcours à une seule box)
   coches = $state<string[]>([]);
@@ -143,7 +154,7 @@ class Zen {
   demarrer(mode: Mode) {
     this.mode = mode;
     this.box = null; this.cible = null; this.boxes = []; this.rechercheFaite = false; this.forcerManuel = false;
-    this.lot = null; this.coches = [];
+    this.lot = null; this.coches = []; this.risquesAcceptes = false;
     this.aller(this.init && !this.init.adb_installe ? "adb" : "appareil");
   }
   choisirAppareil(f: Famille) { this.famille = f; this.aller("recherche"); }
@@ -223,7 +234,7 @@ class Zen {
   // ---- Connexion ----
   async connecter(cible: Cible) {
     if (this.famille === "autre") return this.rapportAppareil(cible); // « Autre appareil » : on ne configure rien, on lit seulement
-    this.lot = null; this.cible = cible; this.box = null;
+    this.lot = null; this.cible = cible; this.box = null; this.risquesAcceptes = false;
     this.aller("connexion");
     this.debut("Connexion à la box");
     try {
@@ -275,7 +286,7 @@ class Zen {
     this.aller("installation");
     this.debut("Installation de Zen Home");
     try {
-      await api.installer(this.ville ? this.ville.id : null, this.jeton ? this.jeton : null, this.sur);
+      await api.installer(this.ville ? this.ville.id : null, this.jeton ? this.jeton : null, this.sur, this.risquesAcceptes);
       this.jeton = ""; // le jeton ne reste pas en mémoire une fois envoyé
       this.debut("Lecture des noms des applis");
       const inv = await api.inventaire(this.sur);
@@ -308,8 +319,9 @@ class Zen {
 
   choix(): Choix {
     const inv = this.inventaire;
-    if (!inv) return { garder: [], desactiver: [], desinstaller: [] };
+    if (!inv) return { garder: [], desactiver: [], desinstaller: [], risques_acceptes: this.risquesAcceptes };
     return {
+      risques_acceptes: this.risquesAcceptes,
       desactiver: inv.applis_systeme.filter((a) => this.desactiver[a.paquet]).map((a) => a.paquet),
       garder: inv.applis_systeme.filter((a) => !this.desactiver[a.paquet]).map((a) => a.paquet),
       desinstaller: inv.applis_utilisateur.filter((a) => this.desinstaller[a.paquet]).map((a) => a.paquet),
@@ -334,7 +346,7 @@ class Zen {
     try {
       if (depuis <= 0) {
         this.jalon = 0; this.debut("Installation de Zen Home");
-        await api.installer(this.ville ? this.ville.id : null, this.jeton ? this.jeton : null, this.sur);
+        await api.installer(this.ville ? this.ville.id : null, this.jeton ? this.jeton : null, this.sur, this.risquesAcceptes);
         this.jeton = ""; // le jeton ne reste pas en mémoire une fois envoyé
       }
       if (depuis <= 1) {
@@ -342,7 +354,7 @@ class Zen {
         this.rapport = await api.appliquer(choix, this.sur);
       }
       this.jalon = 2; this.debut("Vérification et réglage final");
-      this.verification = await api.verifier(true, this.sur);
+      this.verification = await api.verifier(true, this.sur, this.risquesAcceptes);
       try { this.inventaire = await api.inventaire(this.sur); } catch { /* affichage seulement : on garde l'inventaire précédent */ }
       this.fin(); this.succes++;
       this.aller("resultat");
@@ -380,7 +392,7 @@ class Zen {
     if (!choisies.length) return;
     if (choisies.length < 2 || this.famille === "autre") return void this.connecter(cible(choisies[0]));
     this.lot = choisies.map((p) => ({ cible: cible(p), nom: p.nom, ip: p.ip, message: "", etat: "attente" as const }));
-    this.lotPasse = 0;
+    this.lotPasse = 0; this.risquesAcceptes = false;
     await this.attendreRecherche();
     if (this.mode === "installer") this.aller("meteo"); // pas de box connectée : météo et films d'abord
     else if (this.mode === "reparer") void this.lancerTraitement(this.lot, 0);
@@ -414,6 +426,7 @@ class Zen {
       try {
         this.pas("Connexion à la box"); this.box = null;
         this.box = await this.connecterBox(b.cible);
+        b.nonVerifiee = !this.box.verifie;
         await f(b);
         b.etat = "ok";
       } catch (e) {
@@ -427,7 +440,7 @@ class Zen {
 
   private async passage1(b: BoxLot) {
     this.pas("Lecture de la box"); await api.inventaire(this.sur); // sauvegarde de l'état d'origine
-    this.pas("Installation de Zen Home"); await api.installer(this.ville ? this.ville.id : null, this.jeton ? this.jeton : null, this.sur);
+    this.pas("Installation de Zen Home"); await api.installer(this.ville ? this.ville.id : null, this.jeton ? this.jeton : null, this.sur, this.risquesAcceptes);
     this.pas("Lecture des noms des applis"); b.inv = await api.inventaire(this.sur);
     b.passe1 = true;
   }
@@ -437,8 +450,8 @@ class Zen {
     if (this.mode === "restaurer") { this.pas("Retour à l'état d'origine"); b.restauration = await api.restaurer(this.sur); return; }
     if (!b.passe1) await this.passage1(b); // reprise d'une box en échec au passage 1
     this.pas("Lecture de la box"); const inv = await api.inventaire(this.sur); // inventaire propre à cette box
-    this.pas("Application de vos choix"); b.rapport = await api.appliquer(reduire(this.choix(), inv, b.ip, this.inventaire!), this.sur);
-    this.pas("Vérification et réglage final"); b.verification = await api.verifier(true, this.sur);
+    this.pas("Application de vos choix"); b.rapport = await api.appliquer({ ...reduire(this.choix(), inv, b.ip, this.inventaire!), risques_acceptes: this.risquesAcceptes }, this.sur);
+    this.pas("Vérification et réglage final"); b.verification = await api.verifier(true, this.sur, this.risquesAcceptes);
   }
   async lancerTraitement(boxes: BoxLot[], passe: number) {
     this.lotPasse = passe;

@@ -1,6 +1,7 @@
 <script lang="ts">
   import Panneau from "./Panneau.svelte";
   import Icone from "./Icone.svelte";
+  import Risques from "./Risques.svelte";
   import { zen } from "../lib/zen.svelte";
 
   const inv = $derived(zen.inventaire);
@@ -26,8 +27,9 @@
     Films : <b>{zen.jeton ? "avec votre jeton TMDB" : zen.init?.films_inclus ? "inclus" : "sans"}</b>
   </p>
   <p class="petit" style="margin-top:6px">Une sauvegarde de l'état actuel {zen.lot ? "de chaque box est déjà enregistrée" : "est déjà enregistrée"} sur ce Mac.</p>
+  <Risques />
   {#snippet pied()}
-    <button class="btn primary" type="button" onclick={() => zen.appliquer()}><span>Appliquer</span><Icone nom="fleche" /></button>
+    <button class="btn primary" type="button" disabled={zen.risquesRequis && !zen.risquesAcceptes} onclick={() => zen.appliquer()}><span>Appliquer</span><Icone nom="fleche" /></button>
     <button class="btn" type="button" onclick={() => { zen.profil = "perso"; zen.aller("systeme"); }}><span>Modifier en détail</span></button>
     {#if (inv?.applis_utilisateur.length ?? 0) > 0}<button class="lien" type="button" onclick={() => zen.aller("utilisateur")}>Supprimer aussi des applis…</button>{/if}
     <button class="lien" type="button" onclick={() => zen.aller("profil")}>Retour</button>

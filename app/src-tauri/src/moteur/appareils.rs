@@ -281,6 +281,7 @@ pub fn identifier(p: &Proprietes) -> Result<&'static Profil, Inconnu> {
 mod tests {
     use super::*;
     use crate::moteur::classification::classer;
+    use crate::moteur::debloat::Balise;
     use std::path::Path;
     use std::process::Command;
 
@@ -442,6 +443,78 @@ mod tests {
                 assert!(!e.paquet.contains(interdit), "{}", e.paquet);
             }
             assert!(!["com.android.vending", "com.google.android.gms"].contains(&e.paquet.as_str()));
+        }
+    }
+
+    /// Paquets critiques qui ne figurent dans AUCUNE liste (générique et profils).
+    const LISTE_NOIRE: [&str; 27] = [
+        "com.google.android.tvlauncher",
+        "com.google.android.apps.tv.launcherx",
+        "com.google.android.leanbacklauncher",
+        "com.mitv.tvhome.atv",
+        "com.google.android.tungsten.setupwraith",
+        "com.android.vending",
+        "com.google.android.gms",
+        "com.google.android.gsf",
+        "com.android.settings",
+        "com.android.tv.settings",
+        "com.google.android.packageinstaller",
+        "com.android.packageinstaller",
+        "com.android.providers.tv",
+        "com.android.systemui",
+        "com.google.android.inputmethod.latin",
+        "com.google.android.katniss",
+        "com.google.android.marvin.talkback",
+        "com.google.android.tts",
+        "com.google.android.webview",
+        "com.android.webview",
+        "com.tcl.tv",
+        "com.tcl.tvinput",
+        "com.sony.dtv.b2b.hotelmode",
+        "org.droidtv.oad",
+        "com.android.shell",
+        "android",
+        "tv.zenhome",
+    ];
+
+    /// Exceptions documentées de la liste noire : (profil, paquet). La liste Mi Box (non modifiée ici) désactive
+    /// talkback et tts (en [option:garder]) et PatchWall, l'accueil Xiaomi remplacé par Zen Home.
+    const EXCEPTIONS_PROFILS: [(&str, &str); 3] = [
+        ("mibox4", "com.google.android.marvin.talkback"),
+        ("mibox4", "com.google.android.tts"),
+        ("mibox4", "com.mitv.tvhome.atv"),
+    ];
+
+    #[test]
+    fn listes_sans_paquet_critique() {
+        for a in TOUS {
+            for e in a.liste() {
+                let exception = EXCEPTIONS_PROFILS.contains(&(a.id, e.paquet.as_str()));
+                let garder_ok = e.paquet == "com.google.android.katniss" && e.balise == Balise::Garder;
+                assert!(!LISTE_NOIRE.contains(&e.paquet.as_str()) || exception || garder_ok, "{} : {} est critique", a.id, e.paquet);
+            }
+        }
+        for e in debloat::analyser(LISTE_GENERIQUE).unwrap() {
+            let garder_ok = e.balise == Balise::Garder && e.paquet == "com.google.android.katniss";
+            assert!(!LISTE_NOIRE.contains(&e.paquet.as_str()) || garder_ok, "générique : {} est critique", e.paquet);
+        }
+    }
+
+    #[test]
+    fn liste_generique_coherente() {
+        let a = generique_avec("34", "", "com.google.android.tvlauncher/.MainActivity\n", &AUCUN).unwrap();
+        let liste = a.liste();
+        for (i, e) in liste.iter().enumerate() {
+            assert!(liste[..i].iter().all(|f| f.paquet != e.paquet), "{} en double", e.paquet);
+            assert!(paquet_valide(&e.paquet) && !a.est_protege(&e.paquet), "{}", e.paquet);
+            assert!(!e.libelle.is_empty() && !e.explication.is_empty(), "{} : texte vide", e.paquet);
+            if ["com.google.android.katniss", "com.tcl.ttvs", "com.xiaomi.mitv.updateservice", "com.mitv.download.service"].contains(&e.paquet.as_str()) {
+                assert_eq!(e.balise, Balise::Garder, "{} : seulement en [option:garder]", e.paquet);
+            }
+            // Mêmes balise, libellé et explication que dans les profils qui ont le paquet (au moins un identique :
+            // le texte de Play Jeux dit « box » sur la Mi Box et « TV » ailleurs).
+            let ailleurs: Vec<Entree> = TOUS.iter().filter_map(|p| p.liste().into_iter().find(|f| f.paquet == e.paquet)).collect();
+            assert!(ailleurs.is_empty() || ailleurs.contains(e), "{} diffère de sa version en profil", e.paquet);
         }
     }
 

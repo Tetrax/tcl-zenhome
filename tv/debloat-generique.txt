@@ -1,4 +1,5 @@
-# Android TV / Google TV non vérifiée (mode générique) : liste prudente, limitée aux paquets communs à toutes les TV Google.
+# Android TV / Google TV non vérifiée (mode générique) : liste prudente, paquets Google communs, TCL, Xiaomi et reconnaissance de contenu.
+# Seuls les paquets présents sur l'appareil sont proposés ; un paquet hors liste n'est jamais touché.
 # Tout est DÉSACTIVÉ (pm disable-user), rien n'est désinstallé. Annulation : pm enable <paquet>.
 # Jamais d'accueil, de setupwraith, de TalkBack / synthèse vocale / Katniss, de Play Store ni de services Google ici.
 #
@@ -13,3 +14,40 @@ com.android.tv.feedbackconsent         # Consentement aux rapports : demande l'a
 android.autoinstalls.config.google.gtvpai  # Installations automatiques : installe des applis partenaires sans vous demander.
 com.google.android.youtube.tvmusic     # [option:garder] YouTube Music : désactivez-la si vous n'écoutez pas de musique avec.
 com.google.android.play.games          # [option:garder] Play Jeux : l'appli de jeux Google. Désactivez-la si vous ne jouez pas sur la TV.
+com.google.android.tv.bugreportsender  # Rapports de bug : envoie des rapports de plantage à Google.
+com.google.android.videos              # [option:garder] Google TV (films Google) : location et achat de films chez Google. Désactivez-la si vous n'en avez pas acheté.
+
+# TCL
+com.tcl.channelplus                    # Chaînes TCL : chaînes gratuites avec publicités, poussées par TCL.
+com.tcl.tv.tclhome_passive             # Contenus TCL : pousse du contenu TCL sur l'accueil.
+com.tcl.waterfall.overseas             # Recommandations TCL : flux de suggestions de contenus venant de TCL.
+com.tcl.esticker                       # Bannières TCL : bannières et autocollants promotionnels.
+com.tcl.exhibit                        # Mode démo magasin : sert à présenter la TV en boutique, inutile chez vous.
+com.tcl.interactive                    # Contenus interactifs TCL : contenus et promotions interactifs de TCL.
+com.tcl.messagebox                     # Messages TCL : messages promotionnels envoyés par TCL.
+com.tcl.usercenter                     # [option] Compte TCL : le compte TCL tourne en arrière-plan (15 Mo). Désactivez-le si vous n'en avez pas.
+com.tcl.ttvs                           # [option:garder] Service système TCL : peut servir aux mises à jour de la TV (réseau et clé USB). Recommandé de garder.
+com.tcl.logkit                         # Journaux TCL : collecte des journaux de fonctionnement pour TCL.
+com.tcl.guard                          # [option] Safety Guard (TCL) : « nettoyeur » et gestion des permissions de TCL, qui tourne en arrière-plan. Désactivable sans risque connu.
+com.tcl.smartalexa                     # [option] Alexa : l'assistant vocal d'Amazon. Désactivez-le si vous ne l'utilisez pas.
+com.tcl.gamebar                        # [option] Barre de jeux TCL : raccourcis pour jouer. Désactivez-la si vous ne jouez pas sur la TV.
+com.tcl.repairguide                    # [option] Guide de dépannage : aide de TCL en cas de panne.
+com.tcl.ocean.instructions             # [option] Manuel électronique : le mode d'emploi de la TV, à l'écran.
+com.tcl.tv.tclchannel                  # [option] Chaîne TCL : appli de chaînes TCL qui embarque la publicité Google (Mobile Ads).
+com.tcl.tv.plus                        # [option] TCL TV+ : l'appli de contenus de TCL. Désactivez-la si vous ne l'utilisez pas.
+
+# Xiaomi
+com.miui.tv.analytics                  # Statistiques Xiaomi : envoie votre usage de la box à Xiaomi.
+com.mitv.tvhome.michannel              # Chaînes Mi : contenus poussés par Xiaomi.
+com.xm.webcontent                      # Contenus web Xiaomi : promotions affichées par Xiaomi.
+android.autoinstalls.config.xioami.mibox3  # Installations automatiques : installe des applis partenaires sans vous demander.
+com.xiaomi.android.tvsetup.partnercustomizer  # Rangées partenaires : ajoute des publicités de partenaires à l'accueil.
+com.mitv.milinkservice                 # [option] Mi Link : diffuser depuis un téléphone Xiaomi. Le Chromecast intégré reste disponible pour tous les téléphones.
+com.mitv.videoplayer                   # [option:garder] Lecteur vidéo Xiaomi : lit les vidéos d'une clé USB. Désactivez-le si vous ne regardez jamais de fichiers sur clé USB.
+com.xiaomi.mitv.updateservice          # [option:garder] Mises à jour Xiaomi : installe les mises à jour de sécurité de la box. Recommandé de garder.
+com.mitv.download.service              # [option:garder] Téléchargements Xiaomi : utilisé par les mises à jour Xiaomi. Recommandé de garder.
+
+# Reconnaissance de contenu (toutes marques)
+tv.alphonso.alphonso_eula              # Alphonso : reconnaît ce que vous regardez pour cibler la publicité.
+tv.samba.ssm                           # Samba TV : reconnaît ce que vous regardez pour cibler la publicité.
+tv.samba.ssm.ui                        # Samba TV (interface) : affiche les demandes de Samba TV, qui reconnaît ce que vous regardez.
