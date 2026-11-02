@@ -37,6 +37,10 @@ pub struct Lecture<'a> {
 /// Accueils qui ne sont jamais un accueil d'origine (sélecteur, repli, assistant d'installation).
 const ECARTES: [&str; 3] = ["android", "com.android.settings", "com.google.android.tungsten.setupwraith"];
 
+/// Seuls accueils d'origine acceptés pour un appareil générique : lanceurs Google TV / Android TV. Tout autre accueil
+/// (opérateur, hôtel, paramètres, paquet du socle...) serait désactivé par la réparation ou rendu à tort.
+pub const LANCEURS_GOOGLE: [&str; 3] = ["com.google.android.tvlauncher", "com.google.android.apps.tv.launcherx", "com.google.android.leanbacklauncher"];
+
 /// Raison du refus quand Zen Home tient déjà l'accueil (la connexion peut alors repartir d'une sauvegarde d'origine).
 pub const RAISON_ZEN_HOME: &str = "Zen Home déjà installé : accueil d'origine inconnu";
 
@@ -77,6 +81,9 @@ pub fn classer(l: &Lecture) -> Classification {
     }
     if ECARTES.contains(&paquet) || !paquet_valide(paquet) || !l.systeme.contains(paquet) {
         return non("accueil d'origine introuvable");
+    }
+    if !LANCEURS_GOOGLE.contains(&paquet) {
+        return non(format!("accueil d'origine non reconnu ({paquet})"));
     }
     let mode_accueil = if detenteur.is_some() { ModeAccueil::RoleHome } else { ModeAccueil::AccueilPrefere };
     Classification::CompatibleProbable { mode_accueil, accueil_origine: paquet.to_string() }
@@ -229,6 +236,17 @@ mod tests {
         assert_eq!(refus(&Cas { caracteristiques: "default", features: "feature:android.hardware.wifi\n", ..base() }), "pas une TV Android");
         assert_eq!(refus(&Cas { sdk: "26", release: "8", ..base() }), "Android trop ancien (8)");
         assert_eq!(refus(&Cas { sdk: "", ..base() }), "version d'Android illisible");
+    }
+
+    #[test]
+    fn accueil_hors_liste_blanche_refuse() {
+        let systeme = vec![TV_GOOGLE, "com.android.tv.settings", "com.exemple.operateur", "com.google.android.leanbacklauncher"];
+        let non_reconnu = |p: &str| format!("accueil d'origine non reconnu ({p})");
+        let role = |r| Cas { role: r, systeme: systeme.clone(), ..base() };
+        assert_eq!(refus(&role("com.android.tv.settings\n")), non_reconnu("com.android.tv.settings"));
+        let resolution = Cas { resolution: "com.exemple.operateur/.Accueil\n", systeme: systeme.clone(), ..base() };
+        assert_eq!(refus(&resolution), non_reconnu("com.exemple.operateur"));
+        assert!(est_probable(&role("com.google.android.leanbacklauncher\n")));
     }
 
     #[test]

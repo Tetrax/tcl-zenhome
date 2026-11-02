@@ -3,8 +3,8 @@
 
 use std::time::Duration;
 
-use super::appareils::{Appareil, ModeAccueil, Proprietes, ReglagesLus, identifier};
-use super::classification::{Classification, Lecture, RAISON_ZEN_HOME, classer};
+use super::appareils::{Appareil, ModeAccueil, Proprietes, ReglagesLus, SOCLE, identifier};
+use super::classification::{Classification, LANCEURS_GOOGLE, Lecture, RAISON_ZEN_HOME, classer};
 use super::origine::{Origine, Reglage};
 use super::rapport_appareil::{Lu, lire, lire_appareil};
 use super::transport::{Commande, Espace, ErreurTransport, EtatLien, Transport};
@@ -133,10 +133,20 @@ pub fn connecter_box(t: &dyn Transport, pol: &Politique) -> Result<Connecte, Ech
 fn depuis_origine(t: &dyn Transport, l: &Lecture, r: &ReglagesLus, origines: &dyn Fn(&str) -> Option<Origine>) -> Option<Appareil> {
     let o = origines(&lire_serie(t).ok()?)?;
     let accueil = o.accueil?;
+    let paquet = accueil.split('/').next()?.to_string();
+    // La sauvegarde n'est pas fiable : même filtre que la classification (lanceur Google, présent parmi les paquets système).
+    if !LANCEURS_GOOGLE.contains(&paquet.as_str()) || !l.systeme.contains(&paquet) || SOCLE.contains(&paquet.as_str()) {
+        return None;
+    }
     let sdk = l.proprietes.sdk.parse::<u32>().ok()?;
     let mode_accueil = if sdk >= 29 && !l.role.trim().is_empty() { ModeAccueil::RoleHome } else { ModeAccueil::AccueilPrefere };
-    let c = Classification::CompatibleProbable { mode_accueil, accueil_origine: accueil.split('/').next()?.to_string() };
+    let c = Classification::CompatibleProbable { mode_accueil, accueil_origine: paquet.clone() };
     let mut a = Appareil::generique(l, &c, r)?;
+    // protégé hors lanceur (clavier, accessibilité) : un tel paquet ne peut pas être l'accueil à rendre
+    if a.proteges.contains(&paquet) {
+        return None;
+    }
+    a.depuis_origine = true;
     a.accueil = accueil;
     a.veille = match o.veille {
         Reglage::Valeur(v) => Some(v),
@@ -167,7 +177,7 @@ pub fn connecter_appareil(t: &dyn Transport, pol: &Politique, origines: &dyn Fn(
     let appareil = match &classe {
         Classification::CompatibleProbable { .. } => Appareil::generique(&lecture, &classe, &reglages).ok_or_else(|| refus("version d'Android illisible"))?,
         Classification::NonSupporte(r) if r == RAISON_ZEN_HOME => depuis_origine(t, &lecture, &reglages, origines)
-            .ok_or_else(|| refus("Zen Home déjà installé par un autre moyen : accueil d'origine inconnu"))?,
+            .ok_or_else(|| refus("Zen Home est déjà installé, mais ce Mac n'a pas de sauvegarde d'origine de cet appareil : accueil d'origine inconnu."))?,
         Classification::NonSupporte(r) => return Err(refus(r)),
         Classification::Verifie(_) => return Err(refus("appareil non reconnu")),
     };
@@ -338,6 +348,30 @@ mod tests {
         f.modifier(|e| e.sdk = "35".into());
         let c = connecter_box(&f, &Politique::default()).unwrap();
         assert!(c.sdk_recent, "reconnue malgré un Android plus récent : simple avertissement");
+    }
+
+    fn origine_avec_accueil(accueil: &str) -> Origine {
+        Origine { date: "01/01/2026 10:00".into(), desactives: vec![], veille: Reglage::Inconnu, animations: [Reglage::Inconnu, Reglage::Inconnu, Reglage::Inconnu], accueil: Some(accueil.into()) }
+    }
+
+    #[test]
+    fn accueil_d_une_sauvegarde_filtre_comme_a_la_classification() {
+        let lanceur = "com.google.android.apps.tv.launcherx";
+        let f = FakeBox::chromecast();
+        f.modifier(|e| e.role_home = Some("tv.zenhome".into()));
+        for accueil in ["com.google.android.gms/.X", "com.android.tv.settings/.Main", "com.exemple.absent/.A"] {
+            let r = connecter_appareil(&f, &Politique::default(), &|_| Some(origine_avec_accueil(accueil)));
+            assert!(matches!(&r, Err(EchecConnexion::ModeleDifferent(m)) if m.contains("pas de sauvegarde d'origine")), "{accueil} : {r:?}");
+        }
+        // lanceur Google absent des paquets système : refusé aussi
+        f.modifier(|e| {
+            e.paquets.remove("com.google.android.leanbacklauncher");
+        });
+        let r = connecter_appareil(&f, &Politique::default(), &|_| Some(origine_avec_accueil("com.google.android.leanbacklauncher/.Main")));
+        assert!(r.is_err());
+        let a = connecter_appareil(&f, &Politique::default(), &|_| Some(origine_avec_accueil(&format!("{lanceur}/.MainActivity")))).unwrap().appareil;
+        assert!(a.depuis_origine && a.est_generique());
+        assert_eq!(a.launcher(), lanceur);
     }
 
     #[test]
