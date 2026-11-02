@@ -137,8 +137,8 @@ impl EtatBox {
         Self::pour(&TCL_G08)
     }
 
-    /// Google TV inconnue des fiches (Android 14, rôle HOME au lanceur Google) : paquets de la liste générique, `samba`
-    /// désactivé en usine, un clavier et un service d'accessibilité tiers.
+    /// Google TV inconnue des fiches (Android 14, rôle HOME au lanceur Google) : paquets de la liste générique,
+    /// `hotelmenu` désactivé en usine, un clavier et un service d'accessibilité tiers.
     pub fn chromecast() -> Self {
         let mut e = Self::pour(&TCL_G08);
         e.produit = "sabrina".into();
@@ -148,12 +148,12 @@ impl EtatBox {
         e.paquets.retain(|_, p| !p.systeme);
         let generique = debloat::analyser(LISTE_GENERIQUE).expect("liste générique valide");
         let systeme = generique.into_iter().map(|x| x.paquet).chain(
-            [TCL_G08.launcher(), SETUPWRAITH, "com.android.vending", "com.android.tv.settings", "com.google.android.gms", "tv.samba.ssm.ui"].map(String::from),
+            [TCL_G08.launcher(), SETUPWRAITH, "com.android.vending", "com.android.tv.settings", "com.google.android.gms", "com.tcl.hotelmenu"].map(String::from),
         );
         for p in systeme {
             e.paquets.insert(p.clone(), paquet_systeme("priv-app", &p));
         }
-        e.paquets.get_mut("tv.samba.ssm.ui").unwrap().desactive = true;
+        e.paquets.get_mut("com.tcl.hotelmenu").unwrap().desactive = true;
         e.paquets.insert("com.exemple.clavier".into(), paquet_tiers("com.exemple.clavier", 8, "2026-10-20 10:00:00", "Clavier"));
         e.paquets.insert("com.exemple.acces".into(), paquet_tiers("com.exemple.acces", 4, "2026-10-20 10:00:00", "Accès"));
         e.secure.insert("default_input_method".into(), "com.exemple.clavier/.Service".into());

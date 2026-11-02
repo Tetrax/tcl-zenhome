@@ -469,7 +469,7 @@ mod tests {
     }
 
     /// Chromecast Google TV de test : TCL en rôle HOME rebaptisée, liste générique et lanceur éteints (Zen Home installé),
-    /// `tv.samba.ssm.ui` désactivée en usine.
+    /// `com.tcl.hotelmenu` désactivée en usine.
     fn installee_generique() -> (FakeBox, Appareil) {
         use crate::moteur::classification::{Lecture, classer};
         use crate::moteur::appareils::{Proprietes, ReglagesLus};
@@ -491,7 +491,7 @@ mod tests {
         let app = Appareil::generique(&l, &classer(&l), &ReglagesLus { veille: "null", clavier: "null", accessibilite: "null" }).unwrap();
         f.modifier(|e| {
             let modele = e.paquets["com.tcl.logkit"].clone();
-            e.paquets.insert("tv.samba.ssm.ui".into(), PaquetFake { desactive: true, ..modele });
+            e.paquets.insert("com.tcl.hotelmenu".into(), PaquetFake { desactive: true, ..modele });
             for p in app.liste().iter().map(|x| x.paquet.as_str()).chain([TCL_G08.launcher(), "com.google.android.tungsten.setupwraith"]) {
                 let mut m = e.paquets["com.tcl.logkit"].clone();
                 m.desactive = true;
@@ -509,7 +509,7 @@ mod tests {
         let (f, app) = installee_generique();
         let r = restaurer(&f, &app, &Politique::default(), &mut Silencieux, &Reprise::default(), None).unwrap();
         let e = f.instantane();
-        assert!(e.paquets["tv.samba.ssm.ui"].desactive, "désactivée en usine : elle le reste");
+        assert!(e.paquets["com.tcl.hotelmenu"].desactive, "désactivée en usine : elle le reste");
         assert!(!e.paquets["com.tcl.logkit"].desactive, "elle n'était pas désactivée");
         for p in app.liste().iter().map(|x| x.paquet.as_str()).chain([TCL_G08.launcher(), "com.google.android.tungsten.setupwraith"]) {
             assert!(!e.paquets[p].desactive, "{p}");

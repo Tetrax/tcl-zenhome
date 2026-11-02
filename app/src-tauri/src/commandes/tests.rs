@@ -851,7 +851,7 @@ fn generique_cycle_complet_puis_restauration() {
         assert!(e.paquets[p].desactive, "{p}");
     }
     assert!(!e.paquets["com.google.android.play.games"].desactive, "[option:garder]");
-    assert!(e.paquets["tv.samba.ssm.ui"].desactive, "désactivé en usine : le reste");
+    assert!(e.paquets["com.tcl.hotelmenu"].desactive, "désactivé en usine : le reste");
     assert_eq!(e.secure["default_input_method"], "com.exemple.clavier/.Service");
     assert!(e.secure["enabled_accessibility_services"].starts_with("com.exemple.acces/.Acces"), "service tiers conservé");
     assert!(!e.paquets["com.exemple.clavier"].desactive && !e.paquets["com.exemple.acces"].desactive);
