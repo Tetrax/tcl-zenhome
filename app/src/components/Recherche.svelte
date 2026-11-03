@@ -5,7 +5,7 @@
   import BlocErreur from "./BlocErreur.svelte";
   import Icone from "./Icone.svelte";
   import { zen } from "../lib/zen.svelte";
-  import { fiche } from "../lib/appareils";
+  import { CONSIGNES } from "../lib/appareils";
   import { ipLocale, ipValide } from "../lib/validation";
 
   let manuel = $state(zen.forcerManuel);
@@ -16,7 +16,6 @@
   onMount(() => {
     if (!zen.rechercheFaite && !zen.rechercheEnCours) void zen.chercher();
   });
-  const ficheAppareil = $derived(fiche(zen.famille));
   const cherche = $derived(zen.rechercheEnCours || !zen.rechercheFaite);
   // Les box mémorisées sont proposées tout de suite, la recherche continue derrière.
   const props = $derived(zen.propositions);
@@ -83,7 +82,7 @@
       </div>
       <p class="lead" style="margin-top:14px">Est-ce bien la vôtre ?</p>
     {:else if props.length > 1}
-      <p class="lead">Plusieurs appareils sont proposés sur ce réseau. {zen.famille === "autre" ? "Choisissez celui dont vous voulez le rapport." : "Cochez ceux que vous voulez configurer : ils auront les mêmes choix."}</p>
+      <p class="lead">Plusieurs appareils sont proposés sur ce réseau. Cochez ceux que vous voulez configurer : ils auront les mêmes choix.</p>
       <p style="margin:6px 0 0"><button class="lien" type="button" onclick={() => (zen.coches = toutes ? [] : props.map((b) => b.ip))}>{toutes ? "Tout désélectionner" : "Tout sélectionner"}</button></p>
       <ul class="liste" aria-label="Appareils trouvés">
         {#each props as b (b.ip)}
@@ -108,8 +107,8 @@
         </div>
         <p class="msg" id="erreur-ip" role="alert">{erreurIp}</p>
         <p class="petit" id="aide-ip" style="margin-top:0">
-          {#if ficheAppareil}Sur l'appareil : <span class="chemin">{ficheAppareil.adresseIp}</span>.{:else}Dans les réglages réseau de l'appareil.{/if} Elle ressemble à 192.168.1.23.
-          Le « débogage USB » doit être activé{#if ficheAppareil} ({ficheAppareil.debogage}){/if}.
+          Sur l'appareil : <span class="chemin">{CONSIGNES.adresseIp}</span>. Elle ressemble à 192.168.1.23.
+          Le « débogage USB » doit être activé ({CONSIGNES.debogage}).
         </p>
       </form>
     {/if}

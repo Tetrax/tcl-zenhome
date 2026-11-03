@@ -11,8 +11,8 @@
 {#if zen.erreur}
   <BlocErreur extra={{ libelle: "Changer d'adresse", action: autreAdresse }} />
 {:else}
-  <Panneau titre="Connexion à votre box">
-    <p class="lead" aria-live="polite">{zen.travail.etape || "Connexion à la box"}…</p>
+  <Panneau titre="Connexion à votre appareil">
+    <p class="lead" aria-live="polite">{zen.travail.etape || "Connexion à l'appareil"}…</p>
     {#if cible}<p class="petit">Adresse : <span class="ip">{cible}</span></p>{/if}
     <p class="petit">Un message va s'afficher sur l'écran de la TV : acceptez-le, en cochant « Toujours autoriser cet ordinateur ». Gardez la télécommande à portée de main.</p>
     <IllustrationTv />

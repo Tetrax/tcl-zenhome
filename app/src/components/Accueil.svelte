@@ -21,7 +21,7 @@
   <ol class="consignes">
     <li>Allumez la TV et la box (ou la TV Google TV), et laissez-les allumées pendant toute l'installation (environ 10 minutes).</li>
     <li>La box ou la TV et ce Mac doivent être sur le même réseau Wi-Fi.</li>
-    <li>À l'étape suivante, vous choisirez votre appareil : Zen Home vous montrera comment y activer le débogage.</li>
+    <li>À l'étape suivante, Zen Home vous montrera comment activer le débogage sur votre appareil.</li>
     <li>Gardez la télécommande à portée de main : une demande d'autorisation va s'afficher sur la TV, il faudra l'accepter.</li>
   </ol>
   <p class="petit">macOS peut demander si Zen Home peut trouver des appareils sur votre réseau local : acceptez, c'est ce qui permet de retrouver la box.</p>

@@ -6,17 +6,16 @@
   import IllustrationTv from "./IllustrationTv.svelte";
   import Rapport from "./Rapport.svelte";
   import { zen } from "../lib/zen.svelte";
-  import { fiche } from "../lib/appareils";
+  import { CONSIGNES } from "../lib/appareils";
   import type { CodeErreur } from "../lib/types";
 
   let { extra }: { extra?: { libelle: string; action: () => void } } = $props();
   const e = $derived(zen.erreur);
-  const ficheAppareil = $derived(fiche(zen.famille));
 
   const TITRES: Record<CodeErreur, string> = {
     occupe: "Une opération est déjà en cours", annule: "Opération arrêtée", adb_absent: "L'outil adb est manquant",
-    refus_licence: "Votre accord est nécessaire", injoignable: "La box ne répond pas", non_autorise: "La box attend votre autorisation",
-    autre_modele: "Appareil pas encore pris en charge", risques_non_acceptes: "Votre accord est nécessaire", autre_box: "Ce n'est pas la même box", lecture: "La box n'a pas pu être lue",
+    refus_licence: "Votre accord est nécessaire", injoignable: "L'appareil ne répond pas", non_autorise: "L'appareil attend votre autorisation",
+    autre_modele: "Appareil pas encore pris en charge", risques_non_acceptes: "Votre accord est nécessaire", autre_box: "Ce n'est pas le même appareil", lecture: "L'appareil n'a pas pu être lu",
     choix_invalide: "Un choix n'a pas été accepté", reseau: "Problème de connexion Internet", interne: "Un problème est survenu",
   };
   const sansReprise: CodeErreur[] = ["autre_modele", "risques_non_acceptes", "autre_box", "refus_licence"];
@@ -29,7 +28,7 @@
     <p class="lead" role="alert">{e.message}</p>
     {#if e.code === "injoignable"}
       <ul class="petit" style="margin:14px 0 0;padding-left:20px;display:grid;gap:6px">
-        <li>Le débogage USB est activé{#if ficheAppareil} ({ficheAppareil.debogage}){/if}.</li>
+        <li>Le débogage USB est activé ({CONSIGNES.debogage}).</li>
         <li>L'adresse IP est la bonne.</li>
         <li>L'appareil est allumé (pas en veille) et sur le même Wi-Fi que ce Mac.</li>
         <li>Vous avez accepté l'autorisation affichée sur la TV.</li>

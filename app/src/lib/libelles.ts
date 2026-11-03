@@ -2,7 +2,7 @@
 import type { EtatLigne, LigneVerif } from "./types";
 
 const FIXES: Record<string, string> = {
-  "Zen Home installé": "Zen Home est installé sur la box",
+  "Zen Home installé": "Zen Home est installé",
   "Accessibilité : KeyService": "Les raccourcis de la télécommande fonctionnent",
   "Écran de veille = ZenDream": "L'écran de veille de Zen Home est actif",
   "Stats d'usage (Applis ouvertes)": "Zen Home peut voir vos applis récentes",
@@ -35,7 +35,7 @@ export function humaniser(l: LigneVerif, noms: Map<string, string>): LigneHumain
     libelle = `${noms.get(p) ?? p} reste active, comme vous l'avez choisi`; appli = true;
   }
   let detail = l.detail;
-  if (detail === "absent") detail = "Absent de la box";
+  if (detail === "absent") detail = "Absent";
   else if (detail.startsWith("version ")) detail = "Version " + detail.slice(8);
   return { etat: l.etat, libelle: libelle ?? l.controle, detail, brut, appli };
 }

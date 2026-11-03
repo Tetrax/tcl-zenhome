@@ -7,9 +7,9 @@
 <div class="bandeaux" role="status" aria-live="polite">
   {#if zen.reco}
     {#if "essai" in zen.reco}
-      <div class="bandeau alerte"><span class="pulse-dot"></span>Connexion avec la box perdue, nouvelle tentative (essai {zen.reco.essai})…</div>
+      <div class="bandeau alerte"><span class="pulse-dot"></span>Connexion perdue, nouvelle tentative (essai {zen.reco.essai})…</div>
     {:else}
-      <div class="bandeau">Box reconnectée, on continue.</div>
+      <div class="bandeau">Connexion rétablie, on continue.</div>
     {/if}
   {/if}
 </div>

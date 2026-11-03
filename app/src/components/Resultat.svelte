@@ -4,7 +4,9 @@
   import Rapport from "./Rapport.svelte";
   import { zen } from "../lib/zen.svelte";
   import { humaniser, libelleEtat } from "../lib/libelles";
+  import { defini, motConnecte } from "../lib/appareils";
 
+  const mot = $derived(motConnecte(zen.box?.appareil));
   const v = $derived(zen.verification);
   const noms = $derived(new Map([...(zen.inventaire?.applis_systeme ?? []), ...(zen.inventaire?.applis_utilisateur ?? [])].map((a) => [a.paquet, a.libelle])));
   const lignes = $derived((v?.lignes ?? []).map((l) => humaniser(l, noms)));
@@ -13,7 +15,7 @@
   const nb = (e: string) => lignes.filter((l) => l.etat === e).length;
   const parfait = $derived((v?.ko ?? 0) === 0);
   const reparation = $derived(zen.mode === "reparer");
-  const titre = $derived(parfait ? (reparation ? "Votre box est réparée" : "Zen Home est prêt") : "Presque terminé");
+  const titre = $derived(parfait ? (reparation ? `Votre ${mot} est répar${mot === "appareil" ? "é" : "ée"}` : "Zen Home est prêt") : "Presque terminé");
 </script>
 
 {#snippet tableau(legende: string, rows: typeof lignes)}
@@ -52,7 +54,7 @@
   {/if}
   {#if v}
     <p class="petit" style="margin-top:16px" aria-live="polite">Vérification finale : {nb("ok")} en ordre{nb("avert") ? `, ${nb("avert")} à noter` : ""}{nb("ko") ? `, ${nb("ko")} à regarder` : ""}.</p>
-    {@render tableau("Zen Home sur votre box", principales)}
+    {@render tableau(`Zen Home sur votre ${mot}`, principales)}
     {#if applis.length}
       <details>
         <summary>Détail des {applis.length} applis allégées</summary>
@@ -67,9 +69,9 @@
   <div class="note" style="margin-top:20px">
     <Icone nom="info" />
     <div>
-      <p><b>Pour votre sécurité</b>, vous pouvez couper le « débogage USB » de la box : sinon n'importe quel appareil de votre réseau Wi-Fi pourrait la piloter. Il faudra le réactiver pour utiliser « Réparer ».</p>
+      <p><b>Pour votre sécurité</b>, vous pouvez couper le « débogage USB » de {defini(mot)} : sinon n'importe quel appareil de votre réseau Wi-Fi pourrait en prendre le contrôle. Il faudra le réactiver pour utiliser « Réparer ».</p>
       <p style="margin-top:10px">
-        {#if zen.debogageCoupe === "oui"}<b>Débogage coupé.</b> La box ne peut plus être pilotée depuis le réseau.
+        {#if zen.debogageCoupe === "oui"}<b>Débogage coupé.</b> Rien ne peut plus piloter {defini(mot)} depuis le réseau.
         {:else}<button class="btn small" type="button" disabled={zen.debogageCoupe === "en_cours"} class:busy={zen.debogageCoupe === "en_cours"} onclick={() => zen.couperDebogage()}>Couper le débogage</button>
           <span class="petit"> Sinon, il reste activé.</span>{/if}
       </p>
