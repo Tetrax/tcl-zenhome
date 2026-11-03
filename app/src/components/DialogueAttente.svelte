@@ -23,7 +23,7 @@
       <IllustrationTv />
       <p class="petit">Puis cliquez sur « Réessayer ».</p>
     {:else}
-      <h2 id="dlg-titre" tabindex="-1">La box ne répond plus</h2>
+      <h2 id="dlg-titre" tabindex="-1">L'appareil ne répond plus</h2>
       {#if zen.boxActive}<p class="lead"><b>Allez devant la TV « {zen.boxActive} ».</b></p>{/if}
       <p class="lead">La connexion avec la box ou la TV{zen.box ? ` (${zen.box.ip})` : ""} a été perdue.</p>
       <p class="petit">Vérifiez qu'elle est allumée et pas en veille (appuyez sur une touche de la télécommande), et toujours sur le même Wi-Fi que ce Mac. Puis cliquez sur « Réessayer ».</p>

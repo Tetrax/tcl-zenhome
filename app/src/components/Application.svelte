@@ -10,5 +10,5 @@
 {#if zen.erreur}
   <BlocErreur />
 {:else}
-  <Travail titre="Application en cours" sous="Ne fermez pas cette fenêtre et laissez la TV et la box allumées." fraction={zen.fractionGlobale()} {jalons} />
+  <Travail titre="Application en cours" sous="Ne fermez pas cette fenêtre et laissez la TV allumée (et la box, si vous en avez une)." fraction={zen.fractionGlobale()} {jalons} />
 {/if}

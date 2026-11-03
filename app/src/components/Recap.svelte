@@ -3,14 +3,16 @@
   import Icone from "./Icone.svelte";
   import Risques from "./Risques.svelte";
   import { zen } from "../lib/zen.svelte";
+  import { motConnecte } from "../lib/appareils";
 
+  const mot = $derived(motConnecte(zen.box?.appareil));
   const inv = $derived(zen.inventaire);
   const choix = $derived(zen.choix());
   const nom = (p: string) => inv?.applis_systeme.find((a) => a.paquet === p)?.libelle ?? inv?.applis_utilisateur.find((a) => a.paquet === p)?.libelle ?? p;
 </script>
 
 <Panneau titre="Récapitulatif" large>
-  <p class="lead">Voici ce qui va être fait sur {zen.lot ? "vos box" : "votre box"}. Rien ne change avant votre clic sur « Appliquer ».</p>
+  <p class="lead">Voici ce qui va être fait sur {zen.lot ? "vos appareils" : `votre ${mot}`}. Rien ne change avant votre clic sur « Appliquer ».</p>
   <p class="petit">Profil : <b>{{ recommande: "Recommandé", simple: "Simple", leger: "Léger", perso: "Personnalisé" }[zen.profil]}</b></p>
   <dl class="grille">
     <div><dt>Applis système désactivées (réversible)</dt><dd class="grand">{choix.desactiver.length}</dd></div>
@@ -26,7 +28,7 @@
     Météo : <b>{zen.ville ? [zen.ville.nom, zen.ville.pays].filter(Boolean).join(", ") : "aucune"}</b> ·
     Films : <b>{zen.jeton ? "avec votre jeton TMDB" : zen.init?.films_inclus ? "inclus" : "sans"}</b>
   </p>
-  <p class="petit" style="margin-top:6px">Une sauvegarde de l'état actuel {zen.lot ? "de chaque box est déjà enregistrée" : "est déjà enregistrée"} sur ce Mac.</p>
+  <p class="petit" style="margin-top:6px">Une sauvegarde de l'état actuel {zen.lot ? "de chaque appareil est déjà enregistrée" : "est déjà enregistrée"} sur ce Mac.</p>
   <Risques />
   {#snippet pied()}
     <button class="btn primary" type="button" disabled={zen.risquesRequis && !zen.risquesAcceptes} onclick={() => zen.appliquer()}><span>Appliquer</span><Icone nom="fleche" /></button>

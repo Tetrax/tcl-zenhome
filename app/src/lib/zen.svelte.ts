@@ -1,7 +1,7 @@
 // État global et déroulé du parcours. L'interface n'envoie que des intentions au cœur (voir api.ts).
 import { api, normaliserErreur } from "./api";
 import { fusionner, reduire } from "./lot";
-import type { Famille } from "./appareils";
+import { defini, motConnecte } from "./appareils";
 import { choixDuProfil, desactiverParDefaut, type Profil } from "./profils";
 import type { Moment } from "../scene";
 import type {
@@ -42,7 +42,7 @@ export const MOMENT: Record<Ecran, Moment> = {
 /** Écrans où une action longue pilote la lumière (jusqu'au crépuscule). */
 export const ECRANS_TRAVAIL: Ecran[] = ["application", "reparation", "restauration", "lot"];
 
-export const ETAPES = ["Accueil", "Box", "Préparation", "Vos choix", "Installation", "Terminé"] as const;
+export const ETAPES = ["Accueil", "Appareil", "Préparation", "Vos choix", "Installation", "Terminé"] as const;
 export const ETAPE_DE: Record<Ecran, number> = {
   accueil: 0, adb: 0, appareil: 1, recherche: 1, rapport_appareil: 1, connexion: 1, etat: 2, resume: 2, meteo: 2, films: 2, installation: 2,
   profil: 3, systeme: 3, utilisateur: 3, recap: 3, application: 4, reparation: 4, confirm_restauration: 4, restauration: 4,
@@ -57,8 +57,6 @@ class Zen {
   ecran = $state<Ecran>("accueil");
   mode = $state<Mode>("installer");
 
-  /** Appareil choisi à l'écran « Quel appareil ? » : ne sert qu'aux consignes (le cœur vérifie le modèle à la connexion). */
-  famille = $state<Famille>("mibox");
   /** Rapport d'appareil lu par le cœur (texte complet à copier ou envoyer). */
   texteRapportAppareil = $state("");
 
@@ -139,6 +137,8 @@ class Zen {
     }
   };
 
+  /** « la box », « la TV » ou « l'appareil » selon l'appareil connecté, pour les textes affichés pendant le travail. */
+  private get appareilDefini() { return defini(motConnecte(this.box?.appareil)); }
   private debut(etape = "") {
     this.erreur = null; this.reprise = null; this.reco = null; this.attente = null;
     this.travail = { actif: true, etape, fraction: null, avertissements: [], annulation: false };
@@ -157,7 +157,6 @@ class Zen {
     this.lot = null; this.coches = []; this.risquesAcceptes = false;
     this.aller(this.init && !this.init.adb_installe ? "adb" : "appareil");
   }
-  choisirAppareil(f: Famille) { this.famille = f; this.aller("recherche"); }
   retourAccueil() {
     if (this.travail.actif || this.rechercheEnCours) void api.annuler().catch(() => {});
     this.lot = null; // la boucle du lot en cours s'arrête d'elle-même
@@ -233,10 +232,9 @@ class Zen {
 
   // ---- Connexion ----
   async connecter(cible: Cible) {
-    if (this.famille === "autre") return this.rapportAppareil(cible); // « Autre appareil » : on ne configure rien, on lit seulement
     this.lot = null; this.cible = cible; this.box = null; this.risquesAcceptes = false;
     this.aller("connexion");
-    this.debut("Connexion à la box");
+    this.debut("Connexion à l'appareil");
     try {
       await this.attendreRecherche();
       if (!this.travail.actif) return; // retour à l'accueil pendant l'attente
@@ -269,7 +267,7 @@ class Zen {
   // ---- État des lieux ----
   async lireEtat() {
     this.aller("etat");
-    this.debut("Lecture de la box");
+    this.debut(`Lecture de ${this.appareilDefini}`);
     try {
       const inv = await api.inventaire(this.sur);
       this.inventaire = inv;
@@ -364,7 +362,7 @@ class Zen {
   // ---- Réparer ----
   async reparer() {
     this.aller("reparation"); this.jalon = 0; this.verification = null; this.rapport = null; this.debogageCoupe = "non";
-    this.debut("Contrôle de la box");
+    this.debut(`Contrôle de ${this.appareilDefini}`);
     try {
       this.verification = await api.verifier(true, this.sur);
       this.fin(); this.succes++;
@@ -390,7 +388,7 @@ class Zen {
     const choisies = this.propositions.filter((p) => ips.includes(p.ip));
     const cible = (p: Proposition): Cible => (p.id === undefined ? { ip: p.ip } : { id: p.id });
     if (!choisies.length) return;
-    if (choisies.length < 2 || this.famille === "autre") return void this.connecter(cible(choisies[0]));
+    if (choisies.length < 2) return void this.connecter(cible(choisies[0]));
     this.lot = choisies.map((p) => ({ cible: cible(p), nom: p.nom, ip: p.ip, message: "", etat: "attente" as const }));
     this.lotPasse = 0; this.risquesAcceptes = false;
     await this.attendreRecherche();
@@ -424,7 +422,7 @@ class Zen {
       if (this.lotAnnule) { b.etat = "non-traitee"; continue; }
       b.etat = "en-cours"; this.boxActive = b.nom;
       try {
-        this.pas("Connexion à la box"); this.box = null;
+        this.pas("Connexion à l'appareil"); this.box = null;
         this.box = await this.connecterBox(b.cible);
         b.nonVerifiee = !this.box.verifie;
         await f(b);
@@ -439,17 +437,17 @@ class Zen {
   }
 
   private async passage1(b: BoxLot) {
-    this.pas("Lecture de la box"); await api.inventaire(this.sur); // sauvegarde de l'état d'origine
+    this.pas(`Lecture de ${this.appareilDefini}`); await api.inventaire(this.sur); // sauvegarde de l'état d'origine
     this.pas("Installation de Zen Home"); await api.installer(this.ville ? this.ville.id : null, this.jeton ? this.jeton : null, this.sur, this.risquesAcceptes);
     this.pas("Lecture des noms des applis"); b.inv = await api.inventaire(this.sur);
     b.passe1 = true;
   }
   /** Ce qui reste à faire sur une box déjà connectée, selon le mode. */
   private async traiter(b: BoxLot) {
-    if (this.mode === "reparer") { this.pas("Contrôle de la box"); b.verification = await api.verifier(true, this.sur); return; }
+    if (this.mode === "reparer") { this.pas(`Contrôle de ${this.appareilDefini}`); b.verification = await api.verifier(true, this.sur); return; }
     if (this.mode === "restaurer") { this.pas("Retour à l'état d'origine"); b.restauration = await api.restaurer(this.sur); return; }
     if (!b.passe1) await this.passage1(b); // reprise d'une box en échec au passage 1
-    this.pas("Lecture de la box"); const inv = await api.inventaire(this.sur); // inventaire propre à cette box
+    this.pas(`Lecture de ${this.appareilDefini}`); const inv = await api.inventaire(this.sur); // inventaire propre à cette box
     this.pas("Application de vos choix"); b.rapport = await api.appliquer({ ...reduire(this.choix(), inv, b.ip, this.inventaire!), risques_acceptes: this.risquesAcceptes }, this.sur);
     this.pas("Vérification et réglage final"); b.verification = await api.verifier(true, this.sur, this.risquesAcceptes);
   }
@@ -496,7 +494,7 @@ class Zen {
     const ok = (this.lot ?? []).filter((b) => b.etat === "ok");
     for (const b of ok) {
       this.boxActive = b.nom;
-      try { this.debut("Connexion à la box"); this.box = await this.connecterBox(b.cible); await api.couperDebogage(); b.debogage = "oui"; }
+      try { this.debut("Connexion à l'appareil"); this.box = await this.connecterBox(b.cible); await api.couperDebogage(); b.debogage = "oui"; }
       catch { b.debogage = "echec"; }
     }
     this.fin();

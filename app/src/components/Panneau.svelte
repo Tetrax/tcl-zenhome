@@ -9,7 +9,12 @@
   let corps: HTMLElement;
   // Vrai tant qu'il reste du contenu caché sous le bas du corps : un fondu signale qu'on peut faire défiler.
   let suite = $state(false);
-  const mesurer = () => (suite = corps.scrollHeight - corps.scrollTop - corps.clientHeight > 4);
+  // Vrai quand le corps est défilé : un fondu en haut évite que le texte paraisse chevaucher le titre.
+  let haut = $state(false);
+  const mesurer = () => {
+    suite = corps.scrollHeight - corps.scrollTop - corps.clientHeight > 4;
+    haut = corps.scrollTop > 4;
+  };
 
   onMount(() => {
     const ro = new ResizeObserver(mesurer);
@@ -32,7 +37,7 @@
       {#if marque}{@render marque()}{/if}
       {#if grand}<h1 bind:this={entete} tabindex="-1">{titre}</h1>{:else}<h2 bind:this={entete} tabindex="-1">{titre}</h2>{/if}
     </div>
-    <div class="corps" class:suite bind:this={corps} onscroll={mesurer}>{@render children()}</div>
+    <div class="corps" class:suite class:haut bind:this={corps} onscroll={mesurer}>{@render children()}</div>
     {#if pied}<div class="pied">{@render pied()}</div>{/if}
   </div>
 </section>

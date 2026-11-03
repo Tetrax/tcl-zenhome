@@ -2,18 +2,21 @@
   import Panneau from "./Panneau.svelte";
   import { zen } from "../lib/zen.svelte";
   import type { Profil } from "../lib/profils";
+  import { motConnecte } from "../lib/appareils";
+
+  const mot = $derived(motConnecte(zen.box?.appareil));
 
   const profils: { cle: Exclude<Profil, "perso">; titre: string; phrase: string; desactive: string; garde: string; conseille?: boolean }[] = [
-    { cle: "recommande", titre: "Recommandé", conseille: true, phrase: "Le choix conseillé par Zen Home, qui tient compte de l'état actuel de la box.",
+    { cle: "recommande", titre: "Recommandé", conseille: true, phrase: "Le choix conseillé par Zen Home, qui tient compte de l'état actuel de l'appareil.",
       desactive: "pistage, publicité et applis inutiles sur une box ou une TV", garde: "ce qui sert souvent : jeux, musique, films Google, lecteur USB, aide à la lecture, recherche vocale et mises à jour du constructeur" },
-    { cle: "simple", titre: "Simple", phrase: "Une box épurée : tout ce qui n'est pas indispensable est désactivé.",
+    { cle: "simple", titre: "Simple", phrase: "Un accueil épuré : tout ce qui n'est pas indispensable est désactivé.",
       desactive: "pistage, publicité et applis facultatives (jeux, musique, lecteur USB…)", garde: "recherche vocale et mises à jour du constructeur" },
     { cle: "leger", titre: "Léger", phrase: "On ne touche qu'au pistage et à la publicité.",
       desactive: "pistage et publicité", garde: "tout le reste (jeux, musique, lecteur USB, recherche vocale…)" },
   ];
 </script>
 
-<Panneau titre="Comment voulez-vous votre box ?" large>
+<Panneau titre={`Comment voulez-vous votre ${mot} ?`} large>
   <p class="lead">Choisissez un profil : vous verrez le détail avant que quoi que ce soit change. Les applis sont <b>désactivées, pas supprimées</b> : « Revenir à avant Zen Home » les remet.</p>
   <div class="profils">
     {#each profils as p (p.cle)}
