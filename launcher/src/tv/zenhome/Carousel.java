@@ -68,10 +68,11 @@ class Carousel {
     // Carrousel d'applis : par defaut les applis lancables absentes du dock, sinon la liste choisie
     List<String> compute() {
         List<String> out = new ArrayList<>();
+        final List<String> hidden = config.hidden();
         if (prefs.getBoolean("carousel_user_set", false)) {
             for (String p : prefs.getString("carousel", "").split("[,;\\s]+")) {
                 p = p.trim();
-                if (p.length() > 0 && !out.contains(p) && apps.usable(p)) out.add(p);
+                if (p.length() > 0 && !out.contains(p) && !hidden.contains(p) && apps.usable(p)) out.add(p);
             }
             return out;
         }
@@ -90,7 +91,7 @@ class Carousel {
                 ApplicationInfo ai = ri.activityInfo.applicationInfo;
                 boolean bareSystem = (ai.flags & ApplicationInfo.FLAG_SYSTEM) != 0 && (ai.flags & ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) == 0
                         && ri.activityInfo.banner == 0 && ai.banner == 0;   // appli systeme sans banniere leanback
-                if (!names.containsKey(p) && !p.equals(ctx.getPackageName()) && !config.dockPkgs.contains(p) && !skip.contains(p) && !bareSystem
+                if (!names.containsKey(p) && !p.equals(ctx.getPackageName()) && !config.dockPkgs.contains(p) && !hidden.contains(p) && !skip.contains(p) && !bareSystem
                         && !p.startsWith("com.tcl.") && !p.startsWith("com.mediatek."))   // applis TCL / MediaTek (hors personnalisation)
                     names.put(p, ri.loadLabel(pm).toString());
             }

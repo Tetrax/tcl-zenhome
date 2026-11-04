@@ -84,6 +84,12 @@ class Editor {
     void onAppLongPress(final String pkg, final View ov) {
         MenuPanel.Page p = new MenuPanel.Page(apps.appLabel(pkg), "");
         p.add(MenuRules.action(ui.t("Ouvrir", "Open"), "arrow-square-out"), new Runnable() { public void run() { ovs.closeOverlay(ov, false); apps.launch(pkg); } });
+        if (config.isHidden(pkg)) {   // grille « Applis masquees »
+            p.add(MenuRules.action(ui.t("Ne plus masquer", "Unhide"), "arrow-counter-clockwise"), new Runnable() { public void run() {
+                ovs.closeOverlay(ov, false); config.setHidden(pkg, false); host.carouselRefresh(); } });
+            menu(p);
+            return;
+        }
         if (RecentRules.canClose(pkg)) p.add(MenuRules.action(ui.t("Fermer l'appli", "Close app"), "x-circle"), closeAction(pkg));
         if (!config.dockPkgs.contains(pkg) && config.dockPkgs.size() < config.layout) {
             p.add(MenuRules.action(ui.t("Ajouter au dock", "Add to dock"), "plus"), new Runnable() { public void run() {
@@ -92,7 +98,16 @@ class Editor {
             p.add(MenuRules.action(ui.t("Dock plein : remplacer une appli…", "Dock full: replace an app…"), "swap"), new Runnable() { public void run() {
                 ovs.closeOverlay(ov, false); chooseSlotFor(pkg); } });
         }
+        p.add(MenuRules.action(ui.t("Masquer l'appli", "Hide app"), "moon"), new Runnable() { public void run() { ovs.closeOverlay(ov, false); hideApp(pkg); } });
         menu(p);
+    }
+
+    /** Masque l'appli : la retire du dock si elle y est, puis recalcule le carrousel. */
+    void hideApp(String pkg) {
+        config.setHidden(pkg, true);
+        int i = config.dockPkgs.indexOf(pkg);
+        if (i >= 0) { config.dockPkgs.remove(i); config.save(); dock.rebuild(Math.max(0, i - 1)); }
+        host.carouselRefresh();
     }
 
     Runnable closeAction(final String pkg) { return new Runnable() { public void run() { recents.closeApp(pkg); } }; }
@@ -119,6 +134,7 @@ class Editor {
             p.add(MenuRules.action(ui.t("Retirer du dock", "Remove from dock"), "trash"), new Runnable() { public void run() {
                 config.dockPkgs.remove(index); config.save(); dock.rebuild(Math.max(0, index - 1)); } });
             if (RecentRules.canClose(config.dockPkgs.get(index))) p.add(MenuRules.action(ui.t("Fermer l'appli", "Close app"), "x-circle"), closeAction(config.dockPkgs.get(index)));
+            p.add(MenuRules.action(ui.t("Masquer l'appli", "Hide app"), "moon"), new Runnable() { public void run() { hideApp(config.dockPkgs.get(index)); } });
             p.sep();
         }
         if (config.dockPkgs.size() < config.layout) p.add(MenuRules.action(ui.t("Ajouter une appli", "Add an app"), "plus"), new Runnable() { public void run() { pickAppToAdd(); } });
@@ -146,7 +162,7 @@ class Editor {
                 config.layout = n;
                 while (config.dockPkgs.size() > config.layout) config.dockPkgs.remove(config.dockPkgs.size() - 1);
                 if (config.dockPkgs.size() < config.layout && !config.prefs.getBoolean("dock_user_set", false)) {
-                    for (String p : HomeConfig.KNOWN_DOCK) { if (config.dockPkgs.size() >= config.layout) break; if (apps.usable(p) && !config.dockPkgs.contains(p)) config.dockPkgs.add(p); }
+                    for (String p : HomeConfig.KNOWN_DOCK) { if (config.dockPkgs.size() >= config.layout) break; if (apps.usable(p) && !config.dockPkgs.contains(p) && !config.isHidden(p)) config.dockPkgs.add(p); }
                 }
                 config.save(); dock.rebuild(0); } });
         }
@@ -268,6 +284,7 @@ class Editor {
             p.add(MenuRules.action(ui.t("Retirer du carrousel", "Remove from carousel"), "trash"), new Runnable() { public void run() {
                 carousel.pkgs.remove(index); carousel.save(); carousel.rebuild(Math.max(0, index - 1)); } });
             if (RecentRules.canClose(carousel.pkgs.get(index))) p.add(MenuRules.action(ui.t("Fermer l'appli", "Close app"), "x-circle"), closeAction(carousel.pkgs.get(index)));
+            p.add(MenuRules.action(ui.t("Masquer l'appli", "Hide app"), "moon"), new Runnable() { public void run() { hideApp(carousel.pkgs.get(index)); } });
             p.sep();
         }
         p.add(MenuRules.action(ui.t("Ajouter une appli", "Add an app"), "plus"), new Runnable() { public void run() { pickCarouselApp(); } });

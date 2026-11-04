@@ -84,12 +84,22 @@ class HomeConfig {
         dockPkgs.clear();
         String csv = prefs.getString("dock", "");
         if (csv.length() > 0) {
-            for (String p : ConfigRules.csv(csv)) { if (apps.usable(p) && !dockPkgs.contains(p)) dockPkgs.add(p); }
+            for (String p : ConfigRules.csv(csv)) { if (apps.usable(p) && !dockPkgs.contains(p) && !isHidden(p)) dockPkgs.add(p); }
         }
         if (dockPkgs.isEmpty() && !prefs.getBoolean("dock_user_set", false)) {
-            for (String p : KNOWN_DOCK) { if (dockPkgs.size() >= layout) break; if (apps.usable(p)) dockPkgs.add(p); }
+            for (String p : KNOWN_DOCK) { if (dockPkgs.size() >= layout) break; if (apps.usable(p) && !isHidden(p)) dockPkgs.add(p); }
         }
         while (dockPkgs.size() > layout) dockPkgs.remove(dockPkgs.size() - 1);
+    }
+
+    /** Applis masquees (pref « hidden »). */
+    List<String> hidden() { return HiddenRules.parse(prefs.getString("hidden", "")); }
+
+    boolean isHidden(String pkg) { return HiddenRules.contains(hidden(), pkg); }
+
+    void setHidden(String pkg, boolean hide) {
+        List<String> h = hidden();
+        prefs.edit().putString("hidden", HiddenRules.serialize(hide ? HiddenRules.add(h, pkg) : HiddenRules.remove(h, pkg))).apply();
     }
 
     void save() {

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="tv.zenhome" android:versionCode="9" android:versionName="2.6-zh1">
+    package="tv.zenhome" android:versionCode="10" android:versionName="2.6-zh2">
     <uses-sdk android:minSdkVersion="21" android:targetSdkVersion="34" />
     <!-- Photos perso (/sdcard/ZenHome) : pas de dialogue dans le launcher, la permission est accordee par adb.
          Android 13+ (API 33+) :  adb shell pm grant tv.zenhome android.permission.READ_MEDIA_IMAGES

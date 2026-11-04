@@ -23,7 +23,7 @@ public class Tests {
     }
 
     public static void main(String[] args) {
-        net(); fmt(); wmo(); greeting(); dock(); movieRules(); configRules(); nav(); trailer(); myList(); hardening(); inputs(); sleep(); weatherRules(); keyRules(); settingsKey(); gauge(); standby(); iconRules(); themeRules(); menuRules(); recent(); nightLabels(); attribution(); banner();
+        net(); fmt(); wmo(); greeting(); dock(); movieRules(); configRules(); nav(); trailer(); myList(); hardening(); inputs(); sleep(); weatherRules(); keyRules(); settingsKey(); gauge(); standby(); iconRules(); themeRules(); menuRules(); recent(); hidden(); nightLabels(); attribution(); banner();
         System.out.println(count + " assertions, " + failed + " echec(s)");
         if (failed > 0) System.exit(1);
     }
@@ -1073,6 +1073,29 @@ public class Tests {
         java.util.Map<String, Long> m = new java.util.HashMap<>();
         for (int i = 0; i < kv.length; i += 2) m.put((String) kv[i], (Long) kv[i + 1]);
         return m;
+    }
+
+    static void hidden() {
+        eq("hidden: null", "[]", HiddenRules.parse(null).toString());
+        eq("hidden: vide", "[]", HiddenRules.parse("").toString());
+        eq("hidden: blancs et separateurs seuls", "[]", HiddenRules.parse(" , ;; \n").toString());
+        eq("hidden: espaces, points-virgules, vides", "[a.b, c.d, e.f]", HiddenRules.parse(" a.b ,c.d;;e.f, ").toString());
+        eq("hidden: doublons", "[a.b, c.d]", HiddenRules.parse("a.b,c.d,a.b").toString());
+        List<String> h = HiddenRules.parse("a.b,c.d");
+        ok("hidden: contains oui", HiddenRules.contains(h, "a.b"));
+        ok("hidden: contains non", !HiddenRules.contains(h, "x.y"));
+        eq("hidden: add", "[a.b, c.d, x.y]", HiddenRules.add(h, "x.y").toString());
+        eq("hidden: add doublon", "[a.b, c.d]", HiddenRules.add(h, "a.b").toString());
+        eq("hidden: add vide/null", "[a.b, c.d]", HiddenRules.add(HiddenRules.add(h, ""), null).toString());
+        eq("hidden: add ne modifie pas l'entree", "[a.b, c.d]", h.toString());
+        eq("hidden: remove", "[c.d]", HiddenRules.remove(h, "a.b").toString());
+        eq("hidden: remove absent", "[a.b, c.d]", HiddenRules.remove(h, "x.y").toString());
+        List<String> pk = new ArrayList<>(); pk.add("a.b"); pk.add("z.z"); pk.add("c.d"); pk.add("y.y");
+        eq("hidden: filtre", "[z.z, y.y]", HiddenRules.filter(pk, h).toString());
+        eq("hidden: filtre sans masque", pk.toString(), HiddenRules.filter(pk, HiddenRules.parse(null)).toString());
+        eq("hidden: serialize", "a.b,c.d", HiddenRules.serialize(h));
+        eq("hidden: serialize vide", "", HiddenRules.serialize(HiddenRules.parse(null)));
+        eq("hidden: aller-retour", h.toString(), HiddenRules.parse(HiddenRules.serialize(h)).toString());
     }
 
     static void recent() {
