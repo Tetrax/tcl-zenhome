@@ -54,8 +54,17 @@
   .etapes li::before { content: counter(e); position: absolute; left: 0; top: 0; width: 30px; height: 30px; border-radius: 50%;
     display: grid; place-items: center; background: var(--accent); color: #14202c; font-size: 14px; font-weight: 500; }
   .note { margin-top: 18px; padding: 14px 18px; border-radius: 16px; background: rgba(255, 207, 142, .12); border: 1px solid rgba(255, 207, 142, .35); font-size: 15px; color: var(--texte-doux); }
+  .intro-galerie { margin: -6px 0 18px; color: var(--texte-doux); font-size: 15px; }
+  figure { margin: 0; }
+  figure img { display: block; width: 100%; height: auto; border-radius: 16px; border: 1px solid rgba(255, 255, 255, .14); box-shadow: 0 16px 40px -18px rgba(0, 0, 0, .7); }
+  figure a { display: block; border-radius: 16px; }
+  figure a:focus-visible { outline: 3px solid var(--accent); outline-offset: 4px; }
+  figcaption { margin-top: 10px; font-size: 15px; color: var(--texte-doux); }
+  figcaption b { color: var(--texte); font-weight: 500; }
+  .vedette { margin-bottom: 22px; }
+  .galerie { display: grid; grid-template-columns: repeat(2, 1fr); gap: 22px 18px; }
   footer { position: relative; z-index: 1; text-align: center; font-size: 13px; color: var(--texte-doux); padding: 0 16px 28px; }
-  @media (max-width: 720px) { .grille { grid-template-columns: 1fr; } main { padding-top: 28px; } .entete img { width: 56px; height: 56px; } }
+  @media (max-width: 720px) { .grille, .galerie { grid-template-columns: 1fr; } main { padding-top: 28px; } .entete img { width: 56px; height: 56px; } }
   @media (prefers-reduced-motion: reduce) { .bouton { transition: none; } .bouton:hover { transform: none; } }
 </style>
 </head>
@@ -87,6 +96,49 @@
         <div class="atout"><h3>Un nouvel accueil</h3><p>Zen Home remplace l'écran d'accueil chargé de publicités par un accueil simple et rapide.</p></div>
         <div class="atout"><h3>Une box allégée</h3><p>Les programmes de publicité et de pistage sont désactivés. C'est vous qui choisissez, après un récapitulatif.</p></div>
         <div class="atout"><h3>Réversible</h3><p>« Revenir à avant Zen Home » remet la box exactement comme elle était. Plusieurs box ? Elles se configurent d'affilée.</p></div>
+      </div>
+    </section>
+
+    <section>
+      <h2>En images</h2>
+      <p class="intro-galerie">Captures prises sur une TV TCL Google TV équipée de Zen Home. Tout se pilote avec la télécommande.</p>
+      <figure class="vedette">
+        <a href="captures/accueil.jpg"><img src="captures/accueil.jpg" alt="Accueil Zen Home : grande photo de montagne, salutation, heure, météo et dock d'applis" width="1600" height="900" loading="lazy"></a>
+        <figcaption><b>L'accueil.</b> Une grande photo qui change au fil de la journée, l'heure, la météo de votre ville et vos applis préférées. Aucune publicité, aucune suggestion.</figcaption>
+      </figure>
+      <div class="galerie">
+        <figure>
+          <a href="captures/films.jpg"><img src="captures/films.jpg" alt="Rangée des films Netflix avec le résumé du film sélectionné" width="1600" height="900" loading="lazy"></a>
+          <figcaption><b>Les films du moment.</b> Une flèche vers le haut : les nouveautés Netflix, avec l'image et le résumé du film sélectionné.</figcaption>
+        </figure>
+        <figure>
+          <a href="captures/au-cinema.jpg"><img src="captures/au-cinema.jpg" alt="Onglet Au cinéma avec les affiches des films en salle" width="1600" height="900" loading="lazy"></a>
+          <figcaption><b>Au cinéma, bientôt, ma liste.</b> Quatre onglets pour savoir ce qui sort, en salle comme en streaming.</figcaption>
+        </figure>
+        <figure>
+          <a href="captures/fiche-film.jpg"><img src="captures/fiche-film.jpg" alt="Fiche d'un film avec les boutons Ouvrir Netflix, Ajouter à ma liste et Bande-annonce" width="1600" height="900" loading="lazy"></a>
+          <figcaption><b>La fiche d'un film.</b> Le résumé, la note, la bande-annonce, et un bouton pour l'ouvrir directement.</figcaption>
+        </figure>
+        <figure>
+          <a href="captures/entrees.jpg"><img src="captures/entrees.jpg" alt="Cartes des entrées de la TV : HDMI, TV, Xiaomi, AV, avec leur état" width="1600" height="900" loading="lazy"></a>
+          <figcaption><b>Les entrées de la TV.</b> Chaque prise HDMI a sa carte, avec son nom et son état : branchée, en veille ou débranchée.</figcaption>
+        </figure>
+        <figure>
+          <a href="captures/reglages.jpg"><img src="captures/reglages.jpg" alt="Menu Réglages avec Image, Son et Tous les paramètres" width="1600" height="900" loading="lazy"></a>
+          <figcaption><b>Les réglages à portée de main.</b> Sur les TV TCL, l'image et le son se règlent sans quitter l'accueil.</figcaption>
+        </figure>
+        <figure>
+          <a href="captures/minuteur.jpg"><img src="captures/minuteur.jpg" alt="Menu Mise en veille avec des durées de 15 à 240 minutes" width="1600" height="900" loading="lazy"></a>
+          <figcaption><b>Un minuteur de mise en veille.</b> Pour s'endormir devant un film : la TV s'éteint toute seule, avec un avertissement une minute avant.</figcaption>
+        </figure>
+        <figure>
+          <a href="captures/themes.jpg"><img src="captures/themes.jpg" alt="Menu Thème : Verre, Nuit, Sable, Forêt, Auto" width="1600" height="900" loading="lazy"></a>
+          <figcaption><b>Cinq thèmes.</b> Verre, Nuit, Sable, Forêt, ou Auto, qui prend la teinte de la photo.</figcaption>
+        </figure>
+        <figure>
+          <a href="captures/ambiance.jpg"><img src="captures/ambiance.jpg" alt="Mode ambiance : photo de forêt et de montagnes en plein écran avec l'heure et la météo" width="1600" height="900" loading="lazy"></a>
+          <figcaption><b>Le mode ambiance.</b> Après trois minutes sans toucher la télécommande, l'écran devient un tableau : photo, heure et météo.</figcaption>
+        </figure>
       </div>
     </section>
 

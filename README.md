@@ -1,13 +1,28 @@
 # tcl-zenhome
 
-**Une TV TCL Google TV plus légère, plus calme et sans pub, pilotée depuis votre Mac, sans root.**
+**Une TV ou une box Android TV / Google TV plus légère, plus calme et sans pub, configurée depuis votre Mac, sans root.**
+
+**[Télécharger l'appli Mac](https://github.com/Tetrax/tcl-zenhome/releases/latest/download/Zen-Home-Mac.dmg)** · [Présentation](https://tetrax.github.io/tcl-zenhome/) · [Mode d'emploi](https://tetrax.github.io/tcl-zenhome/mode-d-emploi.html)
 
 Ce projet fait deux choses :
 
-1. **Il allège la TV** : il désactive les applis TCL/Google inutiles (pub, promos, télémétrie, services qui tournent en fond).
+1. **Il allège la TV** : il désactive les applis inutiles du fabricant et de Google (pub, promos, télémétrie, services qui tournent en fond). Tout est réversible.
 2. **Il remplace l'écran d'accueil** par **Zen Home**, un accueil minimaliste : grande photo, heure, météo, films du moment et vos applis.
 
-![Accueil Zen Home](docs/captures/accueil.jpg)
+Vérifié sur Xiaomi Mi Box 4 et TV TCL Google TV, et compatible avec la plupart des autres appareils Android TV et Google TV (Android 9 ou plus récent).
+
+![Accueil Zen Home : grande photo, heure, météo et dock d'applis](docs/captures/accueil.jpg)
+
+## En images
+
+Captures prises sur une TV TCL Google TV équipée de Zen Home.
+
+| | |
+|---|---|
+| ![Films Netflix](docs/captures/films.jpg) **Les films du moment.** Une flèche vers le haut : les nouveautés Netflix, avec l'image et le résumé du film sélectionné. | ![Au cinéma](docs/captures/au-cinema.jpg) **Au cinéma, bientôt, ma liste.** Quatre onglets pour savoir ce qui sort, en salle comme en streaming. |
+| ![Fiche d'un film](docs/captures/fiche-film.jpg) **La fiche d'un film.** Le résumé, la note, la bande-annonce, et un bouton pour l'ouvrir directement. | ![Entrées de la TV](docs/captures/entrees.jpg) **Les entrées de la TV.** Chaque prise HDMI a sa carte, avec son nom et son état. |
+| ![Réglages](docs/captures/reglages.jpg) **Les réglages à portée de main.** Sur les TV TCL, l'image et le son se règlent sans quitter l'accueil. | ![Minuteur de veille](docs/captures/minuteur.jpg) **Un minuteur de mise en veille.** La TV s'éteint toute seule, avec un avertissement une minute avant. |
+| ![Thèmes](docs/captures/themes.jpg) **Cinq thèmes.** Verre, Nuit, Sable, Forêt, ou Auto, qui prend la teinte de la photo. | ![Mode ambiance](docs/captures/ambiance.jpg) **Le mode ambiance.** Après trois minutes sans toucher la télécommande : photo, heure et météo en plein écran. |
 
 ## Ce que ça fait
 
@@ -25,9 +40,9 @@ Ce projet fait deux choses :
 - **Photos perso** : vos images à la place de celles fournies.
 - **Léger** : environ 35 à 40 Mo de mémoire, contre environ 340 Mo pour l'accueil Google TV.
 
-| Films | Entrées | Veille | Thème Nuit |
-|---|---|---|---|
-| ![Films](docs/captures/films.jpg) | ![Entrées](docs/captures/entrees.jpg) | ![Écran de veille](docs/captures/veille.jpg) | ![Thème Nuit](docs/captures/theme-nuit.jpg) |
+| Économiseur d'écran | Thème Nuit |
+|---|---|
+| ![Écran de veille](docs/captures/veille.jpg) | ![Thème Nuit](docs/captures/theme-nuit.jpg) |
 
 *Photos de fond : Wikimedia Commons, voir [launcher/CREDITS.md](launcher/CREDITS.md). Affiches et images de films : TMDB.*
 
