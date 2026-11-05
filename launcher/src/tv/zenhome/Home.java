@@ -101,7 +101,7 @@ public class Home extends Activity implements Host {
         content = new FrameLayout(this);
         content.setClipChildren(false);
         ovs = new Overlays(this, ui, root, content, this);
-        grid = new AppsGrid(this, ui, apps, ovs, this);
+        grid = new AppsGrid(this, ui, apps, ovs, config, this);
         inputs = new Inputs(this, ui, apps, ovs, this);
         settingsMenu = new SettingsMenu(this, ui, ovs);
         recents = new Recents(this, ui, apps, ovs, config, carousel);
