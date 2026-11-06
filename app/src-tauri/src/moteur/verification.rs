@@ -177,7 +177,12 @@ fn controler(s: &mut Session, app: &Appareil, liste: &[Entree]) -> Result<Contro
     let a11y = s.lire(&Commande::settings_get(Espace::Secure, "enabled_accessibility_services")?)?;
     let a11y = format!(":{}:", a11y.trim());
     let a11y = if a11y.contains(&format!(":{KEYSVC_FULL}:")) || a11y.contains(&format!(":{KEYSVC_SHORT}:")) {
-        tab.ajouter("Accessibilité : KeyService", Statut::Ok, "")
+        // Listé mais accessibilité coupée (vu sur une TCL après une installation de l'APK hors appli) : KeyService n'est pas lié.
+        if s.lire(&Commande::settings_get(Espace::Secure, "accessibility_enabled")?)?.trim() == "1" {
+            tab.ajouter("Accessibilité : KeyService", Statut::Ok, "")
+        } else {
+            tab.ajouter("Accessibilité : KeyService", Statut::Ko, "accessibilité désactivée")
+        }
     } else {
         tab.ajouter("Accessibilité : KeyService", Statut::Ko, "absent de enabled_accessibility_services")
     };
@@ -600,6 +605,18 @@ mod tests {
         assert_eq!(l.detail, format!("version 1.0, mise à jour disponible ({APK_VERSION_NAME})"));
         assert_eq!(r.avant.version_code, Some(APK_VERSION_CODE - 1));
         assert!(r.apres.is_none() && !r.ok);
+    }
+
+    #[test]
+    fn keyservice_liste_mais_accessibilite_coupee_ko_puis_repare() {
+        let f = equipee_avec_version(Some(APK_VERSION_CODE));
+        f.modifier(|e| {
+            e.secure.insert("accessibility_enabled".into(), "0".into());
+        });
+        let r = lancer(&f, true);
+        assert_eq!(ligne(&r.avant, "Accessibilité : KeyService").statut, Statut::Ko);
+        assert!(r.ok, "{}", r.final_().tableau());
+        assert_eq!(ligne(r.final_(), "Accessibilité : KeyService").statut, Statut::Ok);
     }
 
     #[test]
