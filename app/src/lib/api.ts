@@ -9,6 +9,8 @@ export interface Api {
   installerAdb(accord: boolean, sur: SurEvenement): Promise<void>;
   chercherBox(): Promise<BoxTrouvee[]>;
   connecter(cible: Cible, sur: SurEvenement): Promise<BoxConnectee>;
+  /** Association par code (débogage sans fil) puis connexion ; `ip` : adresse de la TV, si connue (sans le port). */
+  appairer(code: string, ip: string | null, sur: SurEvenement): Promise<BoxConnectee>;
   chercherVilles(saisie: string): Promise<Ville[]>;
   inventaire(sur: SurEvenement): Promise<Inventaire>;
   installer(villeId: number | null, jeton: string | null, sur: SurEvenement, risquesAcceptes?: boolean): Promise<void>;
@@ -47,6 +49,7 @@ async function tauri(): Promise<Api> {
     installerAdb: (accord, sur) => invoke("installer_adb", { accord, canal: canal(sur) }),
     chercherBox: () => invoke("chercher_box"),
     connecter: (cible, sur) => invoke("connecter", { cible, canal: canal(sur) }),
+    appairer: (code, ip, sur) => invoke("appairer", { code, ip, canal: canal(sur) }),
     chercherVilles: (saisie) => invoke("chercher_villes", { saisie }),
     inventaire: (sur) => invoke("inventaire", { canal: canal(sur) }),
     installer: (villeId, jeton, sur, risquesAcceptes = false) => invoke("installer", { villeId, jeton, risquesAcceptes, canal: canal(sur) }),
@@ -81,6 +84,7 @@ export const api: Api = {
   installerAdb: (a, s) => appeler("installerAdb", a, s),
   chercherBox: () => appeler("chercherBox"),
   connecter: (c, s) => appeler("connecter", c, s),
+  appairer: (c, i, s) => appeler("appairer", c, i, s),
   chercherVilles: (q) => appeler("chercherVilles", q),
   inventaire: (s) => appeler("inventaire", s),
   installer: (v, j, s, r) => appeler("installer", v, j, s, r),

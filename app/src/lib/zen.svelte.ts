@@ -11,7 +11,7 @@ import type {
 
 export type Mode = "installer" | "reparer" | "restaurer";
 export type Ecran =
-  | "accueil" | "adb" | "appareil" | "recherche" | "rapport_appareil" | "connexion" | "etat" | "resume" | "meteo" | "films"
+  | "accueil" | "adb" | "appareil" | "recherche" | "appairage" | "rapport_appareil" | "connexion" | "etat" | "resume" | "meteo" | "films"
   | "installation" | "profil" | "systeme" | "utilisateur" | "recap" | "application" | "reparation"
   | "confirm_restauration" | "restauration" | "fin_restauration" | "resultat" | "adieu" | "lot" | "recap_lot";
 
@@ -30,11 +30,11 @@ export interface BoxLot {
 }
 
 /** Une box proposée dans la recherche : trouvée (avec `id`) ou seulement mémorisée (connexion par son adresse). */
-export interface Proposition { id?: number; nom: string; ip: string; recente: boolean; libelle?: string; appareil?: string | null }
+export interface Proposition { id?: number; nom: string; ip: string; recente: boolean; libelle?: string; appareil?: string | null; sans_fil?: boolean }
 
 /** Moment de la journée affiché derrière chaque écran. */
 export const MOMENT: Record<Ecran, Moment> = {
-  accueil: "aube", adb: "matin", appareil: "matin", recherche: "matin", rapport_appareil: "jour", connexion: "jour", etat: "jour", resume: "jour",
+  accueil: "aube", adb: "matin", appareil: "matin", recherche: "matin", appairage: "matin", rapport_appareil: "jour", connexion: "jour", etat: "jour", resume: "jour",
   meteo: "doree", films: "doree", installation: "doree", profil: "doree", systeme: "doree", utilisateur: "doree", recap: "doree",
   application: "doree", reparation: "doree", confirm_restauration: "doree", restauration: "doree",
   fin_restauration: "aube", resultat: "nuit", adieu: "nuit", lot: "doree", recap_lot: "nuit",
@@ -44,7 +44,7 @@ export const ECRANS_TRAVAIL: Ecran[] = ["application", "reparation", "restaurati
 
 export const ETAPES = ["Accueil", "Appareil", "Préparation", "Vos choix", "Installation", "Terminé"] as const;
 export const ETAPE_DE: Record<Ecran, number> = {
-  accueil: 0, adb: 0, appareil: 1, recherche: 1, rapport_appareil: 1, connexion: 1, etat: 2, resume: 2, meteo: 2, films: 2, installation: 2,
+  accueil: 0, adb: 0, appareil: 1, recherche: 1, appairage: 1, rapport_appareil: 1, connexion: 1, etat: 2, resume: 2, meteo: 2, films: 2, installation: 2,
   profil: 3, systeme: 3, utilisateur: 3, recap: 3, application: 4, reparation: 4, confirm_restauration: 4, restauration: 4,
   fin_restauration: 5, resultat: 5, adieu: 5, lot: 4, recap_lot: 5,
 };
@@ -241,14 +241,39 @@ class Zen {
       this.box = await this.connecterBox(cible);
       this.fin();
       this.succes++;
-      if (this.mode === "installer") await this.lireEtat();
-      else if (this.mode === "reparer") await this.reparer();
-      else {
-        // Une sauvegarde d'origine a pu être écrite depuis le démarrage : l'écran de confirmation cite la bonne.
-        try { this.init = await api.etatInitial(); } catch { /* on garde l'état connu */ }
-        this.aller("confirm_restauration");
-      }
+      await this.suiteConnexion();
     } catch (e) { this.echec(e, () => void this.connecter(cible)); }
+  }
+
+  /** Une box est connectée : suite du parcours selon le mode choisi à l'accueil. */
+  private async suiteConnexion() {
+    if (this.mode === "installer") await this.lireEtat();
+    else if (this.mode === "reparer") await this.reparer();
+    else {
+      // Une sauvegarde d'origine a pu être écrite depuis le démarrage : l'écran de confirmation cite la bonne.
+      try { this.init = await api.etatInitial(); } catch { /* on garde l'état connu */ }
+      this.aller("confirm_restauration");
+    }
+  }
+
+  /** Association par code d'une TV en débogage sans fil, puis suite du parcours comme `connecter`. Rend le message d'une
+   * erreur d'association, affichée sur l'écran d'association (qui reste ouvert pour une nouvelle tentative). */
+  async appairer(code: string, ip: string): Promise<ErreurZen | null> {
+    this.lot = null; this.cible = null; this.box = null; this.risquesAcceptes = false;
+    this.debut("Association avec la TV");
+    try {
+      await this.attendreRecherche();
+      if (!this.travail.actif) return null; // retour à l'accueil pendant l'attente
+      this.box = await api.appairer(code, ip || null, this.sur);
+      this.cible = { ip: this.box.ip };
+    } catch (e) {
+      this.fin();
+      return normaliserErreur(e);
+    }
+    this.fin();
+    this.succes++;
+    await this.suiteConnexion(); // gère ses propres erreurs (lireEtat, reparer)
+    return null;
   }
 
   /** Rapport d'appareil (lectures seulement, sans contrôle du modèle) : pour « Autre appareil » ou après `autre_modele`. */

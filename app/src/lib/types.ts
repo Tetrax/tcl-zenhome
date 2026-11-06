@@ -7,7 +7,8 @@ export interface EtatInitial { version: string; adb_installe: boolean; demo: boo
   boxes_memorisees: BoxMemorisee[];
   /** Vrai si l'appli embarque un jeton TMDB : les films marchent sans jeton personnel. */
   films_inclus: boolean }
-export interface BoxMemorisee { nom: string; ip: string }
+/** `sans_fil` : connectée par le débogage sans fil (l'association est gardée, mais l'option doit être réactivée sur la TV). */
+export interface BoxMemorisee { nom: string; ip: string; sans_fil?: boolean }
 /** `appareil` : appareil supposé d'après l'annonce réseau (simple indice, la connexion vérifie), null si inconnu ; `libelle` : son nom court. */
 export interface BoxTrouvee { id: number; nom: string; ip: string; appareil?: string | null; libelle?: string }
 export type Cible = { id: number } | { ip: string };
@@ -42,7 +43,8 @@ export interface RapportRestauration { incomplete: boolean; avertissements: stri
 
 export type CodeErreur =
   | "occupe" | "annule" | "adb_absent" | "refus_licence" | "injoignable" | "non_autorise"
-  | "autre_modele" | "risques_non_acceptes" | "autre_box" | "lecture" | "choix_invalide" | "reseau" | "interne";
+  | "autre_modele" | "risques_non_acceptes" | "autre_box" | "lecture" | "choix_invalide" | "reseau" | "interne"
+  | "code_invalide" | "code_refuse" | "fenetre_introuvable" | "plusieurs_fenetres" | "appairage";
 export interface ErreurZen { code: CodeErreur; message: string }
 
 export type Evenement =

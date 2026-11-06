@@ -180,6 +180,15 @@ export const simulation: Api = {
     return { nom: box.nom, ip, modele: box.modele, appareil: box.appareil, verifie: box.appareil !== "generique" };
   }),
 
+  // Simulation : le code 000000 est refusé, tout autre code associe le Chromecast (appareil générique).
+  appairer: (code: string, _ip: string | null, sur) => exclusive(async (): Promise<BoxConnectee> => {
+    await progresser(sur, "Association avec la TV", 1500, 0, 0.5);
+    if (code === "000000") throw erreur("code_refuse", "La TV n'a pas accepté ce code : vérifiez les 6 chiffres affichés sur la TV. La fenêtre « Code d'association via le Wi-Fi » doit rester ouverte, sinon le code change.");
+    await progresser(sur, "Lecture du modèle de la box", 700, 0.5, 1);
+    box = BOXES[3];
+    return { nom: box.nom, ip: box.ip, modele: box.modele, appareil: box.appareil, verifie: false };
+  }),
+
   async chercherVilles(saisie): Promise<Ville[]> {
     await delaiReseau();
     const norme = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();

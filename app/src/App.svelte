@@ -9,6 +9,7 @@
   import Appareil from "./components/Appareil.svelte";
   import RapportAppareil from "./components/RapportAppareil.svelte";
   import Recherche from "./components/Recherche.svelte";
+  import Appairage from "./components/Appairage.svelte";
   import Connexion from "./components/Connexion.svelte";
   import EtatDesLieux from "./components/EtatDesLieux.svelte";
   import Installation from "./components/Installation.svelte";
@@ -91,6 +92,7 @@
       {:else if zen.ecran === "appareil"}<Appareil />
       {:else if zen.ecran === "rapport_appareil"}<RapportAppareil />
       {:else if zen.ecran === "recherche"}<Recherche />
+      {:else if zen.ecran === "appairage"}<Appairage />
       {:else if zen.ecran === "connexion"}<Connexion />
       {:else if zen.ecran === "etat"}<EtatDesLieux />
       {:else if zen.ecran === "installation"}<Installation />
