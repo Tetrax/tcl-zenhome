@@ -6,10 +6,12 @@
 
 use std::fmt;
 use std::io::{Read, Write};
-use std::net::Ipv4Addr;
+use std::net::{Ipv4Addr, SocketAddrV4};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
+
+use super::appairage::{Appairage, ErreurAppairage, classer_erreur_appairage};
 
 pub const PORT_SERVEUR_ADB: &str = "5038";
 pub const PORT_BOX: u16 = 5555;
@@ -18,6 +20,7 @@ pub const SORTIE_MAX: usize = 16 * 1024 * 1024;
 const DELAI_COMMANDE: Duration = Duration::from_secs(30);
 const DELAI_CONNEXION: Duration = Duration::from_secs(10);
 const DELAI_INSTALLATION: Duration = Duration::from_secs(180);
+const DELAI_APPAIRAGE: Duration = Duration::from_secs(20);
 
 // ---------------------------------------------------------------- validations et quotage
 
@@ -580,7 +583,12 @@ fn texte(octets: &[u8]) -> String {
 
 impl AdbProcess {
     pub fn nouveau(adb: impl Into<PathBuf>, ip: Ipv4Addr) -> Self {
-        Self { adb: adb.into(), serie: format!("{ip}:{PORT_BOX}"), delai: DELAI_COMMANDE }
+        Self::sur_port(adb, ip, PORT_BOX)
+    }
+
+    /// Box sur un autre port que 5555 (débogage sans fil : le port TLS change à chaque activation).
+    pub fn sur_port(adb: impl Into<PathBuf>, ip: Ipv4Addr, port: u16) -> Self {
+        Self { adb: adb.into(), serie: format!("{ip}:{port}"), delai: DELAI_COMMANDE }
     }
 
     pub fn avec_delai(mut self, delai: Duration) -> Self {
@@ -702,6 +710,35 @@ impl Transport for AdbProcess {
 
     fn arreter_serveur(&self) {
         let _ = self.lancer(&["kill-server"], None, DELAI_CONNEXION);
+    }
+}
+
+/// Commandes adb qui visent le serveur et non une box (`mdns services`, `pair`) : même serveur dédié, aucune série.
+pub struct AdbServeur(AdbProcess);
+
+impl AdbServeur {
+    pub fn nouveau(adb: impl Into<PathBuf>) -> Self {
+        Self(AdbProcess::nouveau(adb, Ipv4Addr::LOCALHOST))
+    }
+}
+
+impl Appairage for AdbServeur {
+    fn services_mdns(&self) -> Result<String, ErreurTransport> {
+        let b = self.0.lancer(&["mdns", "services"], None, DELAI_CONNEXION)?;
+        if b.code == 0 { Ok(b.stdout) } else { Err(classer_erreur(b.code, &b.texte_erreur())) }
+    }
+
+    fn appairer(&self, adresse: SocketAddrV4, code: &str) -> Result<(), ErreurAppairage> {
+        // Arguments séparés, jamais de shell. Le code (usage unique, valable tant que la fenêtre est ouverte) figure
+        // le temps de la commande dans la liste des processus du Mac.
+        let cible = adresse.to_string();
+        match self.0.lancer(&["pair", &cible, code], None, DELAI_APPAIRAGE) {
+            // Code 0 et « Successfully paired to ... » ; un « Failed: ... » avec le code 0 reste un échec.
+            Ok(b) if b.code == 0 && !b.texte_erreur().to_lowercase().contains("fail") => Ok(()),
+            Ok(b) => Err(classer_erreur_appairage(&b.texte_erreur())),
+            Err(ErreurTransport::Coupure(m)) => Err(classer_erreur_appairage(&m)),
+            Err(e) => Err(ErreurAppairage::Autre(e.to_string())),
+        }
     }
 }
 
@@ -934,5 +971,39 @@ mod tests {
         }
         assert!(jeton_valide("eyJ.abc_def-1=="));
         assert!(!jeton_valide("") && !jeton_valide("a b") && !jeton_valide("a'b"));
+    }
+
+    /// Faux adb (script) qui note ses arguments : vérifie les commandes exactes de l'appairage, sans adb réel.
+    #[cfg(unix)]
+    #[test]
+    fn appairage_lance_les_bonnes_commandes_adb() {
+        use std::os::unix::fs::PermissionsExt;
+        let d = std::env::temp_dir().join(format!("zenhome-faux-adb-{}", std::process::id()));
+        std::fs::create_dir_all(&d).unwrap();
+        let (adb, journal) = (d.join("adb"), d.join("journal"));
+        let script = format!(
+            "#!/bin/sh\necho \"$ANDROID_ADB_SERVER_PORT $*\" >> '{}'\n\
+             case \"$1\" in\n\
+             pair) if [ \"$3\" = 745385 ]; then echo \"Successfully paired to $2 [guid=adb-X]\"; else echo 'error: protocol fault (couldn'\"'\"'t read status message): Undefined error: 0' >&2; exit 1; fi;;\n\
+             mdns) printf 'List of discovered mdns services\\nadb-X\\t_adb-tls-pairing._tcp\\t192.168.50.17:44437\\n';;\n\
+             esac\n",
+            journal.display()
+        );
+        std::fs::write(&adb, script).unwrap();
+        std::fs::set_permissions(&adb, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let s = AdbServeur::nouveau(&adb);
+        let adresse: SocketAddrV4 = "192.168.50.17:44437".parse().unwrap();
+        assert_eq!(s.appairer(adresse, "000000"), Err(ErreurAppairage::CodeRefuse));
+        assert_eq!(s.appairer(adresse, "745385"), Ok(()));
+        assert!(s.services_mdns().unwrap().contains("_adb-tls-pairing._tcp\t192.168.50.17:44437"));
+        let lignes = std::fs::read_to_string(&journal).unwrap();
+        assert_eq!(
+            lignes.lines().collect::<Vec<_>>(),
+            ["5038 pair 192.168.50.17:44437 000000", "5038 pair 192.168.50.17:44437 745385", "5038 mdns services"]
+        );
+        // le port d'une box sans fil entre dans la série ; 5555 reste le défaut
+        assert_eq!(AdbProcess::sur_port("adb", "192.168.50.17".parse().unwrap(), 45509).serie(), "192.168.50.17:45509");
+        assert_eq!(AdbProcess::nouveau("adb", "192.168.50.17".parse().unwrap()).serie(), "192.168.50.17:5555");
+        let _ = std::fs::remove_dir_all(&d);
     }
 }

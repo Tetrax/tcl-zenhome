@@ -3,6 +3,7 @@
 use serde::Serialize;
 
 use super::surveillance::Interruption;
+use crate::moteur::appairage::ErreurAppairage;
 use crate::moteur::connexion::EchecConnexion;
 use crate::moteur::inventaire::ErreurInventaire;
 use crate::moteur::session::{Arret, ErreurAction};
@@ -115,6 +116,35 @@ impl From<EchecConnexion> for ErreurCommande {
             EchecConnexion::ModeleDifferent(r) => {
                 Self::nouvelle("autre_modele", format!("Cet appareil n'est pas encore pris en charge ({r}). Rien n'a été modifié."))
             }
+        }
+    }
+}
+
+impl From<ErreurAppairage> for ErreurCommande {
+    fn from(e: ErreurAppairage) -> Self {
+        match e {
+            ErreurAppairage::CodeRefuse => Self::nouvelle(
+                "code_refuse",
+                "La TV n'a pas accepté ce code : vérifiez les 6 chiffres affichés sur la TV. La fenêtre « Code d'association via le Wi-Fi » doit rester ouverte, sinon le code change.",
+            ),
+            ErreurAppairage::FenetreIntrouvable => Self::nouvelle(
+                "fenetre_introuvable",
+                "Zen Home ne voit pas la fenêtre d'association : ouvrez-la sur la TV (« Associer l'appareil avec un code d'association »). Le Mac et la TV doivent être sur le même réseau.",
+            ),
+            ErreurAppairage::PlusieursFenetres => Self::nouvelle(
+                "plusieurs_fenetres",
+                "Plusieurs TV affichent une fenêtre d'association : indiquez l'adresse IP de celle que vous voulez associer (sans le port).",
+            ),
+            ErreurAppairage::Delai => Self::nouvelle(
+                "appairage",
+                "L'association a pris trop de temps. Vérifiez que la fenêtre d'association est toujours ouverte sur la TV, puis réessayez.",
+            ),
+            ErreurAppairage::ConnexionIntrouvable => Self::nouvelle(
+                "appairage",
+                "L'association a réussi, mais la TV ne propose pas encore sa connexion. Vérifiez que « Débogage sans fil » est toujours activé, puis relancez la recherche : aucun nouveau code ne sera nécessaire.",
+            ),
+            ErreurAppairage::Interrompu => Self::annulee(),
+            ErreurAppairage::Autre(m) => Self::nouvelle("appairage", format!("L'association a échoué : {m}")),
         }
     }
 }

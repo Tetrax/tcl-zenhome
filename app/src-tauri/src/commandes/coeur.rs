@@ -22,16 +22,18 @@ use super::evenements::{Emetteur, EvenementUi, ObservateurUi};
 use super::{memoire, persistance, rapport};
 use super::surveillance::{Attente, Interruption, Occupation, Surveillance, Surveille};
 use super::types::*;
+use crate::moteur::appairage::{self, Appairage};
 use crate::moteur::appareils::{self, Appareil};
 use crate::moteur::choix::{self, Choix};
 use crate::moteur::connexion::{Connecte, EchecConnexion, Politique, connecter_appareil, lire_serie};
 use crate::moteur::installation::{self, Parametres};
+use crate::moteur::fake_box::FakeAppairage;
 use crate::moteur::inventaire::{self, ErreurInventaire, Inventaire, libelles_broadcast};
 use crate::moteur::origine;
 use crate::moteur::rapport_appareil;
 use crate::moteur::restauration;
 use crate::moteur::session::{Arret, Decision, ErreurAction, Reprise, Session};
-use crate::moteur::transport::{AdbProcess, ArgConfig, Commande, Espace, ErreurTransport, EtatLien, Transport};
+use crate::moteur::transport::{AdbProcess, AdbServeur, ArgConfig, Commande, Espace, ErreurTransport, EtatLien, PORT_BOX, Transport};
 use crate::moteur::verification;
 
 include!(concat!(env!("OUT_DIR"), "/apk_empreinte.rs"));
@@ -39,8 +41,11 @@ include!(concat!(env!("OUT_DIR"), "/apk_empreinte.rs"));
 const APK_TAILLE_MAX: u64 = 200 * 1024 * 1024;
 
 pub type TransportPartage = Arc<dyn Transport + Send + Sync>;
-/// Fabrique le transport vers la box à cette IP (adb réel, FakeBox en démo ou en test).
-pub type Fabrique = Box<dyn Fn(Ipv4Addr) -> Result<TransportPartage, ErreurCommande> + Send + Sync>;
+/// Fabrique le transport vers la box à cette IP et ce port (5555, ou le port TLS du débogage sans fil) : adb réel,
+/// FakeBox en démo ou en test.
+pub type Fabrique = Box<dyn Fn(Ipv4Addr, u16) -> Result<TransportPartage, ErreurCommande> + Send + Sync>;
+/// Fabrique l'accès aux commandes adb du serveur (`mdns services`, `pair`) pour l'appairage par code.
+pub type FabriqueAppairage = Box<dyn Fn() -> Result<Arc<dyn Appairage + Send + Sync>, ErreurCommande> + Send + Sync>;
 
 pub struct Config {
     pub version: String,
@@ -52,6 +57,7 @@ pub struct Config {
     pub apk_sha256: String,
     pub demo: bool,
     pub fabrique: Fabrique,
+    pub appairage: FabriqueAppairage,
     pub politique: Politique,
     pub delai_action: Duration,
     pub delai_decision: Duration,
@@ -64,26 +70,34 @@ pub struct Config {
 impl Config {
     pub fn reelle(version: String, donnees: PathBuf, apk_ressource: PathBuf) -> Self {
         let dossier = donnees.clone();
-        let fabrique: Fabrique = Box::new(move |ip| {
-            let adb = zh_reseau::adb_installe(&dossier)
-                .ok_or_else(|| ErreurCommande::nouvelle("adb_absent", "adb n'est pas installé : installez-le depuis l'écran de démarrage."))?;
-            Ok(Arc::new(AdbProcess::nouveau(adb, ip)) as TransportPartage)
+        let adb_absent = || ErreurCommande::nouvelle("adb_absent", "adb n'est pas installé : installez-le depuis l'écran de démarrage.");
+        let fabrique: Fabrique = Box::new(move |ip, port| {
+            let adb = zh_reseau::adb_installe(&dossier).ok_or_else(adb_absent)?;
+            Ok(Arc::new(AdbProcess::sur_port(adb, ip, port)) as TransportPartage)
         });
-        let mut cfg = Self::commune(version, donnees, apk_ressource, APK_SHA256.to_string(), false, fabrique, Duration::ZERO);
+        let dossier = donnees.clone();
+        let appairage: FabriqueAppairage = Box::new(move || {
+            let adb = zh_reseau::adb_installe(&dossier).ok_or_else(adb_absent)?;
+            Ok(Arc::new(AdbServeur::nouveau(adb)) as Arc<dyn Appairage + Send + Sync>)
+        });
+        let mut cfg = Self::commune(version, donnees, apk_ressource, APK_SHA256.to_string(), false, fabrique, appairage, Duration::ZERO);
         cfg.jeton_projet = option_env!("ZENHOME_TMDB_JETON").map(|j| j.trim().to_string()).filter(|j| !j.is_empty());
         cfg
     }
 
     pub fn demo(version: String, donnees: PathBuf, rythme: Duration) -> Self {
         let boxes = demo::BOXES.map(|(_, ip, serie, appareil)| (ip, demo::DemoBox::nouvelle(rythme, serie, appareil)));
-        let fabrique: Fabrique = Box::new(move |ip| {
+        let fabrique: Fabrique = Box::new(move |ip, _| {
             let (_, b) = boxes.iter().find(|(i, _)| *i == ip.to_string()).unwrap_or(&boxes[0]);
             Ok(b.clone() as TransportPartage)
         });
-        Self::commune(version, donnees.join("demo"), PathBuf::new(), String::new(), true, fabrique, rythme)
+        // Démo : une TV affiche une fenêtre d'association (tout code à 6 chiffres est accepté) ; c'est la Mi Box simulée.
+        let appairage: FabriqueAppairage = Box::new(|| Ok(Arc::new(FakeAppairage::default().avec_fenetre(demo::BOXES[0].1, 44437, 45509, None)) as Arc<dyn Appairage + Send + Sync>));
+        Self::commune(version, donnees.join("demo"), PathBuf::new(), String::new(), true, fabrique, appairage, rythme)
     }
 
-    fn commune(version: String, donnees: PathBuf, apk_ressource: PathBuf, apk_sha256: String, demo: bool, fabrique: Fabrique, rythme_demo: Duration) -> Self {
+    #[allow(clippy::too_many_arguments)]
+    fn commune(version: String, donnees: PathBuf, apk_ressource: PathBuf, apk_sha256: String, demo: bool, fabrique: Fabrique, appairage: FabriqueAppairage, rythme_demo: Duration) -> Self {
         Self {
             version,
             donnees,
@@ -91,6 +105,7 @@ impl Config {
             apk_sha256,
             demo,
             fabrique,
+            appairage,
             politique: Politique::default(),
             delai_action: Duration::from_secs(30 * 60),
             delai_decision: Duration::from_secs(5 * 60),
@@ -118,6 +133,8 @@ struct Etat {
     prochain_id: u32,
     villes: Vec<Ville>,
     adb_demo: bool,
+    /// Port de connexion (débogage sans fil) des box trouvées sans fil par la dernière recherche ou appairées ; 5555 sinon.
+    ports: HashMap<Ipv4Addr, u16>,
     session: Option<SessionBox>,
 }
 
@@ -187,6 +204,13 @@ fn interruption(s: &Surveillance) -> Option<ErreurCommande> {
 fn clore(t: &dyn Transport) {
     t.deconnecter();
     t.arreter_serveur();
+}
+
+fn ip_refusee() -> ErreurCommande {
+    ErreurCommande::nouvelle(
+        "injoignable",
+        "Adresse IP refusée : indiquez l'adresse locale de la box (par exemple 192.168.1.20), pas une adresse publique.",
+    )
 }
 
 /// Numéro de série réduit aux caractères d'un nom de dossier de sauvegarde.
@@ -273,7 +297,8 @@ impl Coeur {
 
     /// Box mémorisées, la plus récente d'abord. En démo, SALON joue celle d'une installation précédente.
     fn boxes_memorisees(&self) -> Vec<BoxMemoriseeUi> {
-        let vue = |b: BoxTrouvee| BoxMemoriseeUi { nom: b.nom, ip: b.ip };
+        let sans_fil = memoire::ips_sans_fil(&self.cfg.donnees);
+        let vue = |b: BoxTrouvee| BoxMemoriseeUi { sans_fil: sans_fil.contains(&b.ip), nom: b.nom, ip: b.ip };
         if self.cfg.demo {
             let (nom, ip, _, _) = demo::BOXES[0];
             return vec![vue(BoxTrouvee { nom: nom.into(), ip: ip.into(), appareil: Some(appareils::MIBOX4.id.into()), libelle: appareils::MIBOX4.nom_defaut.into() })];
@@ -328,9 +353,36 @@ impl Coeur {
         } else {
             // `annuler` lève le drapeau : la recherche rend alors ce qu'elle a trouvé, sans erreur
             let indices: Vec<_> = appareils::TOUS.iter().map(|a| a.indice()).collect();
-            zh_reseau::chercher_box(Duration::from_secs(15), &memoire::lire(&self.cfg.donnees), &indices, &self.annule)
+            // Débogage sans fil : une première lecture met en route la découverte mDNS du serveur adb pendant la recherche.
+            let sans_fil = (self.cfg.appairage)().ok();
+            if let Some(a) = &sans_fil {
+                let _ = a.services_mdns();
+            }
+            let trouvees = zh_reseau::chercher_box(Duration::from_secs(15), &memoire::lire(&self.cfg.donnees), &indices, &self.annule);
+            match sans_fil {
+                Some(a) => trouvees.map(|t| self.avec_sans_fil(t, &*a)),
+                None => trouvees,
+            }
         };
         self.garder_recherche(resultat)
+    }
+
+    /// Ajoute aux box trouvées celles que `adb mdns services` annonce en débogage sans fil (déjà appairées : aucun code à
+    /// ressaisir) et retient leur port. Une box déjà trouvée garde le port 5555 : elle répond déjà sans appairage.
+    pub(crate) fn avec_sans_fil(&self, mut trouvees: Vec<BoxTrouvee>, a: &dyn Appairage) -> Vec<BoxTrouvee> {
+        let connues = memoire::lire(&self.cfg.donnees);
+        let mut ports = HashMap::new();
+        for s in appairage::connexions_mdns(a) {
+            let ip = s.adresse.ip().to_string();
+            if trouvees.iter().any(|b| b.ip == ip) {
+                continue;
+            }
+            ports.insert(*s.adresse.ip(), s.adresse.port());
+            let inconnue = || BoxTrouvee { nom: "Appareil à vérifier".into(), ip: ip.clone(), appareil: None, libelle: "Appareil à vérifier".into() };
+            trouvees.push(connues.iter().find(|b| b.ip == ip).cloned().unwrap_or_else(inconnue));
+        }
+        self.etat().ports = ports;
+        trouvees
     }
 
     /// Garde le résultat d'une recherche. Même en cas d'échec, les ids de la recherche précédente ne sont plus valables.
@@ -450,7 +502,7 @@ impl Coeur {
             s.t.deconnecter();
         }
         emettre(EvenementUi::Etape { nom: "Lecture de l'appareil".into() });
-        let t = (self.cfg.fabrique)(ip)?;
+        let t = (self.cfg.fabrique)(ip, self.port_de(ip))?;
         let w = Surveille { t: &*t, surveillance: &surveillance };
         let texte = (|| {
             w.deconnecter();
@@ -513,14 +565,14 @@ impl Coeur {
 
     // ------------------------------------------------------------------ connexion
 
+    /// Port adb de la box : 5555, sauf pour une box vue en débogage sans fil (voir `avec_sans_fil`, `appairer`).
+    fn port_de(&self, ip: Ipv4Addr) -> u16 {
+        self.etat().ports.get(&ip).copied().unwrap_or(PORT_BOX)
+    }
+
     fn resoudre(&self, cible: &Cible) -> Result<(String, Ipv4Addr), ErreurCommande> {
         let e = self.etat();
-        let ip_invalide = || {
-            ErreurCommande::nouvelle(
-                "injoignable",
-                "Adresse IP refusée : indiquez l'adresse locale de la box (par exemple 192.168.1.20), pas une adresse publique.",
-            )
-        };
+        let ip_invalide = ip_refusee;
         match cible {
             Cible::Id { id } => {
                 let b = e
@@ -540,14 +592,37 @@ impl Coeur {
     pub fn connecter(&self, cible: &Cible, emettre: Emetteur) -> Result<Connexion, ErreurCommande> {
         let (_occupation, surveillance) = self.prendre()?;
         let (nom, ip) = self.resoudre(cible)?;
+        self.ouvrir_session(nom, ip, self.port_de(ip), emettre, &surveillance)
+    }
+
+    /// Association par code d'une TV en débogage sans fil, puis connexion comme pour une box trouvée (voir `moteur::appairage`).
+    /// `ip` : adresse de la TV si l'utilisateur la connaît (obligatoire quand plusieurs TV affichent une fenêtre d'association).
+    pub fn appairer(&self, code: &str, ip: Option<&str>, emettre: Emetteur) -> Result<Connexion, ErreurCommande> {
+        let code = appairage::valider_code(code).ok_or_else(|| {
+            ErreurCommande::nouvelle("code_invalide", "Le code comporte 6 chiffres : recopiez ceux affichés sur la TV, dans la fenêtre « Code d'association via le Wi-Fi ».")
+        })?;
+        let ip = match ip.map(str::trim).filter(|s| !s.is_empty()) {
+            Some(s) => Some(zh_reseau::valider_ipv4(s).ok_or_else(ip_refusee)?),
+            None => None,
+        };
+        let (_occupation, surveillance) = self.prendre()?;
+        let a = (self.cfg.appairage)()?;
+        emettre(EvenementUi::Etape { nom: "Association avec la TV".into() });
+        let adresse = appairage::appairer(&*a, &code, ip, &|| surveillance.interruption().is_some()).map_err(|e| interruption(&surveillance).unwrap_or_else(|| e.into()))?;
+        self.etat().ports.insert(*adresse.ip(), adresse.port());
+        self.ouvrir_session(String::new(), *adresse.ip(), adresse.port(), emettre, &surveillance)
+    }
+
+    /// Ouvre la session sur la box à cette IP et ce port : ancienne box déconnectée, connexion, reconnaissance, mémoire.
+    fn ouvrir_session(&self, nom: String, ip: Ipv4Addr, port: u16, emettre: Emetteur, surveillance: &Surveillance) -> Result<Connexion, ErreurCommande> {
         // Seule l'ancienne box est déconnectée : le serveur adb reste, pour enchaîner les box sans le relancer.
         let ancienne = self.etat().session.take();
         if let Some(s) = ancienne {
             s.t.deconnecter();
         }
         emettre(EvenementUi::Etape { nom: "Connexion à la box".into() });
-        let t = (self.cfg.fabrique)(ip)?;
-        let r = self.etablir(&t, emettre, &surveillance);
+        let t = (self.cfg.fabrique)(ip, port)?;
+        let r = self.etablir(&t, emettre, surveillance);
         match r {
             Ok((serie, appareil)) => {
                 let mut reprise = Reprise::pour_box(serie);
@@ -559,6 +634,9 @@ impl Coeur {
                 if let (false, Some(serie)) = (self.cfg.demo, reprise.serie.as_deref()) {
                     nom = memoire::nom_pour(&self.cfg.donnees, serie, &ip.to_string(), &nom, &appareil.nom_defaut);
                     let _ = memoire::memoriser(&self.cfg.donnees, serie, &nom, &ip.to_string(), Some(&appareil.id));
+                    if port != PORT_BOX {
+                        let _ = memoire::marquer_sans_fil(&self.cfg.donnees, serie);
+                    }
                 }
                 let connexion = Connexion { nom, ip: ip.to_string(), modele: appareil.nom.clone(), appareil: appareil.id.clone(), verifie: !appareil.est_generique() };
                 self.etat().session = Some(SessionBox { t, appareil, reprise, inventaire: None });

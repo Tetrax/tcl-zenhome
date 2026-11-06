@@ -14,7 +14,8 @@ use super::persistance;
 use super::types::{Cible, ChoixUi, InventaireUi};
 use crate::moteur::transport::{Commande, ErreurTransport, EtatLien, Sortie, Transport};
 use crate::moteur::connexion::Politique;
-use crate::moteur::fake_box::FakeBox;
+use crate::moteur::appairage::Appairage;
+use crate::moteur::fake_box::{FakeAppairage, FakeBox};
 use crate::moteur::session::Reprise;
 
 const SERIE: &str = "TESTSERIAL0001";
@@ -31,7 +32,7 @@ fn dossier(nom: &str) -> PathBuf {
 
 fn config(donnees: PathBuf, f: &Arc<FakeBox>) -> Config {
     let f = f.clone();
-    let fabrique: Fabrique = Box::new(move |_| Ok(f.clone() as TransportPartage));
+    let fabrique: Fabrique = Box::new(move |_, _| Ok(f.clone() as TransportPartage));
     Config {
         version: "0.0.0-test".into(),
         donnees,
@@ -39,6 +40,7 @@ fn config(donnees: PathBuf, f: &Arc<FakeBox>) -> Config {
         apk_sha256: String::new(),
         demo: false,
         fabrique,
+        appairage: Box::new(|| Ok(Arc::new(FakeAppairage::default()) as Arc<dyn Appairage + Send + Sync>)),
         politique: Politique::default(),
         delai_action: Duration::from_secs(60),
         delai_decision: Duration::from_secs(5),
@@ -81,7 +83,7 @@ fn rien(_: EvenementUi) {}
 fn config_deux(donnees: PathBuf, a: &Arc<FakeBox>, b: &Arc<FakeBox>) -> Config {
     let (a, b) = (a.clone(), b.clone());
     let mut cfg = config(donnees, &a);
-    cfg.fabrique = Box::new(move |ip| Ok(if ip.to_string() == IP_B { b.clone() } else { a.clone() } as TransportPartage));
+    cfg.fabrique = Box::new(move |ip, _| Ok(if ip.to_string() == IP_B { b.clone() } else { a.clone() } as TransportPartage));
     avec_apk(&mut cfg, b"apk de test", &sha(b"apk de test"));
     cfg
 }
@@ -714,7 +716,7 @@ fn changer_de_box_garde_le_serveur_adb() {
     let arrets = Arc::new(AtomicU32::new(0));
     let mut cfg = config_deux(dossier("serveur"), &a, &b);
     let (aa, bb, n) = (a.clone(), b.clone(), arrets.clone());
-    cfg.fabrique = Box::new(move |ip| Ok(Arc::new(Compteur(if ip.to_string() == IP_B { bb.clone() } else { aa.clone() }, n.clone())) as TransportPartage));
+    cfg.fabrique = Box::new(move |ip, _| Ok(Arc::new(Compteur(if ip.to_string() == IP_B { bb.clone() } else { aa.clone() }, n.clone())) as TransportPartage));
     let c = Coeur::nouveau(cfg);
 
     connecter_ip(&c, IP);
@@ -954,4 +956,130 @@ fn generique_deja_equipe_repart_de_la_sauvegarde_d_origine() {
     let err = c3.connecter(&Cible::Ip { ip: IP.into() }, &rien).err().unwrap();
     assert_eq!(err.code, "autre_modele");
     assert!(err.message.contains("pas de sauvegarde d'origine de cet appareil : accueil d'origine inconnu."), "{}", err.message);
+}
+
+// ---------------------------------------------------------------- appairage par code (débogage sans fil)
+
+type Ports = Arc<Mutex<Vec<u16>>>;
+
+/// Coeur dont la fabrique note le port demandé pour chaque transport, avec une fausse TV en débogage sans fil.
+fn pret_sans_fil(nom: &str, tv: FakeAppairage) -> (Coeur, Arc<FakeAppairage>, Ports, PathBuf) {
+    let (f, d) = (Arc::new(FakeBox::mibox4()), dossier(nom));
+    let mut cfg = config(d.clone(), &f);
+    avec_apk(&mut cfg, b"apk de test", &sha(b"apk de test"));
+    let (ports, tv) = (Ports::default(), Arc::new(tv));
+    let (p, boite) = (ports.clone(), f.clone());
+    cfg.fabrique = Box::new(move |_, port| {
+        p.lock().unwrap().push(port);
+        Ok(boite.clone() as TransportPartage)
+    });
+    let t = tv.clone();
+    cfg.appairage = Box::new(move || Ok(t.clone() as Arc<dyn Appairage + Send + Sync>));
+    (Coeur::nouveau(cfg), tv, ports, d)
+}
+
+fn fenetre() -> FakeAppairage {
+    FakeAppairage::default().avec_fenetre(IP, 44437, 45509, Some("745385"))
+}
+
+#[test]
+fn appairage_nominal_la_serie_ip_port_circule_jusqu_a_la_box() {
+    let (c, tv, ports, d) = pret_sans_fil("appairage-nominal", fenetre());
+    let connexion = c.appairer("745 385", None, &rien).unwrap();
+    assert_eq!((connexion.ip.as_str(), connexion.appareil.as_str()), (IP, "mibox4"));
+    assert_eq!(*ports.lock().unwrap(), [45509], "la connexion vise le port TLS annoncé, pas 5555");
+    assert_eq!(tv.journal().iter().filter(|l| l.starts_with("pair ")).collect::<Vec<_>>(), [&format!("pair {IP}:44437")]);
+    // la suite du parcours (lecture, vérification) fonctionne sur cette session
+    assert!(inventaire(&c).resume.nb_applis > 0);
+    c.verifier(false, false, &rien).unwrap();
+    // mémoire : l'IP et l'indicateur sans fil, jamais le port
+    let etat = c.etat_initial();
+    assert_eq!(etat.boxes_memorisees.iter().map(|b| (b.ip.as_str(), b.sans_fil)).collect::<Vec<_>>(), [(IP, true)]);
+    let brut = std::fs::read_to_string(d.join("boxes.json")).unwrap();
+    assert!(brut.contains("sans_fil") && !brut.contains("45509") && !brut.contains("44437"), "{brut}");
+}
+
+#[test]
+fn appairage_code_refuse_puis_bon_code() {
+    let (c, tv, ports, _) = pret_sans_fil("appairage-refus", fenetre());
+    let err = c.appairer("000000", None, &rien).err().unwrap();
+    assert_eq!(err.code, "code_refuse");
+    assert!(err.message.contains("6 chiffres") && err.message.contains("fenêtre"), "{}", err.message);
+    assert!(c.reprise_session().is_none() && ports.lock().unwrap().is_empty(), "rien n'est connecté");
+    // la fenêtre est restée ouverte : le bon code passe
+    c.appairer("745385", None, &rien).unwrap();
+    assert_eq!(tv.journal().iter().filter(|l| l.starts_with("pair ")).count(), 2);
+    assert_eq!(*ports.lock().unwrap(), [45509]);
+}
+
+#[test]
+fn appairage_sans_fenetre() {
+    let (c, _, ports, _) = pret_sans_fil("appairage-aucune", FakeAppairage::default());
+    let err = c.appairer("745385", None, &rien).err().unwrap();
+    assert_eq!(err.code, "fenetre_introuvable");
+    assert!(err.message.contains("même réseau"), "{}", err.message);
+    assert!(ports.lock().unwrap().is_empty());
+    // le Coeur n'est pas resté « occupé »
+    assert_eq!(code(c.appairer("745385", None, &rien)), "fenetre_introuvable");
+}
+
+#[test]
+fn appairage_plusieurs_fenetres_demande_l_ip() {
+    let deux = FakeAppairage::default().avec_fenetre(IP, 44437, 45509, Some("745385")).avec_fenetre(IP_B, 33333, 41000, Some("111111"));
+    let (c, tv, ports, _) = pret_sans_fil("appairage-plusieurs", deux);
+    let err = c.appairer("745385", None, &rien).err().unwrap();
+    assert_eq!(err.code, "plusieurs_fenetres");
+    assert!(tv.journal().iter().all(|l| !l.starts_with("pair ")), "rien n'est tenté avant de savoir laquelle");
+    // l'IP désigne la bonne fenêtre
+    c.appairer("111111", Some(" 192.168.1.21 "), &rien).unwrap();
+    assert_eq!(*ports.lock().unwrap(), [41000]);
+    assert!(tv.journal().contains(&format!("pair {IP_B}:33333")));
+}
+
+#[test]
+fn appairage_refuse_les_entrees_invalides_avant_toute_commande() {
+    let (c, tv, _, _) = pret_sans_fil("appairage-invalide", fenetre());
+    for mauvais in ["", "12345", "1234567", "12345a", "12 34 5;"] {
+        assert_eq!(code(c.appairer(mauvais, None, &rien)), "code_invalide", "{mauvais:?}");
+    }
+    for ip in ["8.8.8.8", "192.168.1.20:44437", "pas une ip"] {
+        assert_eq!(code(c.appairer("745385", Some(ip), &rien)), "injoignable", "{ip}");
+    }
+    assert!(tv.journal().is_empty(), "aucune commande adb : {:?}", tv.journal());
+}
+
+#[test]
+fn appairage_attend_le_service_de_connexion_puis_abandonne() {
+    let (c, _, ports, _) = pret_sans_fil("appairage-retard", fenetre().connexion_retardee(2));
+    c.appairer("745385", None, &rien).unwrap();
+    assert_eq!(*ports.lock().unwrap(), [45509]);
+    let (c, _, ports, _) = pret_sans_fil("appairage-jamais", fenetre().connexion_retardee(100));
+    let err = c.appairer("745385", None, &rien).err().unwrap();
+    assert_eq!(err.code, "appairage");
+    assert!(err.message.contains("aucun nouveau code"), "{}", err.message);
+    assert!(ports.lock().unwrap().is_empty());
+}
+
+#[test]
+fn recherche_liste_les_box_sans_fil_deja_appairees() {
+    let (c, tv, ports, _) = pret_sans_fil("recherche-sans-fil", FakeAppairage::default().deja_appairee(IP_B, 41000));
+    // une box déjà trouvée par la recherche classique garde 5555, même si elle annonce aussi un service sans fil
+    let deja = vec![zh_reseau::BoxTrouvee { nom: "SALON".into(), ip: IP_B.into(), appareil: None, libelle: "Mi Box".into() }];
+    assert_eq!(c.avec_sans_fil(deja, &*tv).len(), 1);
+    c.connecter(&Cible::Ip { ip: IP_B.into() }, &rien).unwrap();
+    assert_eq!(*ports.lock().unwrap(), [5555]);
+    // sinon elle est proposée, et la connexion vise le port annoncé
+    let vues = c.garder_recherche(Ok(c.avec_sans_fil(vec![], &*tv))).unwrap();
+    assert_eq!(vues.iter().map(|b| b.ip.as_str()).collect::<Vec<_>>(), [IP_B]);
+    c.connecter(&Cible::Id { id: vues[0].id }, &rien).unwrap();
+    assert_eq!(ports.lock().unwrap().last(), Some(&41000));
+    assert!(c.etat_initial().boxes_memorisees[0].sans_fil);
+}
+
+#[test]
+fn connexion_classique_reste_en_5555_et_sans_indicateur() {
+    let (c, _, ports, _) = pret_sans_fil("classique-5555", FakeAppairage::default());
+    c.connecter(&Cible::Ip { ip: IP.into() }, &rien).unwrap();
+    assert_eq!(*ports.lock().unwrap(), [5555]);
+    assert!(!c.etat_initial().boxes_memorisees[0].sans_fil);
 }
