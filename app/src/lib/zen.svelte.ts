@@ -123,6 +123,8 @@ class Zen {
   aller(e: Ecran) {
     if (e === "accueil" || e === "adieu" || e === "recherche") this.jeton = ""; // le jeton ne survit pas à la sortie du lot
     if (e === "recherche") this.lot = null;
+    // Les versions d'accueil mémorisées ont pu changer (réparation) : le bandeau de l'accueil suit.
+    if (e === "accueil" && this.init) void api.etatInitial().then((i) => (this.init = i), () => {});
     this.erreur = null; this.reprise = null; this.attente = null; this.ecran = e; }
 
   private sur = (e: Evenement) => {

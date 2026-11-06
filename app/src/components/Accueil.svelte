@@ -6,6 +6,10 @@
   import { zen } from "../lib/zen.svelte";
 
   let desinstallation = $state(false);
+  // Box dont l'accueil Zen Home est connu et plus ancien que celui de l'appli (version inconnue : pas de bandeau).
+  const perimees = $derived(
+    (zen.init?.boxes_memorisees ?? []).filter((b) => b.version_code != null && b.version_code < (zen.init?.apk_version_code ?? 0)),
+  );
 </script>
 
 <Panneau titre="Zen Home" grand large>
@@ -16,6 +20,11 @@
     <div class="note alerte"><Icone nom="alerte" /><p><b>Une opération précédente a été interrompue.</b> Branchez la box, puis choisissez « Réparer » : Zen Home vérifiera son état et corrigera ce qui reste à faire.</p></div>
   {/if}
   <MiseAJour />
+  {#if perimees.length}
+    <div class="note" role="status">
+      <p>Une nouvelle version de l'accueil Zen Home est disponible pour {perimees.map((b) => b.nom).join(", ")}. <button class="lien" type="button" onclick={() => zen.demarrer("reparer")}>Mettre à jour</button></p>
+    </div>
+  {/if}
   <p class="lead">Un accueil apaisé pour votre box ou TV Android (Mi Box, TV TCL et la plupart des appareils Android TV et Google TV), sans publicité ni pistage. Il suffit d'une dizaine de minutes.</p>
   <h3 style="margin-top:22px">Avant de commencer</h3>
   <ol class="consignes">
