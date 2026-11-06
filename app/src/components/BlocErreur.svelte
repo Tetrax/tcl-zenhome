@@ -17,6 +17,8 @@
     refus_licence: "Votre accord est nécessaire", injoignable: "L'appareil ne répond pas", non_autorise: "L'appareil attend votre autorisation",
     autre_modele: "Appareil pas encore pris en charge", risques_non_acceptes: "Votre accord est nécessaire", autre_box: "Ce n'est pas le même appareil", lecture: "L'appareil n'a pas pu être lu",
     choix_invalide: "Un choix n'a pas été accepté", reseau: "Problème de connexion Internet", interne: "Un problème est survenu",
+    code_invalide: "Le code n'est pas valide", code_refuse: "Le code a été refusé", fenetre_introuvable: "Fenêtre d'association introuvable",
+    plusieurs_fenetres: "Plusieurs TV proposent un code", appairage: "L'association n'a pas abouti",
   };
   const sansReprise: CodeErreur[] = ["autre_modele", "risques_non_acceptes", "autre_box", "refus_licence"];
   const peutReessayer = $derived(!!zen.reprise && !!e && !sansReprise.includes(e.code));

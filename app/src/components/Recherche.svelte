@@ -22,7 +22,8 @@
   const aucune = $derived(zen.rechercheFaite && props.length === 0);
   const formulaire = $derived(manuel || aucune);
   const unique = $derived(props.length === 1 ? props[0] : null);
-  const detail = (p: { recente: boolean }) => (p.recente ? (zen.rechercheFaite ? "configurée récemment, n'a pas répondu à la recherche" : "configurée récemment") : "");
+  const detail = (p: { recente: boolean; sans_fil?: boolean }) =>
+    p.recente ? (zen.rechercheFaite ? (p.sans_fil ? "n'a pas répondu : réactivez « Débogage sans fil » sur la TV (l'association est gardée)" : "configurée récemment, n'a pas répondu à la recherche") : "configurée récemment") : "";
 
   function ouvrirManuel() {
     manuel = true;
@@ -62,6 +63,7 @@
     </div>
     {#snippet pied()}
       <button class="btn small" type="button" onclick={() => { manuel = true; void zen.annuler(); }}>Saisir l'adresse moi-même</button>
+      <button class="lien" type="button" onclick={() => zen.aller("appairage")}>Ma TV demande un code d'association</button>
       <button class="lien" type="button" onclick={() => zen.retourAccueil()}>Retour</button>
     {/snippet}
   </Panneau>
@@ -119,6 +121,7 @@
         <button class="btn primary" type="button" onclick={valider} disabled={nbCoches === 0}>{nbCoches > 1 ? `Configurer ces ${nbCoches} appareils` : "Choisir cet appareil"}</button>
       {/if}
       {#if !formulaire}<button class="btn" type="button" onclick={ouvrirManuel}>Autre adresse</button>{/if}
+      <button class="lien" type="button" onclick={() => zen.aller("appairage")}>Ma TV demande un code d'association</button>
       {#if !cherche}<button class="lien" type="button" onclick={() => { manuel = false; void zen.chercher(); }}>Relancer la recherche</button>{/if}
       <button class="lien" type="button" onclick={() => zen.retourAccueil()}>Retour</button>
     {/snippet}

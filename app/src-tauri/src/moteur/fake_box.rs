@@ -3,9 +3,11 @@
 //! texte réellement envoyé à adb, comme le ferait le shell de la box.
 
 use std::collections::BTreeMap;
+use std::net::SocketAddrV4;
 use std::path::Path;
 use std::sync::{Mutex, MutexGuard};
 
+use super::appairage::{Appairage, ErreurAppairage};
 use super::appareils::{LISTE_GENERIQUE, MIBOX4, ModeAccueil, Profil, TCL_G08, TOUS};
 use super::debloat;
 use super::installation::APK_VERSION_CODE;
@@ -689,6 +691,94 @@ impl Transport for FakeBox {
         let mut i = self.interne();
         i.journal.push("disconnect".into());
         i.scenario.connecte = false;
+    }
+
+    fn attendre(&self, _duree: std::time::Duration) {}
+}
+
+/// TV simulée avec « Débogage sans fil » actif.
+struct TvFake {
+    instance: String,
+    /// Port de la fenêtre d'association (`None` : fermée) et son code (`None` : tout code est accepté, démo).
+    appairage: Option<(u16, Option<String>)>,
+    ip: String,
+    port_connexion: u16,
+    /// Lectures de `mdns services` pendant lesquelles le service de connexion reste caché (après l'appairage).
+    cachee: u32,
+}
+
+#[derive(Default)]
+struct InterneAppairage {
+    tvs: Vec<TvFake>,
+    retard_connexion: u32,
+    journal: Vec<String>,
+}
+
+/// Faux `Appairage` : produit une sortie de `adb mdns services` d'après l'état des TV simulées, et simule `adb pair`
+/// (mauvais code : la fenêtre reste ouverte ; bon code : elle se ferme).
+#[derive(Default)]
+pub struct FakeAppairage(Mutex<InterneAppairage>);
+
+impl FakeAppairage {
+    fn interne(&self) -> MutexGuard<'_, InterneAppairage> {
+        self.0.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    /// TV avec fenêtre d'association ouverte (`port_appairage`, `code`) et service de connexion (`port_connexion`).
+    pub fn avec_fenetre(self, ip: &str, port_appairage: u16, port_connexion: u16, code: Option<&str>) -> Self {
+        let instance = format!("adb-FAKE{port_connexion}-abc");
+        self.interne().tvs.push(TvFake { instance, appairage: Some((port_appairage, code.map(Into::into))), ip: ip.into(), port_connexion, cachee: 0 });
+        self
+    }
+
+    /// TV déjà appairée, débogage sans fil actif, sans fenêtre d'association.
+    pub fn deja_appairee(self, ip: &str, port_connexion: u16) -> Self {
+        let instance = format!("adb-FAKE{port_connexion}-abc");
+        self.interne().tvs.push(TvFake { instance, appairage: None, ip: ip.into(), port_connexion, cachee: 0 });
+        self
+    }
+
+    /// Après un appairage réussi, le service de connexion n'apparaît qu'après `lectures` lectures de `mdns services`.
+    pub fn connexion_retardee(self, lectures: u32) -> Self {
+        self.interne().retard_connexion = lectures;
+        self
+    }
+
+    pub fn journal(&self) -> Vec<String> {
+        self.interne().journal.clone()
+    }
+}
+
+impl Appairage for FakeAppairage {
+    fn services_mdns(&self) -> Result<String, ErreurTransport> {
+        let mut i = self.interne();
+        i.journal.push("mdns services".into());
+        let mut sortie = String::from("List of discovered mdns services\n");
+        for tv in &mut i.tvs {
+            if let Some((port, _)) = tv.appairage {
+                sortie += &format!("{}\t_adb-tls-pairing._tcp\t{}:{port}\n", tv.instance, tv.ip);
+            }
+            if tv.cachee > 0 {
+                tv.cachee -= 1;
+            } else {
+                sortie += &format!("{}\t_adb-tls-connect._tcp\t{}:{}\n", tv.instance, tv.ip, tv.port_connexion);
+            }
+        }
+        Ok(sortie)
+    }
+
+    fn appairer(&self, adresse: SocketAddrV4, code: &str) -> Result<(), ErreurAppairage> {
+        let mut i = self.interne();
+        i.journal.push(format!("pair {adresse}"));
+        let retard = i.retard_connexion;
+        let tv = i.tvs.iter_mut().find(|t| t.ip == adresse.ip().to_string() && t.appairage.as_ref().is_some_and(|(p, _)| *p == adresse.port()));
+        let Some(tv) = tv else { return Err(ErreurAppairage::FenetreIntrouvable) };
+        if tv.appairage.as_ref().is_some_and(|(_, attendu)| attendu.as_deref().is_some_and(|a| a != code)) {
+            return Err(ErreurAppairage::CodeRefuse);
+        }
+        tv.appairage = None;
+        tv.cachee = retard;
+        Ok(())
     }
 
     fn attendre(&self, _duree: std::time::Duration) {}

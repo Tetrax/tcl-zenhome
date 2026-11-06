@@ -67,6 +67,12 @@ pub async fn connecter(coeur: Etat<'_>, cible: Cible, canal: Channel<EvenementUi
 }
 
 #[tauri::command]
+pub async fn appairer(coeur: Etat<'_>, code: String, ip: Option<String>, canal: Channel<EvenementUi>) -> Result<Connexion, ErreurCommande> {
+    let c = coeur.inner().clone();
+    bloquant(move || c.appairer(&code, ip.as_deref(), &emetteur(canal))).await
+}
+
+#[tauri::command]
 pub async fn chercher_villes(coeur: Etat<'_>, saisie: String) -> Result<Vec<VilleUi>, ErreurCommande> {
     let c = coeur.inner().clone();
     bloquant(move || c.chercher_villes(&saisie)).await

@@ -28,6 +28,9 @@ struct Memorisee {
     /// Identifiant de l'appareil (absent des anciens fichiers, qui ne connaissaient que la Mi Box).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     appareil: Option<String>,
+    /// Box connectée par le débogage sans fil (appairage par code) : on garde l'IP, pas le port, qui change à chaque activation.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    sans_fil: bool,
     /// `versionCode` de l'accueil Zen Home connu sur cette box (absent des anciens fichiers, ou version inconnue).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     version_accueil: Option<u32>,
@@ -74,6 +77,11 @@ pub fn noter_version(racine: &Path, serie: &str, version: Option<u32>) -> std::i
     ecrire_atomique(racine, FICHIER, &serde_json::to_vec(&entrees).map_err(std::io::Error::other)?)
 }
 
+/// IP des box mémorisées connectées par le débogage sans fil.
+pub fn ips_sans_fil(racine: &Path) -> Vec<String> {
+    charger(racine).into_iter().filter(|m| m.sans_fil).map(|m| m.ip).collect()
+}
+
 /// Nom par défaut de l'appareil (la Mi Box pour les anciennes entrées).
 fn par_defaut(appareil: Option<&str>) -> &'static str {
     if appareil == Some(GENERIQUE) { NOM_GENERIQUE } else { appareil.and_then(par_id).unwrap_or(&MIBOX4).nom_defaut }
@@ -100,9 +108,18 @@ pub fn memoriser(racine: &Path, serie: &str, nom: &str, ip: &str, appareil: Opti
     entrees.retain(|m| m.serie != serie && m.ip != ip);
     let nom = if nom == "Appareil à vérifier" { String::new() } else { zh_reseau::nettoyer_nom(nom) };
     let nom = if nom.is_empty() { par_defaut(appareil).into() } else { nom };
-    entrees.push(Memorisee { serie: serie.into(), nom, ip: ip.into(), appareil: appareil.map(String::from), version_accueil });
+    entrees.push(Memorisee { serie: serie.into(), nom, ip: ip.into(), appareil: appareil.map(String::from), version_accueil, sans_fil: false });
     let trop = entrees.len().saturating_sub(BOXES_MAX);
     entrees.drain(..trop);
+    ecrire_atomique(racine, FICHIER, &serde_json::to_vec(&entrees).map_err(std::io::Error::other)?)
+}
+
+/// Note que la box de cette série se connecte par le débogage sans fil (à appeler après `memoriser`).
+pub fn marquer_sans_fil(racine: &Path, serie: &str) -> std::io::Result<()> {
+    let mut entrees = charger(racine);
+    if let Some(m) = entrees.iter_mut().find(|m| m.serie == serie) {
+        m.sans_fil = true;
+    }
     ecrire_atomique(racine, FICHIER, &serde_json::to_vec(&entrees).map_err(std::io::Error::other)?)
 }
 
@@ -165,6 +182,25 @@ mod tests {
         assert_eq!(l[1].0, "SALON");
         assert_eq!(nom_pour(&d, "C", "10.0.0.3", NOM_GENERIQUE, "x"), "x", "nom par défaut non repris comme nom choisi");
         let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn sans_fil_garde_l_ip_sans_port_et_reste_compatible() {
+        let d = dossier("sans-fil");
+        memoriser(&d, "A", "Salon", "192.168.50.17", Some(GENERIQUE)).unwrap();
+        memoriser(&d, "B", "Chambre", "192.168.50.18", None).unwrap();
+        assert!(ips_sans_fil(&d).is_empty());
+        marquer_sans_fil(&d, "A").unwrap();
+        assert_eq!(ips_sans_fil(&d), ["192.168.50.17"]);
+        let brut = std::fs::read_to_string(d.join(FICHIER)).unwrap();
+        assert_eq!(brut.matches("sans_fil").count(), 1, "écrit seulement pour la box sans fil : {brut}");
+        assert_eq!(lire(&d).len(), 2);
+        // une reconnexion classique (5555) efface l'indicateur
+        memoriser(&d, "A", "Salon", "192.168.50.17", Some(GENERIQUE)).unwrap();
+        assert!(ips_sans_fil(&d).is_empty());
+        // un ancien fichier, sans le champ, reste lisible
+        std::fs::write(d.join(FICHIER), r#"[{"serie":"A","nom":"Salon","ip":"192.168.1.20"}]"#).unwrap();
+        assert_eq!((lire(&d).len(), ips_sans_fil(&d).len()), (1, 0));
     }
 
     #[test]

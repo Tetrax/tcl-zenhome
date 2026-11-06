@@ -10,7 +10,8 @@ export interface EtatInitial { version: string; adb_installe: boolean; demo: boo
   /** `versionCode` de l'accueil Zen Home embarqué dans l'appli. */
   apk_version_code: number }
 /** `version_code` : `versionCode` de l'accueil connu sur cette box, null si inconnu. */
-export interface BoxMemorisee { nom: string; ip: string; version_code?: number | null }
+/** `sans_fil` : connectée par le débogage sans fil (l'association est gardée, mais l'option doit être réactivée sur la TV). */
+export interface BoxMemorisee { nom: string; ip: string; version_code?: number | null; sans_fil?: boolean }
 /** `appareil` : appareil supposé d'après l'annonce réseau (simple indice, la connexion vérifie), null si inconnu ; `libelle` : son nom court. */
 export interface BoxTrouvee { id: number; nom: string; ip: string; appareil?: string | null; libelle?: string }
 export type Cible = { id: number } | { ip: string };
@@ -45,7 +46,8 @@ export interface RapportRestauration { incomplete: boolean; avertissements: stri
 
 export type CodeErreur =
   | "occupe" | "annule" | "adb_absent" | "refus_licence" | "injoignable" | "non_autorise"
-  | "autre_modele" | "risques_non_acceptes" | "autre_box" | "lecture" | "choix_invalide" | "reseau" | "interne";
+  | "autre_modele" | "risques_non_acceptes" | "autre_box" | "lecture" | "choix_invalide" | "reseau" | "interne"
+  | "code_invalide" | "code_refuse" | "fenetre_introuvable" | "plusieurs_fenetres" | "appairage";
 export interface ErreurZen { code: CodeErreur; message: string }
 
 export type Evenement =

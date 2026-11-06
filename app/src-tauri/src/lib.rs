@@ -37,6 +37,7 @@ pub fn run() {
             commandes::installer_adb,
             commandes::chercher_box,
             commandes::connecter,
+            commandes::appairer,
             commandes::chercher_villes,
             commandes::inventaire,
             commandes::installer,

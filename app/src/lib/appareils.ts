@@ -15,6 +15,8 @@ export const CONSIGNES = {
   /** Chemin commun à tous les appareils : chemin puis nom(s) de la ligne « Build ». */
   debloquer: "Paramètres > Système (ou Préférences de l'appareil) > À propos", build: "« Build » ou « Build de l'OS Android TV »",
   debogage: "Options pour les développeurs > Débogage USB", variante: "« Options pour les concepteurs » sur certaines Mi Box",
+  /** TV qui n'accepte pas le débogage USB sur le réseau : débogage sans fil, avec un code d'association. */
+  sansFil: "Options pour les développeurs > Débogage sans fil",
   /** Où lire l'adresse IP. */
   adresseIp: "Paramètres > Réseau et Internet",
   /** Précisions affichées dans le bloc repliable. */
@@ -28,6 +30,11 @@ export const CONSIGNES = {
       titre: "TV TCL Google TV",
       debloquer: "Paramètres > Système > À propos", build: "Build de l'OS Android TV",
       debogage: "Paramètres > Système > Options pour les développeurs > Débogage USB",
+    },
+    {
+      titre: "Chromecast avec Google TV, Google TV Streamer, TV sans « Débogage USB » sur le réseau",
+      debloquer: "Paramètres > Système > À propos", build: "Build de l'OS Android TV",
+      debogage: "Options pour les développeurs > Débogage sans fil (Activé), puis dans Zen Home « Ma TV demande un code d'association »",
     },
   ] satisfies PrecisionAppareil[],
   shield: "Sur une Nvidia Shield, activez « Débogage réseau » à la place du débogage USB.",

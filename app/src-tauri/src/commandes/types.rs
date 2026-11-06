@@ -35,6 +35,8 @@ pub struct EtatInitial {
 pub struct BoxMemoriseeUi {
     pub nom: String,
     pub ip: String,
+    /// Connectée par le débogage sans fil : si la recherche ne la trouve pas, il faut le réactiver sur la TV.
+    pub sans_fil: bool,
     /// `versionCode` de l'accueil connu sur cette box ; `None` si inconnu.
     pub version_code: Option<u32>,
 }
