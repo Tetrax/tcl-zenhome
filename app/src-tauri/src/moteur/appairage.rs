@@ -139,7 +139,8 @@ fn attendre_fenetre(a: &dyn Appairage, ip: Option<Ipv4Addr>, interrompu: &dyn Fn
     Err(ErreurAppairage::FenetreIntrouvable)
 }
 
-/// Parcours d'appairage : trouve la fenêtre, appaire, puis retrouve le service de connexion du même nom d'instance.
+/// Parcours d'appairage : trouve la fenêtre, appaire, puis retrouve le service de connexion du même nom d'instance ET de
+/// la même IP (un autre appareil du réseau peut annoncer le même nom pour détourner la connexion).
 /// Rend l'adresse (IP:port) sur laquelle faire `adb connect`. `interrompu` : annulation ou délai global.
 pub fn appairer(a: &dyn Appairage, code: &str, ip: Option<Ipv4Addr>, interrompu: &dyn Fn() -> bool) -> Result<SocketAddrV4, ErreurAppairage> {
     let code = valider_code(code).ok_or_else(|| ErreurAppairage::Autre("code invalide".into()))?;
@@ -149,7 +150,7 @@ pub fn appairer(a: &dyn Appairage, code: &str, ip: Option<Ipv4Addr>, interrompu:
         if interrompu() {
             return Err(ErreurAppairage::Interrompu);
         }
-        let service = a.services_mdns().ok().and_then(|s| analyser_mdns(&s).connexion.into_iter().find(|s| s.instance == fenetre.instance));
+        let service = a.services_mdns().ok().and_then(|s| analyser_mdns(&s).connexion.into_iter().find(|s| s.instance == fenetre.instance && s.adresse.ip() == fenetre.adresse.ip()));
         if let Some(s) = service {
             return Ok(s.adresse);
         }
@@ -171,6 +172,27 @@ mod tests {
 
     fn sock(s: &str) -> SocketAddrV4 {
         s.parse().unwrap()
+    }
+
+    /// Sortie `mdns services` fixe, appairage toujours accepté.
+    struct MdnsFixe(&'static str);
+    impl Appairage for MdnsFixe {
+        fn services_mdns(&self) -> Result<String, ErreurTransport> {
+            Ok(self.0.into())
+        }
+        fn appairer(&self, _: SocketAddrV4, _: &str) -> Result<(), ErreurAppairage> {
+            Ok(())
+        }
+        fn attendre(&self, _: Duration) {}
+    }
+
+    #[test]
+    fn service_de_connexion_d_une_autre_ip_ignore() {
+        // Un autre appareil annonce le nom d'instance de la TV avec sa propre IP : on ne s'y connecte pas.
+        let a = MdnsFixe("List of discovered mdns services\nadb-TV-x\t_adb-tls-pairing._tcp\t192.168.50.17:44437\nadb-TV-x\t_adb-tls-connect._tcp\t192.168.50.66:45509\n");
+        assert_eq!(appairer(&a, "123456", None, &|| false), Err(ErreurAppairage::ConnexionIntrouvable));
+        let a = MdnsFixe("adb-TV-x\t_adb-tls-pairing._tcp\t192.168.50.17:44437\nadb-TV-x\t_adb-tls-connect._tcp\t192.168.50.66:45509\nadb-TV-x\t_adb-tls-connect._tcp\t192.168.50.17:45509\n");
+        assert_eq!(appairer(&a, "123456", None, &|| false), Ok(sock("192.168.50.17:45509")));
     }
 
     #[test]

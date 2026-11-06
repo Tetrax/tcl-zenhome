@@ -360,8 +360,9 @@ impl Coeur {
             }
             let trouvees = zh_reseau::chercher_box(Duration::from_secs(15), &memoire::lire(&self.cfg.donnees), &indices, &self.annule);
             match sans_fil {
-                Some(a) => trouvees.map(|t| self.avec_sans_fil(t, &*a)),
-                None => trouvees,
+                // Recherche annulée : on rend ce qui a été trouvé sans relire mDNS (jusqu'à 10 s de plus).
+                Some(a) if !self.annule.load(Ordering::SeqCst) => trouvees.map(|t| self.avec_sans_fil(t, &*a)),
+                _ => trouvees,
             }
         };
         self.garder_recherche(resultat)
