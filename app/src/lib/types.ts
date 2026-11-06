@@ -6,8 +6,11 @@ export interface EtatInitial { version: string; adb_installe: boolean; demo: boo
   /** Box déjà configurées (la plus récente d'abord), à proposer tout de suite pendant la recherche. */
   boxes_memorisees: BoxMemorisee[];
   /** Vrai si l'appli embarque un jeton TMDB : les films marchent sans jeton personnel. */
-  films_inclus: boolean }
-export interface BoxMemorisee { nom: string; ip: string }
+  films_inclus: boolean;
+  /** `versionCode` de l'accueil Zen Home embarqué dans l'appli. */
+  apk_version_code: number }
+/** `version_code` : `versionCode` de l'accueil connu sur cette box, null si inconnu. */
+export interface BoxMemorisee { nom: string; ip: string; version_code?: number | null }
 /** `appareil` : appareil supposé d'après l'annonce réseau (simple indice, la connexion vérifie), null si inconnu ; `libelle` : son nom court. */
 export interface BoxTrouvee { id: number; nom: string; ip: string; appareil?: string | null; libelle?: string }
 export type Cible = { id: number } | { ip: string };

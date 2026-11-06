@@ -28,6 +28,9 @@ struct Memorisee {
     /// Identifiant de l'appareil (absent des anciens fichiers, qui ne connaissaient que la Mi Box).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     appareil: Option<String>,
+    /// `versionCode` de l'accueil Zen Home connu sur cette box (absent des anciens fichiers, ou version inconnue).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    version_accueil: Option<u32>,
 }
 
 fn charger(racine: &Path) -> Vec<Memorisee> {
@@ -52,7 +55,23 @@ fn charger(racine: &Path) -> Vec<Memorisee> {
 
 /// Box mémorisées (la plus récente en dernier) ; vide si le fichier est absent ou invalide.
 pub fn lire(racine: &Path) -> Vec<BoxTrouvee> {
-    charger(racine).into_iter().map(|m| BoxTrouvee { libelle: par_defaut(m.appareil.as_deref()).into(), nom: m.nom, ip: m.ip, appareil: m.appareil }).collect()
+    lire_avec_version(racine).into_iter().map(|(b, _)| b).collect()
+}
+
+/// Comme `lire`, avec le `versionCode` de l'accueil connu sur chaque box (`None` : inconnu).
+pub fn lire_avec_version(racine: &Path) -> Vec<(BoxTrouvee, Option<u32>)> {
+    charger(racine)
+        .into_iter()
+        .map(|m| (BoxTrouvee { libelle: par_defaut(m.appareil.as_deref()).into(), nom: m.nom, ip: m.ip, appareil: m.appareil }, m.version_accueil))
+        .collect()
+}
+
+/// Met à jour le `versionCode` de l'accueil connu pour cette série (sans effet si la box n'est pas mémorisée).
+pub fn noter_version(racine: &Path, serie: &str, version: Option<u32>) -> std::io::Result<()> {
+    let mut entrees = charger(racine);
+    let Some(m) = entrees.iter_mut().find(|m| m.serie == serie) else { return Ok(()) };
+    m.version_accueil = version;
+    ecrire_atomique(racine, FICHIER, &serde_json::to_vec(&entrees).map_err(std::io::Error::other)?)
 }
 
 /// Nom par défaut de l'appareil (la Mi Box pour les anciennes entrées).
@@ -76,10 +95,12 @@ pub fn nom_pour(racine: &Path, serie: &str, ip: &str, propose: &str, defaut: &st
 /// Mémorise la box (remplace l'entrée de même série ou de même IP ; la plus ancienne saute au-delà du plafond).
 pub fn memoriser(racine: &Path, serie: &str, nom: &str, ip: &str, appareil: Option<&str>) -> std::io::Result<()> {
     let mut entrees = charger(racine);
+    // La version de l'accueil connue pour cette série survit à une nouvelle connexion.
+    let version_accueil = entrees.iter().find(|m| m.serie == serie).and_then(|m| m.version_accueil);
     entrees.retain(|m| m.serie != serie && m.ip != ip);
     let nom = if nom == "Appareil à vérifier" { String::new() } else { zh_reseau::nettoyer_nom(nom) };
     let nom = if nom.is_empty() { par_defaut(appareil).into() } else { nom };
-    entrees.push(Memorisee { serie: serie.into(), nom, ip: ip.into(), appareil: appareil.map(String::from) });
+    entrees.push(Memorisee { serie: serie.into(), nom, ip: ip.into(), appareil: appareil.map(String::from), version_accueil });
     let trop = entrees.len().saturating_sub(BOXES_MAX);
     entrees.drain(..trop);
     ecrire_atomique(racine, FICHIER, &serde_json::to_vec(&entrees).map_err(std::io::Error::other)?)
@@ -143,6 +164,25 @@ mod tests {
         assert_eq!(l[0], (NOM_GENERIQUE.into(), NOM_GENERIQUE.into(), Some(GENERIQUE.into())));
         assert_eq!(l[1].0, "SALON");
         assert_eq!(nom_pour(&d, "C", "10.0.0.3", NOM_GENERIQUE, "x"), "x", "nom par défaut non repris comme nom choisi");
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn version_de_l_accueil_memorisee_et_conservee() {
+        let d = dossier("version");
+        std::fs::create_dir_all(&d).unwrap();
+        // ancien fichier, sans le champ : il se lit, version inconnue
+        std::fs::write(d.join(FICHIER), r#"[{"serie":"A","nom":"Salon","ip":"192.168.1.20","appareil":"mibox4"}]"#).unwrap();
+        assert_eq!(lire_avec_version(&d).into_iter().map(|(b, v)| (b.nom, v)).collect::<Vec<_>>(), [("Salon".into(), None)]);
+        noter_version(&d, "A", Some(10)).unwrap();
+        noter_version(&d, "inconnue", Some(3)).unwrap();
+        assert_eq!(lire_avec_version(&d)[0].1, Some(10));
+        // une nouvelle connexion (même série, autre IP) garde la version
+        memoriser(&d, "A", "Salon", "192.168.1.21", Some("mibox4")).unwrap();
+        assert_eq!(lire_avec_version(&d)[0].1, Some(10));
+        noter_version(&d, "A", None).unwrap();
+        assert_eq!(lire_avec_version(&d)[0].1, None);
+        assert!(!std::fs::read_to_string(d.join(FICHIER)).unwrap().contains("version_accueil"));
         let _ = std::fs::remove_dir_all(&d);
     }
 

@@ -27,12 +27,16 @@ pub struct EtatInitial {
     pub boxes_memorisees: Vec<BoxMemoriseeUi>,
     /// Vrai si l'appli embarque un jeton TMDB (le jeton lui-même n'est jamais exposé).
     pub films_inclus: bool,
+    /// `versionCode` de l'accueil Zen Home embarqué dans l'appli.
+    pub apk_version_code: u32,
 }
 
 #[derive(Serialize)]
 pub struct BoxMemoriseeUi {
     pub nom: String,
     pub ip: String,
+    /// `versionCode` de l'accueil connu sur cette box ; `None` si inconnu.
+    pub version_code: Option<u32>,
 }
 
 #[derive(Serialize)]

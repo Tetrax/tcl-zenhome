@@ -16,6 +16,9 @@ pub const DREAM: &str = "tv.zenhome/tv.zenhome.ZenDream";
 pub const ACCUEIL_ZEN: &str = "tv.zenhome/.Home";
 const SERVICES_ACCESSIBILITE: &str = "enabled_accessibility_services";
 
+// `APK_VERSION_CODE` et `APK_VERSION_NAME` : version de l'APK embarqué, lue dans le manifeste par build.rs.
+include!(concat!(env!("OUT_DIR"), "/apk_version.rs"));
+
 pub struct Parametres {
     pub apk: PathBuf,
     pub lat: Option<String>,
