@@ -31,8 +31,31 @@ fn embarquer_apk() {
         .expect("écriture de apk_empreinte.rs");
 }
 
+/// Version de l'APK embarqué : `android:versionCode` et `android:versionName` de `launcher/AndroidManifest.xml`
+/// (source de vérité), figés dans `apk_version.rs`. Sert à repérer un accueil installé plus ancien que celui de l'appli.
+fn versions_apk() {
+    let racine = PathBuf::from(env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR"));
+    let manifeste = racine.join("../../launcher/AndroidManifest.xml");
+    println!("cargo:rerun-if-changed={}", manifeste.display());
+    let texte = fs::read_to_string(&manifeste).expect("lecture de launcher/AndroidManifest.xml");
+    let attribut = |nom: &str| -> String {
+        let debut = texte.find(&format!("{nom}=\"")).unwrap_or_else(|| panic!("{nom} absent de AndroidManifest.xml")) + nom.len() + 2;
+        let fin = texte[debut..].find('"').unwrap_or_else(|| panic!("{nom} mal formé dans AndroidManifest.xml"));
+        texte[debut..debut + fin].to_string()
+    };
+    let code: u32 = attribut("android:versionCode").parse().expect("android:versionCode doit être un entier");
+    let nom = attribut("android:versionName");
+    let sortie = PathBuf::from(env::var("OUT_DIR").expect("OUT_DIR")).join("apk_version.rs");
+    fs::write(
+        sortie,
+        format!("/// `versionCode` de l'APK embarqué.\npub const APK_VERSION_CODE: u32 = {code};\n/// `versionName` de l'APK embarqué.\npub const APK_VERSION_NAME: &str = {nom:?};\n"),
+    )
+    .expect("écriture de apk_version.rs");
+}
+
 fn main() {
     embarquer_apk();
+    versions_apk();
     // Les commandes de l'appli sont déclarées ici : chacune exige une permission explicite
     // (allow-<nom>) dans capabilities/. Ajouter les nouvelles commandes à cette liste.
     tauri_build::try_build(tauri_build::Attributes::new().app_manifest(tauri_build::AppManifest::new().commands(&[

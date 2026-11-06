@@ -268,17 +268,18 @@ impl Coeur {
             origine: self.origine_courante().map(|o| OrigineUi { date: o.date }),
             boxes_memorisees: self.boxes_memorisees(),
             films_inclus: self.cfg.jeton_projet.is_some(),
+            apk_version_code: installation::APK_VERSION_CODE,
         }
     }
 
     /// Box mémorisées, la plus récente d'abord. En démo, SALON joue celle d'une installation précédente.
     fn boxes_memorisees(&self) -> Vec<BoxMemoriseeUi> {
-        let vue = |b: BoxTrouvee| BoxMemoriseeUi { nom: b.nom, ip: b.ip };
+        let vue = |(b, version_code): (BoxTrouvee, Option<u32>)| BoxMemoriseeUi { nom: b.nom, ip: b.ip, version_code };
         if self.cfg.demo {
             let (nom, ip, _, _) = demo::BOXES[0];
-            return vec![vue(BoxTrouvee { nom: nom.into(), ip: ip.into(), appareil: Some(appareils::MIBOX4.id.into()), libelle: appareils::MIBOX4.nom_defaut.into() })];
+            return vec![vue((BoxTrouvee { nom: nom.into(), ip: ip.into(), appareil: Some(appareils::MIBOX4.id.into()), libelle: appareils::MIBOX4.nom_defaut.into() }, None))];
         }
-        memoire::lire(&self.cfg.donnees).into_iter().rev().map(vue).collect()
+        memoire::lire_avec_version(&self.cfg.donnees).into_iter().rev().map(vue).collect()
     }
 
     pub fn installer_adb(&self, accord: bool, emettre: Emetteur) -> Result<(), ErreurCommande> {
@@ -749,8 +750,17 @@ impl Coeur {
                 jeton: jeton.map(|j| j.trim().to_string()).filter(|j| !j.is_empty()).or_else(|| self.cfg.jeton_projet.clone()),
             };
             let r = installation::installer(&c.transport(), &c.appareil, &self.cfg.politique, &mut c.observateur(), &p, &c.reprise);
-            c.issue(r).map(|_| ())
+            c.issue(r)?;
+            self.noter_version(c.reprise.serie.as_deref(), Some(installation::APK_VERSION_CODE));
+            Ok(())
         })
+    }
+
+    /// Mémorise le `versionCode` de l'accueil connu sur cette box (sans effet en démo).
+    fn noter_version(&self, serie: Option<&str>, version: Option<u32>) {
+        if let (false, Some(serie)) = (self.cfg.demo, serie) {
+            let _ = memoire::noter_version(&self.cfg.donnees, serie, version);
+        }
     }
 
     pub fn appliquer(&self, choix: &ChoixUi, emettre: Emetteur) -> Result<RapportApplication, ErreurCommande> {
@@ -793,6 +803,10 @@ impl Coeur {
             };
             let r = verification::verifier(&c.transport(), &c.appareil, &self.cfg.politique, &mut c.observateur(), reparer, apk.as_ref().map(|a| a.chemin.as_path()), &c.reprise);
             let rapport = c.issue(r)?;
+            // Liste des paquets illisible : on ne sait rien de l'accueil, la version mémorisée reste telle quelle.
+            if !rapport.final_().inconnu {
+                self.noter_version(c.reprise.serie.as_deref(), rapport.final_().version_code);
+            }
             if reparer && rapport.ok {
                 self.oublier_reprise();
             }

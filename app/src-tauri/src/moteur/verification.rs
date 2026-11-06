@@ -8,7 +8,7 @@ use std::time::Duration;
 use super::appareils::{Appareil, ModeAccueil};
 use super::connexion::Politique;
 use super::debloat::{Balise, Entree};
-use super::installation::{DREAM, KEYSVC_FULL, KEYSVC_SHORT, PKG, activer_accessibilite, definir_accueil, installer_apk};
+use super::installation::{APK_VERSION_CODE, APK_VERSION_NAME, DREAM, KEYSVC_FULL, KEYSVC_SHORT, PKG, activer_accessibilite, definir_accueil, installer_apk};
 use super::inventaire::{EtatWifi, accueil_prefere, etat_wifi, liste_garder, noms_paquets};
 use super::session::{Arret, Observateur, Reprise, Session};
 use super::transport::{Commande, Dumpsys, Espace, OptionPm, Transport};
@@ -34,6 +34,8 @@ pub struct Ligne {
 #[derive(Debug, Clone)]
 struct Etats {
     inst: Statut,
+    /// Zen Home est installé mais son versionCode est inférieur à celui de l'APK embarqué (`inst` est alors Ko).
+    perime: bool,
     role: Statut,
     lx: Statut,
     sw: Statut,
@@ -51,6 +53,8 @@ pub struct Controle {
     pub ko: usize,
     /// Liste des paquets illisible : état des paquets inconnu (le kit sort alors en code 1).
     pub inconnu: bool,
+    /// `versionCode` de Zen Home installé, s'il est installé et lisible.
+    pub version_code: Option<u32>,
     etats: Etats,
 }
 
@@ -86,6 +90,13 @@ impl Tableau {
     }
 }
 
+/// Nombre qui suit `versionCode=` dans `dumpsys package` (ligne du genre `versionCode=10 minSdk=21 targetSdk=34`).
+fn code_version(dump: &str) -> Option<u32> {
+    let reste = dump.lines().find_map(|l| l.split_once("versionCode=").map(|(_, r)| r))?;
+    let chiffres: String = reste.chars().take_while(char::is_ascii_digit).collect();
+    chiffres.parse().ok()
+}
+
 fn controler(s: &mut Session, app: &Appareil, liste: &[Entree]) -> Result<Controle, Arret> {
     let mut tab = Tableau(Vec::new());
     // Wi-Fi : dans les cas « lié » et « non vérifiable », setupwraith n'est JAMAIS désactivé.
@@ -108,12 +119,21 @@ fn controler(s: &mut Session, app: &Appareil, liste: &[Entree]) -> Result<Contro
         }
     };
 
+    let (mut version_code, mut perime) = (None, false);
     let inst = if inconnu {
         tab.ajouter("Zen Home installé", Statut::Avert, "")
     } else if tous.iter().any(|p| p == PKG) {
         let dump = s.lire(&Commande::dumpsys_paquet(PKG)?)?;
         let ver = dump.lines().find(|l| l.contains("versionName=")).and_then(|l| l.split('=').nth(1)).filter(|v| !v.is_empty());
-        tab.ajouter("Zen Home installé", Statut::Ok, &format!("version {}", ver.unwrap_or("?")))
+        version_code = code_version(&dump);
+        // Un versionCode illisible n'est pas un accueil périmé : on ne réinstalle que sur une preuve.
+        perime = version_code.is_some_and(|c| c < APK_VERSION_CODE);
+        let ver = ver.unwrap_or("?");
+        if perime {
+            tab.ajouter("Zen Home installé", Statut::Ko, &format!("version {ver}, mise à jour disponible ({APK_VERSION_NAME})"))
+        } else {
+            tab.ajouter("Zen Home installé", Statut::Ok, &format!("version {ver}"))
+        }
     } else {
         tab.ajouter("Zen Home installé", Statut::Ko, "absent")
     };
@@ -197,7 +217,7 @@ fn controler(s: &mut Session, app: &Appareil, liste: &[Entree]) -> Result<Contro
     };
 
     let ko = tab.0.iter().filter(|l| l.statut == Statut::Ko).count();
-    Ok(Controle { lignes: tab.0, ko, inconnu, etats: Etats { inst, role, lx, sw, a11y, dream, usage, spot, wifi, debloat_ko } })
+    Ok(Controle { lignes: tab.0, ko, inconnu, version_code, etats: Etats { inst, perime, role, lx, sw, a11y, dream, usage, spot, wifi, debloat_ko } })
 }
 
 /// Une commande qui échoue n'arrête pas la réparation (mieux vaut finir le retour arrière que s'arrêter au milieu) :
@@ -240,14 +260,17 @@ fn noter_desactive(s: &mut Session, paquet: &str) {
 fn corriger(s: &mut Session, app: &Appareil, c: &Controle, apk: Option<&Path>) -> Result<bool, Arret> {
     let e = &c.etats;
     // 1. Zen Home d'abord : installation, accueil, services
-    let mut ok_home = e.inst == Statut::Ok;
+    // Un accueil périmé reste installé (et utilisable) si la mise à jour échoue : le reste de la réparation continue.
+    let mut ok_home = e.inst == Statut::Ok || e.perime;
+    let mut reinstalle = false;
     if e.inst == Statut::Ko {
         match apk {
             Some(a) => {
                 let r = installer_apk(s, a);
-                ok_home = tolerer(s, r)?;
+                reinstalle = tolerer(s, r)?;
+                ok_home = reinstalle || e.perime;
             }
-            None => s.avertir("APK absent : Zen Home ne peut pas être réinstallé."),
+            None => s.avertir(if e.perime { "APK absent : Zen Home ne peut pas être mis à jour." } else { "APK absent : Zen Home ne peut pas être réinstallé." }),
         }
     }
     if ok_home {
@@ -255,7 +278,9 @@ fn corriger(s: &mut Session, app: &Appareil, c: &Controle, apk: Option<&Path>) -
             let r = definir_accueil(s, app);
             tolerer(s, r)?;
         }
-        if e.a11y != Statut::Ok {
+        // Une réinstallation sur un accueil existant délie KeyService sans le retirer de la liste (voir `activer_accessibilite`) :
+        // le contrôle le voit « Ok », on le rejoue donc. KeyService est commun à tous les appareils.
+        if e.a11y != Statut::Ok || (e.perime && reinstalle) {
             let r = activer_accessibilite(s);
             tolerer(s, r)?;
         }
@@ -341,7 +366,7 @@ impl RapportVerification {
     }
 }
 
-/// `verifier-tv.sh` (`reparer` = `--fix`). `apk` : APK à réinstaller si Zen Home est absent.
+/// `verifier-tv.sh` (`reparer` = `--fix`). `apk` : APK à (ré)installer si Zen Home est absent ou périmé.
 pub fn verifier(
     t: &dyn Transport,
     app: &Appareil,
@@ -556,6 +581,86 @@ mod tests {
         let l = ligne(&r.avant, "Zen Home installé");
         assert_eq!((l.statut, l.detail.as_str()), (Statut::Avert, "non vérifié"));
         assert_eq!(ligne(&r.avant, &format!("Désactivé : {LAUNCHERX}")).statut, Statut::Avert);
+    }
+
+    /// Box équipée (réparation complète faite), puis Zen Home y est ramené à `version` (`None` : versionCode illisible).
+    fn equipee_avec_version(version: Option<u32>) -> FakeBox {
+        let f = connectee();
+        assert!(lancer(&f, true).ok);
+        f.modifier(|e| e.version_zen_home = version);
+        f
+    }
+
+    #[test]
+    fn accueil_perime_controle_ko() {
+        let f = equipee_avec_version(Some(APK_VERSION_CODE - 1));
+        let r = lancer(&f, false);
+        let l = ligne(&r.avant, "Zen Home installé");
+        assert_eq!(l.statut, Statut::Ko);
+        assert_eq!(l.detail, format!("version 1.0, mise à jour disponible ({APK_VERSION_NAME})"));
+        assert_eq!(r.avant.version_code, Some(APK_VERSION_CODE - 1));
+        assert!(r.apres.is_none() && !r.ok);
+    }
+
+    #[test]
+    fn reparer_met_a_jour_l_accueil_et_rejoue_keyservice() {
+        let f = equipee_avec_version(Some(APK_VERSION_CODE - 1));
+        let avant = f.journal().len();
+        let r = lancer(&f, true);
+        assert!(r.ok, "{}", r.final_().tableau());
+        assert_eq!(ligne(r.final_(), "Zen Home installé").statut, Statut::Ok);
+        assert_eq!(r.final_().version_code, Some(APK_VERSION_CODE));
+        let j = &f.journal()[avant..];
+        let place = |m: &str| j.iter().position(|l| l.starts_with(m)).unwrap_or_else(|| panic!("{m} : {j:?}"));
+        let install = place("install:");
+        assert!(j.iter().all(|l| !l.starts_with("uninstall")), "jamais de désinstallation");
+        // KeyService est retiré puis remis APRÈS la réinstallation
+        let retire = place("shell: settings put secure enabled_accessibility_services '\"\"'");
+        let remis = place(&format!("shell: settings put secure enabled_accessibility_services '{KEYSVC_FULL}'"));
+        assert!(install < retire && retire < remis);
+    }
+
+    #[test]
+    fn accueil_a_jour_pas_de_reinstallation() {
+        let f = equipee_avec_version(Some(APK_VERSION_CODE));
+        let avant = f.journal().len();
+        let r = lancer(&f, true);
+        assert!(r.ok && r.apres.is_none());
+        assert!(f.journal()[avant..].iter().all(|l| !l.starts_with("install")));
+        // un accueil plus récent que l'embarqué n'est pas touché non plus
+        f.modifier(|e| e.version_zen_home = Some(APK_VERSION_CODE + 1));
+        assert!(lancer(&f, true).ok);
+        assert!(f.journal()[avant..].iter().all(|l| !l.starts_with("install")));
+    }
+
+    #[test]
+    fn version_illisible_donne_ok_sans_reinstallation() {
+        let f = equipee_avec_version(None);
+        let avant = f.journal().len();
+        let r = lancer(&f, true);
+        assert!(r.ok && r.apres.is_none());
+        assert_eq!(ligne(&r.avant, "Zen Home installé").detail, "version 1.0");
+        assert_eq!(r.avant.version_code, None);
+        assert!(f.journal()[avant..].iter().all(|l| !l.starts_with("install")));
+    }
+
+    #[test]
+    fn accueil_perime_sans_apk_continue_la_reparation() {
+        let f = equipee_avec_version(Some(APK_VERSION_CODE - 1));
+        f.modifier(|e| {
+            e.secure.remove("enabled_accessibility_services");
+        });
+        let r = verifier(&f, &Appareil::depuis(&MIBOX4), &Politique::default(), &mut Silencieux, true, None, &Reprise::default()).unwrap();
+        assert!(r.avertissements.iter().any(|a| a.contains("mis à jour")));
+        assert_eq!(ligne(r.final_(), "Accessibilité : KeyService").statut, Statut::Ok, "le reste est réparé malgré tout");
+    }
+
+    #[test]
+    fn code_version_lit_le_nombre_juste_apres_version_code() {
+        assert_eq!(code_version("  Package [x]:\n    versionCode=10 minSdk=21 targetSdk=34\n    versionName=2.6\n"), Some(10));
+        assert_eq!(code_version("    versionCode=7\n"), Some(7));
+        assert_eq!(code_version("    versionCode=abc\n"), None);
+        assert_eq!(code_version("    versionName=2.6\n"), None);
     }
 
     const LAUNCHERX_TCL: &str = "com.google.android.apps.tv.launcherx";
