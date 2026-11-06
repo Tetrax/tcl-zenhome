@@ -10,6 +10,7 @@ use std::sync::{Mutex, MutexGuard};
 use super::appairage::{Appairage, ErreurAppairage};
 use super::appareils::{LISTE_GENERIQUE, MIBOX4, ModeAccueil, Profil, TCL_G08, TOUS};
 use super::debloat;
+use super::installation::APK_VERSION_CODE;
 use super::transport::{Commande, ErreurTransport, EtatLien, Sortie, Transport, decouper_shell, paquet_valide};
 
 pub const ZEN_HOME: &str = "tv.zenhome";
@@ -73,6 +74,9 @@ pub struct EtatBox {
     pub premier_plan: Option<String>,
     /// Faux : Zen Home n'apparaît jamais au premier plan, même avec la touche Accueil.
     pub zen_home_visible: bool,
+    /// `versionCode` de Zen Home installé (par défaut celui de l'APK embarqué ; `install` y remet l'embarqué).
+    /// `None` : la ligne `versionCode=` n'apparaît pas dans `dumpsys package`.
+    pub version_zen_home: Option<u32>,
     /// Dernière configuration reçue par le ConfigReceiver (le jeton n'est jamais conservé : `***`).
     pub config: BTreeMap<String, String>,
 }
@@ -210,6 +214,7 @@ impl EtatBox {
             wifi: WifiFake::Libre,
             premier_plan: Some(app.accueil.into()),
             zen_home_visible: true,
+            version_zen_home: Some(APK_VERSION_CODE),
             config: BTreeMap::new(),
         }
     }
@@ -405,7 +410,9 @@ impl Interne {
                 None => "<?xml version=\"1.0\" encoding=\"utf-8\" standalone=\"yes\" ?>\n<preferred-activities>\n</preferred-activities>\n".into(),
             }),
             ["dumpsys", "package", p] => sortie(if e.paquets.contains_key(*p) {
-                format!("Packages:\n  Package [{p}] (abc123):\n    versionName=1.0\n")
+                let code = if *p == ZEN_HOME { e.version_zen_home } else { Some(1) };
+                let code = code.map_or(String::new(), |c| format!("    versionCode={c} minSdk=21 targetSdk=34\n"));
+                format!("Packages:\n  Package [{p}] (abc123):\n{code}    versionName=1.0\n")
             } else {
                 String::new()
             }),
@@ -626,6 +633,7 @@ impl Transport for FakeBox {
             return Err(echec(1, "Failure [INSTALL_FAILED_UPDATE_INCOMPATIBLE: signatures do not match]"));
         }
         i.etat.paquets.insert(ZEN_HOME.into(), paquet_tiers(ZEN_HOME, 5, "2026-10-28 22:30:00", "Zen Home"));
+        i.etat.version_zen_home = Some(APK_VERSION_CODE);
         sortie("Performing Streamed Install\nSuccess\n")
     }
 
